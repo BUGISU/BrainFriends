@@ -11,6 +11,8 @@ import React, {
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { REHAB_PROTOCOLS, PlaceType } from "@/constants/trainingData";
+import { loadPatientProfile } from "@/lib/patientStorage";
+import { SessionManager, Step1Result } from "@/lib/kwab/SessionManager";
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
@@ -24,7 +26,9 @@ export default function Step1Page() {
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isAnswered, setIsAnswered] = useState(false); // 🔹 답변 완료 여부
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [responseTimes, setResponseTimes] = useState<number[]>([]); // 반응 시간 기록
+  const [questionStartTime, setQuestionStartTime] = useState<number>(0); // 문제 시작 시간
 
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
@@ -86,6 +90,7 @@ export default function Step1Page() {
             utteranceRef.current = null;
             setIsSpeaking(false);
             setTimeLeft(currentItem?.duration || 10);
+            setQuestionStartTime(Date.now()); // 문제 시작 시간 기록
           };
 
           msg.onerror = (e) => {
@@ -103,12 +108,18 @@ export default function Step1Page() {
     [currentItem],
   );
 
-  // 🔹 정답 처리 (중복 클릭 방지)
+  // 정답 처리 (중복 클릭 방지)
   const handleAnswer = useCallback(
     (userAnswer: boolean | null) => {
-      if (isAnswered) return; // 🔹 이미 답변했으면 무시
+      if (isAnswered) return;
 
-      setIsAnswered(true); // 🔹 답변 완료 플래그
+      setIsAnswered(true);
+
+      // 반응 시간 기록
+      if (questionStartTime > 0) {
+        const responseTime = Date.now() - questionStartTime;
+        setResponseTimes((prev) => [...prev, responseTime]);
+      }
 
       if (window.speechSynthesis && utteranceRef.current) {
         window.speechSynthesis.cancel();
@@ -124,12 +135,38 @@ export default function Step1Page() {
       if (isCorrect) setScore((prev) => prev + 1);
       setTimeLeft(null);
 
-      // 🔹 다음 문제로 넘어갈 때 답변 플래그 초기화
+      // 마지막 문제 완료 시 K-WAB 저장
       setTimeout(() => {
         if (currentIndex < trainingData.length - 1) {
           setCurrentIndex((prev) => prev + 1);
-          setIsAnswered(false); // 🔹 다음 문제에서 다시 답변 가능
+          setIsAnswered(false);
         } else {
+          // Step1 완료 - K-WAB 세션에 저장
+          const patient = loadPatientProfile();
+          if (patient) {
+            const sessionManager = new SessionManager(
+              {
+                age: patient.age,
+                educationYears: patient.educationYears || 0,
+              },
+              placeParam
+            );
+
+            const avgResponseTime =
+              responseTimes.length > 0
+                ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+                : 0;
+
+            const step1Result: Step1Result = {
+              correctAnswers: nextScore,
+              totalQuestions: trainingData.length,
+              averageResponseTime: avgResponseTime,
+              timestamp: Date.now(),
+            };
+
+            sessionManager.saveStep1Result(step1Result);
+          }
+
           router.push(`/step-2?score=${nextScore}&place=${placeParam}`);
         }
       }, 500);
@@ -142,6 +179,8 @@ export default function Step1Page() {
       router,
       placeParam,
       isAnswered,
+      questionStartTime,
+      responseTimes,
     ],
   );
 

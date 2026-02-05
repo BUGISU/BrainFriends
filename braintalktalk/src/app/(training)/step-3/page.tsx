@@ -139,7 +139,7 @@ export default function Step3Page() {
         setShowResult(null);
         setIsAnswered(false);
       } else {
-        router.push(`/result?place=${place}&step3=${isCorrect ? 100 : 0}`);
+        router.push(`/step-4?place=${place}`);
       }
     }, 1200);
   };
