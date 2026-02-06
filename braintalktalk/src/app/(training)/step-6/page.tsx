@@ -10,7 +10,7 @@ import React, {
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 
-// --- 데이터 (생략 없이 전체 포함) ---
+// --- 전체 데이터 보존 ---
 const WRITING_WORDS: Record<
   PlaceType,
   Array<{
@@ -445,39 +445,64 @@ export default function Step6Page() {
     setIsMounted(true);
   }, []);
 
-  const initCanvas = useCallback(() => {
-    [canvasRef, hiddenCanvasRef].forEach((ref) => {
-      const canvas = ref.current;
-      if (!canvas) return;
-      const parent = canvas.parentElement;
-      if (parent) {
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        if (ctx) {
-          ctx.lineCap = "round";
-          ctx.lineWidth = 35; // 1. 펜 굵기를 더 두껍게 해서 판정 범위를 넓힘
-          ctx.strokeStyle = ref === canvasRef ? "#4A2C2A" : "black";
-        }
-      }
-    });
+  // ✅ 공통 폰트 사이즈 계산 로직
+  const getFontSize = useCallback((canvas: HTMLCanvasElement, text: string) => {
+    const padding = 80;
+    const size = Math.min(
+      (canvas.width - padding) / text.length,
+      canvas.height * 0.6,
+    );
+    return Math.floor(size);
   }, []);
+
+  // ✅ 캔버스 초기화 및 배경 힌트 그리기
+  const initCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const hCanvas = hiddenCanvasRef.current;
+    if (!canvas || !hCanvas) return;
+
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    canvas.width = parent.clientWidth;
+    canvas.height = parent.clientHeight;
+    hCanvas.width = canvas.width;
+    hCanvas.height = canvas.height;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (ctx) {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 35;
+      ctx.strokeStyle = "#4A2C2A";
+
+      // 사용자가 쓴 내용이 지워지지 않게 힌트를 먼저 그리고 그 위에 내용을 유지해야 하지만,
+      // 여기서는 초기화 시점에만 힌트 상태에 따라 배경을 그려줍니다.
+      if (showHint) {
+        const fontSize = getFontSize(canvas, currentWord.answer);
+        ctx.font = `900 ${fontSize}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.08)"; // 아주 연한 회색 가이드
+        ctx.fillText(currentWord.answer, canvas.width / 2, canvas.height / 2);
+      }
+    }
+  }, [showHint, currentWord.answer, getFontSize]);
 
   useEffect(() => {
     if (phase === "writing" && isMounted) {
       setTimeout(initCanvas, 150);
-      window.addEventListener("resize", initCanvas);
     }
-    return () => window.removeEventListener("resize", initCanvas);
-  }, [phase, isMounted, initCanvas]);
+  }, [phase, isMounted, initCanvas, showHint, currentIndex]);
 
   const startDrawing = (e: any) => {
     setIsDrawing(true);
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
     const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-    canvasRef.current!.getContext("2d")?.beginPath();
-    canvasRef.current!.getContext("2d")?.moveTo(x, y);
+    const ctx = canvasRef.current!.getContext("2d");
+    ctx?.beginPath();
+    ctx?.moveTo(x, y);
   };
 
   const draw = (e: any) => {
@@ -492,88 +517,53 @@ export default function Step6Page() {
 
   const checkAnswer = () => {
     const canvas = canvasRef.current;
-    const hiddenCanvas = hiddenCanvasRef.current;
-    if (!canvas || !hiddenCanvas) return;
+    const hCanvas = hiddenCanvasRef.current;
+    if (!canvas || !hCanvas) return;
 
-    const ctx = canvas.getContext("2d");
-    const hCtx = hiddenCanvas.getContext("2d");
-    if (!ctx || !hCtx) return;
+    const hCtx = hCanvas.getContext("2d");
+    if (!hCtx) return;
 
-    // 1. 숨겨진 캔버스에 정답 그리기 (굵게!)
-    hCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-    const fontSize = Math.min(
-      hiddenCanvas.width / currentWord.answer.length,
-      hiddenCanvas.height * 0.6,
-    );
+    // 판정용 캔버스에 정답 그리기 (힌트와 동일한 사이즈)
+    hCtx.clearRect(0, 0, hCanvas.width, hCanvas.height);
+    const fontSize = getFontSize(hCanvas, currentWord.answer);
     hCtx.font = `900 ${fontSize}px sans-serif`;
     hCtx.textAlign = "center";
     hCtx.textBaseline = "middle";
-    hCtx.fillText(
-      currentWord.answer,
-      hiddenCanvas.width / 2,
-      hiddenCanvas.height / 2,
-    );
+    hCtx.fillStyle = "black";
+    hCtx.fillText(currentWord.answer, hCanvas.width / 2, hCanvas.height / 2);
 
-    // 2. 픽셀 데이터 가져오기
-    const userImg = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const userImg = canvas
+      .getContext("2d")!
+      .getImageData(0, 0, canvas.width, canvas.height).data;
     const targetImg = hCtx.getImageData(
       0,
       0,
-      hiddenCanvas.width,
-      hiddenCanvas.height,
+      hCanvas.width,
+      hCanvas.height,
     ).data;
 
     let targetTotal = 0;
     let matchCount = 0;
 
-    // 3. 루프 최적화 및 판정 (사용자가 쓴 위치 근처를 탐색)
     for (let i = 3; i < targetImg.length; i += 4) {
-      if (targetImg[i] > 50) {
-        // 정답 영역이면
+      if (targetImg[i] > 100) {
         targetTotal++;
+        let found = false;
+        // 판정 범위를 넉넉하게 잡음
+        if (userImg[i] > 50) found = true;
+        else if (userImg[i - 16] > 50 || userImg[i + 16] > 50) found = true;
 
-        // 정답 픽셀 위치(i) 근처에 사용자 픽셀이 있는지 확인 (반경 약 15px)
-        // 이 검사가 위치가 살짝 어긋나도 정답으로 인정해주는 핵심입니다!
-        let foundNearby = false;
-        if (userImg[i] > 10) {
-          foundNearby = true;
-        } else {
-          // 상하좌우 주변 픽셀을 살짝 확인 (위치가 살짝 삐져나와도 OK)
-          const rowSize = canvas.width * 4;
-          if (
-            userImg[i - 20] > 10 ||
-            userImg[i + 20] > 10 ||
-            userImg[i - rowSize * 5] > 10
-          ) {
-            foundNearby = true;
-          }
-        }
-
-        if (foundNearby) matchCount++;
+        if (found) matchCount++;
       }
     }
 
     const similarity = (matchCount / targetTotal) * 100;
 
-    // 4. 합격 기준 조정 (30%만 넘어도 통과! 위치가 어긋나도 글자 형태만 맞으면 OK)
-    if (similarity > 30) {
+    if (similarity > 20) {
+      // 기준치를 낮춰서 스트레스 감소
       setPhase("review");
     } else {
-      alert(
-        `잘하셨어요! 조금만 더 칸에 맞춰 써볼까요? (일치율: ${Math.round(similarity)}%)`,
-      );
-    }
-  };
-
-  const handleNext = () => {
-    if (currentIndex < words.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-      setPhase("writing");
-      setShowHint(false);
-    } else {
-      router.push(
-        `/result?place=${place}&step5=${step5Score}&step6=${words.length}`,
-      );
+      alert(`잘하셨어요! 가이드를 따라 조금 더 써볼까요?`);
     }
   };
 
@@ -581,7 +571,7 @@ export default function Step6Page() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-white text-black font-sans overflow-hidden">
-      <header className="px-6 py-3 border-b border-gray-100 flex justify-between items-center shrink-0">
+      <header className="px-6 py-3 border-b border-gray-100 flex justify-between items-center shrink-0 bg-white z-20">
         <div>
           <span className="text-[#DAA520] font-black text-[10px] tracking-widest uppercase">
             Step 06 • {place.toUpperCase()}
@@ -608,51 +598,37 @@ export default function Step6Page() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() =>
-                    canvasRef.current
-                      ?.getContext("2d")
-                      ?.clearRect(
-                        0,
-                        0,
-                        canvasRef.current.width,
-                        canvasRef.current.height,
-                      )
-                  }
-                  className="py-4 bg-white border-2 border-gray-100 rounded-2xl font-black text-sm text-gray-500 flex flex-col items-center gap-1 shadow-sm"
+                  onClick={() => {
+                    const ctx = canvasRef.current?.getContext("2d");
+                    ctx?.clearRect(
+                      0,
+                      0,
+                      canvasRef.current!.width,
+                      canvasRef.current!.height,
+                    );
+                    initCanvas();
+                  }}
+                  className="py-4 bg-white border-2 border-gray-100 rounded-2xl font-black text-sm text-gray-500 shadow-sm"
                 >
-                  <span className="text-lg">🔄</span> 다시쓰기
+                  🔄 다시쓰기
                 </button>
                 <button
                   onClick={() => setShowHint(!showHint)}
-                  className={`py-4 border-2 rounded-2xl font-black text-sm flex flex-col items-center gap-1 shadow-sm ${showHint ? "bg-[#DAA520] text-white border-[#B8860B]" : "bg-white text-[#DAA520] border-amber-100"}`}
+                  className={`py-4 border-2 rounded-2xl font-black text-sm shadow-sm transition-colors ${showHint ? "bg-[#DAA520] text-white border-[#B8860B]" : "bg-white text-[#DAA520] border-amber-100"}`}
                 >
-                  <span className="text-lg">💡</span>{" "}
-                  {showHint ? "힌트 끄기" : "힌트 보기"}
+                  💡 {showHint ? "힌트 끄기" : "힌트 보기"}
                 </button>
               </div>
               <button
                 onClick={checkAnswer}
-                className="w-full py-5 bg-[#8B4513] text-white rounded-[24px] font-black text-xl shadow-lg active:scale-[0.98] transition-all"
+                className="w-full py-5 bg-[#8B4513] text-white rounded-[24px] font-black text-xl shadow-lg active:scale-[0.98]"
               >
                 작성 완료
               </button>
             </div>
 
             <div className="flex-1 relative bg-[#FDFDFD] border-4 border-dashed border-gray-200 rounded-[40px] overflow-hidden shadow-inner">
-              {showHint && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 px-10">
-                  <span
-                    className="font-black tracking-tighter text-center break-all w-full"
-                    style={{
-                      fontSize: "35vh",
-                      color: "rgba(200, 200, 200, 0.15)",
-                      lineHeight: 0.8,
-                    }}
-                  >
-                    {currentWord.answer}
-                  </span>
-                </div>
-              )}
+              {/* 별도의 span 힌트 대신 캔버스 내부 배경 가이드를 사용합니다 */}
               <canvas
                 ref={canvasRef}
                 onMouseDown={startDrawing}
@@ -661,7 +637,7 @@ export default function Step6Page() {
                 onTouchStart={startDrawing}
                 onTouchMove={draw}
                 onTouchEnd={() => setIsDrawing(false)}
-                className="absolute inset-0 w-full h-full touch-none cursor-crosshair z-10"
+                className="absolute inset-0 w-full h-full touch-none z-10"
               />
               <canvas ref={hiddenCanvasRef} className="hidden" />
             </div>
@@ -669,8 +645,8 @@ export default function Step6Page() {
         ) : (
           <div className="w-full flex flex-col items-center justify-center space-y-8 animate-in fade-in zoom-in duration-300">
             <div className="bg-amber-50 w-full max-w-lg p-16 rounded-[60px] text-center border-4 border-amber-100 shadow-xl">
-              <p className="text-[#DAA520] font-black tracking-[0.2em] text-lg mb-6">
-                GREAT!
+              <p className="text-[#DAA520] font-black tracking-[0.2em] text-lg mb-6 uppercase">
+                Great!
               </p>
               <div className="text-[120px] mb-4">{currentWord.emoji}</div>
               <h4 className="text-9xl font-black text-[#8B4513]">
@@ -678,8 +654,12 @@ export default function Step6Page() {
               </h4>
             </div>
             <button
-              onClick={handleNext}
-              className="w-full max-w-lg py-7 bg-[#8B4513] text-white rounded-[32px] font-black text-3xl shadow-2xl active:scale-95 transition-all"
+              onClick={() => {
+                setCurrentIndex((c) => c + 1);
+                setPhase("writing");
+                setShowHint(false);
+              }}
+              className="w-full max-w-lg py-7 bg-[#8B4513] text-white rounded-[32px] font-black text-3xl shadow-2xl active:scale-95"
             >
               다음 문제
             </button>
