@@ -59,16 +59,15 @@ function Step1Client() {
   const [isAnswered, setIsAnswered] = useState(false);
   const [canAnswer, setCanAnswer] = useState(false);
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
-  const [questionResults, setQuestionResults] = useState
-    Array<{
-      question: string;
-      userAnswer: boolean | null;
-      correctAnswer: boolean;
-      isCorrect: boolean;
-      responseTime: number;
-    }>
-  >([]);
-
+ const [questionResults, setQuestionResults] = useState
+  Array<{
+    question: string;
+    userAnswer: boolean | null;
+    correctAnswer: boolean;
+    isCorrect: boolean;
+    responseTime: number;
+  }>
+>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
