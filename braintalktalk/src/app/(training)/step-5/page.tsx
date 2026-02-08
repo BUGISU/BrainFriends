@@ -1,7 +1,12 @@
-// src/app/(training)/step-5/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
@@ -10,42 +15,153 @@ import { PlaceType } from "@/constants/trainingData";
 // ============================================
 // 1. 읽기 텍스트 데이터
 // ============================================
-const READING_TEXTS: Record<PlaceType, Array<{
-  id: number;
-  title: string;
-  text: string;
-  difficulty: "easy" | "medium" | "hard";
-  wordCount: number;
-}>> = {
+const READING_TEXTS: Record<
+  PlaceType,
+  Array<{
+    id: number;
+    title: string;
+    text: string;
+    difficulty: "easy" | "medium" | "hard";
+    wordCount: number;
+  }>
+> = {
   home: [
-    { id: 1, title: "아침 일과", text: "아침에 일어나면 세수를 하고 이를 닦습니다. 그리고 맛있는 아침 밥을 먹습니다.", difficulty: "easy", wordCount: 15 },
-    { id: 2, title: "우리 집", text: "우리 집에는 거실과 방이 있습니다. 거실에는 소파와 텔레비전이 있고, 방에는 침대와 책상이 있습니다. 부엌에서는 맛있는 음식을 만들 수 있습니다.", difficulty: "medium", wordCount: 28 },
-    { id: 3, title: "가족과 저녁", text: "저녁이 되면 가족들이 모두 집에 돌아옵니다. 함께 저녁 식사를 하면서 오늘 있었던 일을 이야기합니다. 식사 후에는 텔레비전을 보거나 책을 읽습니다. 가족과 함께하는 시간은 언제나 행복합니다.", difficulty: "hard", wordCount: 42 },
+    {
+      id: 1,
+      title: "아침 일과",
+      text: "아침에 일어나면 세수를 하고 이를 닦습니다. 그리고 맛있는 아침 밥을 먹습니다.",
+      difficulty: "easy",
+      wordCount: 15,
+    },
+    {
+      id: 2,
+      title: "우리 집",
+      text: "우리 집에는 거실과 방이 있습니다. 거실에는 소파와 텔레비전이 있고, 방에는 침대와 책상이 있습니다. 부엌에서는 맛있는 음식을 만들 수 있습니다.",
+      difficulty: "medium",
+      wordCount: 28,
+    },
+    {
+      id: 3,
+      title: "가족과 저녁",
+      text: "저녁이 되면 가족들이 모두 집에 돌아옵니다. 함께 저녁 식사를 하면서 오늘 있었던 일을 이야기합니다. 식사 후에는 텔레비전을 보거나 책을 읽습니다. 가족과 함께하는 시간은 언제나 행복합니다.",
+      difficulty: "hard",
+      wordCount: 42,
+    },
   ],
   hospital: [
-    { id: 1, title: "병원 가기", text: "몸이 아프면 병원에 갑니다. 의사 선생님이 어디가 아픈지 물어봅니다.", difficulty: "easy", wordCount: 14 },
-    { id: 2, title: "진료 받기", text: "병원에 도착하면 먼저 접수를 합니다. 번호표를 받고 대기실에서 기다립니다. 이름이 불리면 진료실로 들어갑니다. 의사 선생님께 증상을 자세히 말씀드립니다.", difficulty: "medium", wordCount: 32 },
-    { id: 3, title: "약 복용", text: "의사 선생님이 처방전을 줍니다. 처방전을 가지고 약국에 갑니다. 약사님이 약을 지어 주시면서 복용 방법을 알려줍니다. 식후 삼십 분에 물과 함께 약을 먹습니다. 약을 빠뜨리지 않고 먹어야 빨리 낫습니다.", difficulty: "hard", wordCount: 48 },
+    {
+      id: 1,
+      title: "병원 가기",
+      text: "몸이 아프면 병원에 갑니다. 의사 선생님이 어디가 아픈지 물어봅니다.",
+      difficulty: "easy",
+      wordCount: 14,
+    },
+    {
+      id: 2,
+      title: "진료 받기",
+      text: "병원에 도착하면 먼저 접수를 합니다. 번호표를 받고 대기실에서 기다립니다. 이름이 불리면 진료실로 들어갑니다. 의사 선생님께 증상을 자세히 말씀드립니다.",
+      difficulty: "medium",
+      wordCount: 32,
+    },
+    {
+      id: 3,
+      title: "약 복용",
+      text: "의사 선생님이 처방전을 줍니다. 처방전을 가지고 약국에 갑니다. 약사님이 약을 지어 주시면서 복용 방법을 알려줍니다. 식후 삼십 분에 물과 함께 약을 먹습니다. 약을 빠뜨리지 않고 먹어야 빨리 낫습니다.",
+      difficulty: "hard",
+      wordCount: 48,
+    },
   ],
   cafe: [
-    { id: 1, title: "커피 주문", text: "카페에 가서 따뜻한 커피를 주문합니다. 잠시 기다리면 음료가 나옵니다.", difficulty: "easy", wordCount: 14 },
-    { id: 2, title: "카페에서", text: "오늘은 날씨가 좋아서 카페에 왔습니다. 창가 자리에 앉아 아메리카노를 마십니다. 책을 읽으면서 여유로운 시간을 보냅니다. 이런 시간이 참 좋습니다.", difficulty: "medium", wordCount: 30 },
-    { id: 3, title: "친구와 카페", text: "오랜만에 친구를 만나 카페에 갔습니다. 친구는 라떼를 시키고 나는 아이스 아메리카노를 시켰습니다. 우리는 서로의 근황을 이야기하며 즐거운 시간을 보냈습니다. 다음에 또 만나자고 약속했습니다. 친구와 함께하는 시간은 소중합니다.", difficulty: "hard", wordCount: 45 },
+    {
+      id: 1,
+      title: "커피 주문",
+      text: "카페에 가서 따뜻한 커피를 주문합니다. 잠시 기다리면 음료가 나옵니다.",
+      difficulty: "easy",
+      wordCount: 14,
+    },
+    {
+      id: 2,
+      title: "카페에서",
+      text: "오늘은 날씨가 좋아서 카페에 왔습니다. 창가 자리에 앉아 아메리카노를 마십니다. 책을 읽으면서 여유로운 시간을 보냅니다. 이런 시간이 참 좋습니다.",
+      difficulty: "medium",
+      wordCount: 30,
+    },
+    {
+      id: 3,
+      title: "친구와 카페",
+      text: "오랜만에 친구를 만나 카페에 갔습니다. 친구는 라떼를 시키고 나는 아이스 아메리카노를 시켰습니다. 우리는 서로의 근황을 이야기하며 즐거운 시간을 보냈습니다. 다음에 또 만나자고 약속했습니다. 친구와 함께하는 시간은 소중합니다.",
+      difficulty: "hard",
+      wordCount: 45,
+    },
   ],
   bank: [
-    { id: 1, title: "은행 가기", text: "은행에 가서 통장을 만듭니다. 신분증을 꼭 가져가야 합니다.", difficulty: "easy", wordCount: 12 },
-    { id: 2, title: "ATM 사용", text: "현금이 필요하면 ATM을 이용합니다. 카드를 넣고 비밀번호를 입력합니다. 원하는 금액을 선택하면 돈이 나옵니다. 카드와 영수증을 챙기는 것을 잊지 마세요.", difficulty: "medium", wordCount: 32 },
-    { id: 3, title: "적금 가입", text: "은행에서 적금에 가입하려고 합니다. 창구에서 상담을 받고 여러 상품을 비교합니다. 금리와 만기 기간을 확인한 후 가장 좋은 상품을 선택합니다. 매달 일정 금액을 자동으로 이체하기로 했습니다. 목돈을 모으는 좋은 방법입니다.", difficulty: "hard", wordCount: 50 },
+    {
+      id: 1,
+      title: "은행 가기",
+      text: "은행에 가서 통장을 만듭니다. 신분증을 꼭 가져가야 합니다.",
+      difficulty: "easy",
+      wordCount: 12,
+    },
+    {
+      id: 2,
+      title: "ATM 사용",
+      text: "현금이 필요하면 ATM을 이용합니다. 카드를 넣고 비밀번호를 입력합니다. 원하는 금액을 선택하면 돈이 나옵니다. 카드와 영수증을 챙기는 것을 잊지 마세요.",
+      difficulty: "medium",
+      wordCount: 32,
+    },
+    {
+      id: 3,
+      title: "적금 가입",
+      text: "은행에서 적금에 가입하려고 합니다. 창구에서 상담을 받고 여러 상품을 비교합니다. 금리와 만기 기간을 확인한 후 가장 좋은 상품을 선택합니다. 매달 일정 금액을 자동으로 이체하기로 했습니다. 목돈을 모으는 좋은 방법입니다.",
+      difficulty: "hard",
+      wordCount: 50,
+    },
   ],
   park: [
-    { id: 1, title: "공원 산책", text: "공원에서 산책을 합니다. 나무와 꽃이 많아서 기분이 좋습니다.", difficulty: "easy", wordCount: 12 },
-    { id: 2, title: "운동하기", text: "아침마다 공원에서 운동을 합니다. 먼저 가볍게 스트레칭을 하고 천천히 걷습니다. 운동 기구로 팔과 다리 운동도 합니다. 땀을 흘리고 나면 기분이 상쾌합니다.", difficulty: "medium", wordCount: 32 },
-    { id: 3, title: "봄 나들이", text: "따뜻한 봄날, 가족과 함께 공원으로 나들이를 갔습니다. 아이들은 놀이터에서 신나게 뛰어놀고, 어른들은 벤치에 앉아 이야기를 나눕니다. 도시락을 먹으며 행복한 시간을 보냈습니다. 저녁노을을 보며 집으로 돌아왔습니다. 즐거운 하루였습니다.", difficulty: "hard", wordCount: 48 },
+    {
+      id: 1,
+      title: "공원 산책",
+      text: "공원에서 산책을 합니다. 나무와 꽃이 많아서 기분이 좋습니다.",
+      difficulty: "easy",
+      wordCount: 12,
+    },
+    {
+      id: 2,
+      title: "운동하기",
+      text: "아침마다 공원에서 운동을 합니다. 먼저 가볍게 스트레칭을 하고 천천히 걷습니다. 운동 기구로 팔과 다리 운동도 합니다. 땀을 흘리고 나면 기분이 상쾌합니다.",
+      difficulty: "medium",
+      wordCount: 32,
+    },
+    {
+      id: 3,
+      title: "봄 나들이",
+      text: "따뜻한 봄날, 가족과 함께 공원으로 나들이를 갔습니다. 아이들은 놀이터에서 신나게 뛰어놀고, 어른들은 벤치에 앉아 이야기를 나눕니다. 도시락을 먹으며 행복한 시간을 보냈습니다. 저녁노을을 보며 집으로 돌아왔습니다. 즐거운 하루였습니다.",
+      difficulty: "hard",
+      wordCount: 48,
+    },
   ],
   mart: [
-    { id: 1, title: "장보기", text: "마트에서 과일과 채소를 삽니다. 카트에 담아서 계산대로 갑니다.", difficulty: "easy", wordCount: 12 },
-    { id: 2, title: "마트 쇼핑", text: "일주일 치 장을 보러 마트에 갔습니다. 먼저 채소 코너에서 배추와 양파를 담습니다. 정육 코너에서 돼지고기도 삽니다. 계산대에서 카드로 결제하고 영수증을 받습니다.", difficulty: "medium", wordCount: 34 },
-    { id: 3, title: "할인 행사", text: "오늘 마트에서 큰 할인 행사를 합니다. 평소보다 물건이 많이 저렴합니다. 필요한 것들의 목록을 미리 작성해 왔습니다. 목록대로 물건을 담으니 불필요한 지출을 줄일 수 있습니다. 포인트 카드를 적립하면 다음에 할인도 받을 수 있습니다. 알뜰하게 장을 보니 기분이 좋습니다.", difficulty: "hard", wordCount: 55 },
+    {
+      id: 1,
+      title: "장보기",
+      text: "마트에서 과일과 채소를 삽니다. 카트에 담아서 계산대로 갑니다.",
+      difficulty: "easy",
+      wordCount: 12,
+    },
+    {
+      id: 2,
+      title: "마트 쇼핑",
+      text: "일주일 치 장을 보러 마트에 갔습니다. 먼저 채소 코너에서 배추와 양파를 담습니다. 정육 코너에서 돼지고기도 삽니다. 계산대에서 카드로 결제하고 영수증을 받습니다.",
+      difficulty: "medium",
+      wordCount: 34,
+    },
+    {
+      id: 3,
+      title: "할인 행사",
+      text: "오늘 마트에서 큰 할인 행사를 합니다. 평소보다 물건이 많이 저렴합니다. 필요한 것들의 목록을 미리 작성해 왔습니다. 목록대로 물건을 담으니 불필요한 지출을 줄일 수 있습니다. 포인트 카드를 적립하면 다음에 할인도 받을 수 있습니다. 알뜰하게 장을 보니 기분이 좋습니다.",
+      difficulty: "hard",
+      wordCount: 55,
+    },
   ],
 };
 
@@ -54,11 +170,11 @@ const READING_TEXTS: Record<PlaceType, Array<{
 // ============================================
 interface ReadingMetrics {
   textId: number;
-  totalTime: number;         // 총 소요 시간 (초)
-  wordsPerMinute: number;    // 분당 단어 수
-  pauseCount: number;        // 멈춤 횟수
-  averageAmplitude: number;  // 평균 음량
-  readingScore: number;      // 읽기 점수 (0-100)
+  totalTime: number; // 총 소요 시간 (초)
+  wordsPerMinute: number; // 분당 단어 수
+  pauseCount: number; // 멈춤 횟수
+  averageAmplitude: number; // 평균 음량
+  readingScore: number; // 읽기 점수 (0-100)
 }
 
 // ============================================
@@ -89,7 +205,9 @@ export default function Step5Page() {
 
   // 결과
   const [readingResults, setReadingResults] = useState<ReadingMetrics[]>([]);
-  const [currentReading, setCurrentReading] = useState<ReadingMetrics | null>(null);
+  const [currentReading, setCurrentReading] = useState<ReadingMetrics | null>(
+    null,
+  );
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -103,7 +221,10 @@ export default function Step5Page() {
   const amplitudeHistoryRef = useRef<number[]>([]);
 
   // 텍스트 데이터
-  const texts = useMemo(() => READING_TEXTS[place] || READING_TEXTS.home, [place]);
+  const texts = useMemo(
+    () => READING_TEXTS[place] || READING_TEXTS.home,
+    [place],
+  );
   const currentText = texts[currentIndex];
   const words = currentText.text.split(/\s+/);
 
@@ -117,7 +238,7 @@ export default function Step5Page() {
     async function init() {
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
         );
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
@@ -162,9 +283,11 @@ export default function Step5Page() {
     return () => {
       isCancelled = true;
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (audioAnimationRef.current) cancelAnimationFrame(audioAnimationRef.current);
+      if (audioAnimationRef.current)
+        cancelAnimationFrame(audioAnimationRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      if (streamRef.current)
+        streamRef.current.getTracks().forEach((t) => t.stop());
       if (audioContextRef.current) audioContextRef.current.close();
     };
   }, []);
@@ -257,18 +380,19 @@ export default function Step5Page() {
       }
     }
 
-    const wordsPerMinute = totalTime > 0 ? Math.round((currentText.wordCount / totalTime) * 60) : 0;
-    const averageAmplitude = history.length > 0
-      ? history.reduce((a, b) => a + b) / history.length
-      : 0;
+    const wordsPerMinute =
+      totalTime > 0 ? Math.round((currentText.wordCount / totalTime) * 60) : 0;
+    const averageAmplitude =
+      history.length > 0 ? history.reduce((a, b) => a + b) / history.length : 0;
 
     // 점수 계산
     // - WPM 100-150이 이상적 (최대 40점)
     // - 멈춤이 적을수록 좋음 (최대 30점)
     // - 음량이 적절하면 좋음 (최대 30점)
-    const wpmScore = wordsPerMinute >= 80 && wordsPerMinute <= 180
-      ? 40
-      : Math.max(0, 40 - Math.abs(wordsPerMinute - 130) * 0.3);
+    const wpmScore =
+      wordsPerMinute >= 80 && wordsPerMinute <= 180
+        ? 40
+        : Math.max(0, 40 - Math.abs(wordsPerMinute - 130) * 0.3);
     const pauseScore = Math.max(0, 30 - pauseCount * 3);
     const ampScore = averageAmplitude >= 20 && averageAmplitude <= 60 ? 30 : 15;
     const readingScore = Math.round(wpmScore + pauseScore + ampScore);
@@ -303,9 +427,13 @@ export default function Step5Page() {
   };
 
   const finishTraining = () => {
-    const avgScore = readingResults.length > 0
-      ? Math.round(readingResults.reduce((a, b) => a + b.readingScore, 0) / readingResults.length)
-      : 0;
+    const avgScore =
+      readingResults.length > 0
+        ? Math.round(
+            readingResults.reduce((a, b) => a + b.readingScore, 0) /
+              readingResults.length,
+          )
+        : 0;
 
     router.push(`/step-6?place=${place}&step4=${step4Score}&step5=${avgScore}`);
   };
@@ -334,8 +462,14 @@ export default function Step5Page() {
           </h2>
         </div>
         <div className="flex items-center gap-3">
-          <div className={`px-3 py-1 rounded-full text-xs font-bold ${difficultyColors[currentText.difficulty]}`}>
-            {currentText.difficulty === "easy" ? "쉬움" : currentText.difficulty === "medium" ? "보통" : "어려움"}
+          <div
+            className={`px-3 py-1 rounded-full text-xs font-bold ${difficultyColors[currentText.difficulty]}`}
+          >
+            {currentText.difficulty === "easy"
+              ? "쉬움"
+              : currentText.difficulty === "medium"
+                ? "보통"
+                : "어려움"}
           </div>
           {phase === "reading" && (
             <div className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-600 animate-pulse">
@@ -378,7 +512,9 @@ export default function Step5Page() {
 
           <div className="bg-amber-50 rounded-2xl p-3 text-center">
             <p className="text-xs text-amber-600 font-bold">단어 수</p>
-            <p className="text-xl font-black text-amber-700">{currentText.wordCount}개</p>
+            <p className="text-xl font-black text-amber-700">
+              {currentText.wordCount}개
+            </p>
           </div>
         </div>
 
@@ -444,19 +580,27 @@ export default function Step5Page() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="text-center p-3 bg-gray-50 rounded-xl">
                     <p className="text-gray-400">소요 시간</p>
-                    <p className="text-2xl font-black text-blue-600">{currentReading.totalTime}초</p>
+                    <p className="text-2xl font-black text-blue-600">
+                      {currentReading.totalTime}초
+                    </p>
                   </div>
                   <div className="text-center p-3 bg-gray-50 rounded-xl">
                     <p className="text-gray-400">분당 단어</p>
-                    <p className="text-2xl font-black text-green-600">{currentReading.wordsPerMinute}</p>
+                    <p className="text-2xl font-black text-green-600">
+                      {currentReading.wordsPerMinute}
+                    </p>
                   </div>
                   <div className="text-center p-3 bg-gray-50 rounded-xl">
                     <p className="text-gray-400">멈춤 횟수</p>
-                    <p className="text-2xl font-black text-purple-600">{currentReading.pauseCount}회</p>
+                    <p className="text-2xl font-black text-purple-600">
+                      {currentReading.pauseCount}회
+                    </p>
                   </div>
                   <div className="text-center p-3 bg-amber-50 rounded-xl">
                     <p className="text-amber-600">읽기 점수</p>
-                    <p className="text-3xl font-black text-amber-700">{currentReading.readingScore}</p>
+                    <p className="text-3xl font-black text-amber-700">
+                      {currentReading.readingScore}
+                    </p>
                   </div>
                 </div>
 
@@ -476,7 +620,9 @@ export default function Step5Page() {
       <footer className="py-3 px-6 bg-[#F8F9FA]/50 border-t border-gray-50 flex justify-between items-center text-[10px] font-black text-[#8B4513]/40 uppercase tracking-[0.15em]">
         <span>Face SI: {faceMetrics.symmetryScore}%</span>
         <span>Reading Assessment Training</span>
-        <span>Text {currentIndex + 1} / {texts.length}</span>
+        <span>
+          Text {currentIndex + 1} / {texts.length}
+        </span>
       </footer>
     </div>
   );

@@ -1,4 +1,3 @@
-// src/app/(training)/step-4/page.tsx
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
