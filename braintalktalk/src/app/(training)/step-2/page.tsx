@@ -1,5 +1,4 @@
-export const dynamic = "force-dynamic";
-("use client");
+"use client";
 
 import React, { useState, useRef, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,7 +10,7 @@ import {
   SPEECH_REPETITION_PROTOCOLS,
   PlaceType,
 } from "@/constants/trainingData";
-
+export const dynamic = "force-dynamic";
 // --- 하위 컴포넌트: 실제 로직 포함 ---
 function Step2Content() {
   const router = useRouter();

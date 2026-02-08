@@ -1,5 +1,4 @@
-export const dynamic = "force-dynamic";
-("use client");
+"use client";
 
 import React, {
   useState,
@@ -13,7 +12,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
 import { PlaceType } from "@/constants/trainingData";
-
+export const dynamic = "force-dynamic";
 // --- 상황 시나리오 데이터 (기존과 동일) ---
 const FLUENCY_SCENARIOS: Record<
   PlaceType,

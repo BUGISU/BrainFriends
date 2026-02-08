@@ -1,5 +1,4 @@
-export const dynamic = "force-dynamic";
-("use client");
+"use client";
 
 import React, {
   useState,
@@ -12,7 +11,7 @@ import React, {
 import { useRouter, useSearchParams } from "next/navigation";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
 import { VISUAL_MATCHING_PROTOCOLS, PlaceType } from "@/constants/trainingData";
-
+export const dynamic = "force-dynamic";
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
 // 1️⃣ 실제 로직을 담당하는 내부 컴포넌트

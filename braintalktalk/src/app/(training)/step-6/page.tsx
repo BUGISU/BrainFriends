@@ -1,5 +1,4 @@
-export const dynamic = "force-dynamic";
-("use client");
+"use client";
 
 import React, {
   useState,
@@ -11,7 +10,7 @@ import React, {
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
-
+export const dynamic = "force-dynamic";
 // --- 전체 데이터 보존 (유지) ---
 const WRITING_WORDS: Record<
   PlaceType,
