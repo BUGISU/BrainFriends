@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 
 export const dynamic = "force-dynamic";
-"use client";
+
 
 // ============================================
 // 로딩 컴포넌트
@@ -27,6 +27,7 @@ export default function Page() {
     </Suspense>
   );
 }
+"use client";
 // ============================================
 // 클라이언트 컴포넌트 (useSearchParams 사용)
 // ============================================
