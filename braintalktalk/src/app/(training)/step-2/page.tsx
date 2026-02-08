@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
@@ -11,7 +11,8 @@ import {
   PlaceType,
 } from "@/constants/trainingData";
 
-export default function Step2Page() {
+// --- 하위 컴포넌트: 실제 로직 포함 ---
+function Step2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const place = (searchParams.get("place") as PlaceType) || "cafe";
@@ -25,7 +26,6 @@ export default function Step2Page() {
   const [transcript, setTranscript] = useState<string>("");
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [recordedAudios, setRecordedAudios] = useState<any[]>([]);
-  const [currentAudioUrl, setCurrentAudioUrl] = useState<string>("");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
@@ -39,25 +39,35 @@ export default function Step2Page() {
 
   const currentItem = protocol[currentIndex];
 
-  // ✅ 결과 저장 함수 추가
-  const saveStep2Results = (results: any[], audios: any[]) => {
+  // ✅ [SaMD 로직] 하이브리드 점수 산출 및 결과 저장
+  const saveStep2Results = (results: any[]) => {
     const patient = loadPatientProfile();
     if (!patient) return;
+
     const sessionManager = new SessionManager(
       { age: patient.age, educationYears: patient.educationYears || 0 },
       place,
     );
+
+    // 하이브리드 가중치 적용 (음성 60%, 안면 40%)
+    const avgSymmetry =
+      results.reduce((a, b) => a + b.symmetryScore, 0) / results.length;
+    const avgPronunciation =
+      results.reduce((a, b) => a + b.pronunciationScore, 0) / results.length;
+
+    // 최종 점수 산출: (음성 * 0.6) + (안면 * 0.4)
+    const hybridScore = avgPronunciation * 0.6 + avgSymmetry * 0.4;
+
     sessionManager.saveStep2Result({
       items: results,
-      averageSymmetry:
-        results.reduce((a, b) => a + b.symmetryScore, 0) / results.length,
-      averagePronunciation:
-        results.reduce((a, b) => a + b.pronunciationScore, 0) / results.length,
+      averageSymmetry: avgSymmetry,
+      averagePronunciation: avgPronunciation,
+      hybridScore: Number(hybridScore.toFixed(2)),
+      isSuccess: hybridScore >= 85, // 85% 기준 미달 시 리포트에서 별도 처리
       timestamp: Date.now(),
     });
   };
 
-  // ✅ 오디오 정지 함수 (분리됨)
   const stopAudio = () => {
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
@@ -67,16 +77,14 @@ export default function Step2Page() {
     handleNextTransition();
   };
 
-  // ✅ 다음 단계 이동 공통 로직
   const handleNextTransition = () => {
     setResultScore(null);
     setTranscript("");
-    setCurrentAudioUrl("");
     if (currentIndex < protocol.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setAudioLevel(0);
     } else {
-      saveStep2Results(analysisResults, recordedAudios);
+      saveStep2Results(analysisResults);
       router.push(`/step-3?place=${place}`);
     }
   };
@@ -90,6 +98,7 @@ export default function Step2Page() {
         if (!apiKey) return alert("API 키를 확인해주세요.");
         if (!analyzerRef.current)
           analyzerRef.current = new SpeechAnalyzer(apiKey);
+
         await analyzerRef.current.startAnalysis((level) =>
           setAudioLevel(level),
         );
@@ -109,7 +118,6 @@ export default function Step2Page() {
         const audioUrl = URL.createObjectURL(result.audioBlob);
         setTranscript(result.transcript);
         setResultScore(result.pronunciationScore);
-        setCurrentAudioUrl(audioUrl);
         setIsAnalyzing(false);
 
         const updatedResults = [
@@ -127,7 +135,7 @@ export default function Step2Page() {
           { text: currentItem.text, audioUrl },
         ]);
 
-        // ✅ 자동 재생 로직
+        // 자동 재생 및 다음 단계 전환
         setTimeout(() => {
           const audio = new Audio(audioUrl);
           audioPlayerRef.current = audio;
@@ -283,6 +291,22 @@ export default function Step2Page() {
   );
 }
 
+// --- 메인 페이지 컴포넌트: Suspense로 래핑 ---
+export default function Step2Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center bg-white">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+        </div>
+      }
+    >
+      <Step2Content />
+    </Suspense>
+  );
+}
+
+// --- 공통 컴포넌트 ---
 function MetricBar({ label, value, unit, color }: any) {
   return (
     <div className="space-y-1.5 font-black">

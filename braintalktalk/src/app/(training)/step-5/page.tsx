@@ -6,15 +6,14 @@ import React, {
   useCallback,
   useRef,
   useMemo,
+  Suspense,
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
 import { PlaceType } from "@/constants/trainingData";
 
-// ============================================
-// 1. 읽기 텍스트 데이터
-// ============================================
+// --- 읽기 텍스트 데이터 (기존 데이터 유지) ---
 const READING_TEXTS: Record<
   PlaceType,
   Array<{
@@ -165,28 +164,21 @@ const READING_TEXTS: Record<
   ],
 };
 
-// ============================================
-// 2. 읽기 평가 인터페이스
-// ============================================
 interface ReadingMetrics {
   textId: number;
-  totalTime: number; // 총 소요 시간 (초)
-  wordsPerMinute: number; // 분당 단어 수
-  pauseCount: number; // 멈춤 횟수
-  averageAmplitude: number; // 평균 음량
-  readingScore: number; // 읽기 점수 (0-100)
+  totalTime: number;
+  wordsPerMinute: number;
+  pauseCount: number;
+  averageAmplitude: number;
+  readingScore: number;
 }
 
-// ============================================
-// 3. 메인 컴포넌트
-// ============================================
-export default function Step5Page() {
+function Step5Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step4Score = searchParams.get("step4") || "0";
 
-  // 상태
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<"ready" | "reading" | "review">("ready");
   const [isMounted, setIsMounted] = useState(false);
@@ -195,21 +187,17 @@ export default function Step5Page() {
   const [isFaceReady, setIsFaceReady] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
 
-  // 안면 분석
   const [faceMetrics, setFaceMetrics] = useState<LipMetrics>({
     symmetryScore: 100,
     openingRatio: 0,
     isStretched: false,
     deviation: 0,
   });
-
-  // 결과
   const [readingResults, setReadingResults] = useState<ReadingMetrics[]>([]);
   const [currentReading, setCurrentReading] = useState<ReadingMetrics | null>(
     null,
   );
 
-  // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -218,23 +206,53 @@ export default function Step5Page() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioAnimationRef = useRef<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const highlightIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const amplitudeHistoryRef = useRef<number[]>([]);
 
-  // 텍스트 데이터
   const texts = useMemo(
     () => READING_TEXTS[place] || READING_TEXTS.home,
     [place],
   );
   const currentText = texts[currentIndex];
-  const words = currentText.text.split(/\s+/);
+  const words = useMemo(() => currentText.text.split(/\s+/), [currentText]);
 
-  // ============================================
-  // 4. 초기화 (이전과 동일)
-  // ============================================
+  const predictFace = useCallback(() => {
+    if (landmarkerRef.current && videoRef.current?.readyState >= 2) {
+      const results = landmarkerRef.current.detectForVideo(
+        videoRef.current,
+        performance.now(),
+      );
+      if (results.faceLandmarks?.[0])
+        setFaceMetrics(calculateLipMetrics(results.faceLandmarks[0]));
+    }
+    animationRef.current = requestAnimationFrame(predictFace);
+  }, []);
+
+  const initAudioAnalysis = useCallback(
+    (stream: MediaStream) => {
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateAudio = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        setAudioLevel(avg);
+        if (phase === "reading") amplitudeHistoryRef.current.push(avg);
+        audioAnimationRef.current = requestAnimationFrame(updateAudio);
+      };
+      updateAudio();
+    },
+    [phase],
+  );
+
   useEffect(() => {
     setIsMounted(true);
     let isCancelled = false;
-
     async function init() {
       try {
         const vision = await FilesetResolver.forVisionTasks(
@@ -248,22 +266,13 @@ export default function Step5Page() {
           },
           runningMode: "VIDEO",
         });
-
         if (isCancelled) return;
         landmarkerRef.current = landmarker;
-
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { aspectRatio: 1.333, width: 320, height: 240 },
+          video: { width: 320, height: 240 },
           audio: true,
         });
-
-        if (isCancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-
         streamRef.current = stream;
-
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
@@ -271,222 +280,126 @@ export default function Step5Page() {
             animationRef.current = requestAnimationFrame(predictFace);
           };
         }
-
         initAudioAnalysis(stream);
       } catch (err) {
-        console.error("초기화 실패:", err);
+        console.error(err);
       }
     }
-
     init();
-
     return () => {
       isCancelled = true;
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (audioAnimationRef.current)
         cancelAnimationFrame(audioAnimationRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
+      if (highlightIntervalRef.current)
+        clearInterval(highlightIntervalRef.current);
       if (streamRef.current)
         streamRef.current.getTracks().forEach((t) => t.stop());
-      if (audioContextRef.current) audioContextRef.current.close();
     };
-  }, []);
+  }, [predictFace, initAudioAnalysis]);
 
-  const predictFace = useCallback(() => {
-    const video = videoRef.current;
-    const landmarker = landmarkerRef.current;
-
-    if (landmarker && video && video.readyState >= 2) {
-      const results = landmarker.detectForVideo(video, performance.now());
-      if (results.faceLandmarks?.[0]) {
-        setFaceMetrics(calculateLipMetrics(results.faceLandmarks[0]));
-      }
-    }
-    animationRef.current = requestAnimationFrame(predictFace);
-  }, []);
-
-  const initAudioAnalysis = (stream: MediaStream) => {
-    const audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(stream);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-
-    audioContextRef.current = audioContext;
-    analyserRef.current = analyser;
-
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const updateAudio = () => {
-      analyser.getByteFrequencyData(dataArray);
-      const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-      setAudioLevel(average);
-
-      if (phase === "reading") {
-        amplitudeHistoryRef.current.push(average);
-      }
-
-      audioAnimationRef.current = requestAnimationFrame(updateAudio);
-    };
-    updateAudio();
-  };
-
-  // ============================================
-  // 5. 읽기 시작
-  // ============================================
   const startReading = () => {
     setPhase("reading");
     setReadingTime(0);
     setHighlightIndex(0);
     amplitudeHistoryRef.current = [];
+    timerRef.current = setInterval(
+      () => setReadingTime((prev) => prev + 1),
+      1000,
+    );
 
-    timerRef.current = setInterval(() => {
-      setReadingTime((prev) => prev + 1);
-    }, 1000);
-
-    // 단어 하이라이트 자동 진행 (예상 읽기 속도 기반)
-    const avgReadingSpeed = 2; // 초당 2단어 예상
-    let wordIndex = 0;
-    const highlightInterval = setInterval(() => {
-      wordIndex++;
-      if (wordIndex < words.length) {
-        setHighlightIndex(wordIndex);
-      } else {
-        clearInterval(highlightInterval);
-      }
+    const avgReadingSpeed = 1.8; // 초당 약 1.8단어 (고령층 평균 반영)
+    let wordIdx = 0;
+    highlightIntervalRef.current = setInterval(() => {
+      wordIdx++;
+      if (wordIdx < words.length) setHighlightIndex(wordIdx);
+      else if (highlightIntervalRef.current)
+        clearInterval(highlightIntervalRef.current);
     }, 1000 / avgReadingSpeed);
   };
 
-  // ============================================
-  // 6. 읽기 종료 & 분석
-  // ============================================
   const stopReading = () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    if (highlightIntervalRef.current)
+      clearInterval(highlightIntervalRef.current);
 
-    const totalTime = readingTime;
+    const totalTime = Math.max(readingTime, 1);
     const history = amplitudeHistoryRef.current;
-
-    // 멈춤 횟수 계산
     const silenceThreshold = 10;
-    let pauseCount = 0;
+    let pauses = 0;
     let inSilence = false;
-    for (const amp of history) {
+    history.forEach((amp) => {
       if (amp < silenceThreshold && !inSilence) {
-        pauseCount++;
+        pauses++;
         inSilence = true;
-      } else if (amp >= silenceThreshold) {
-        inSilence = false;
-      }
-    }
+      } else if (amp >= silenceThreshold) inSilence = false;
+    });
 
-    const wordsPerMinute =
-      totalTime > 0 ? Math.round((currentText.wordCount / totalTime) * 60) : 0;
-    const averageAmplitude =
-      history.length > 0 ? history.reduce((a, b) => a + b) / history.length : 0;
-
-    // 점수 계산
-    // - WPM 100-150이 이상적 (최대 40점)
-    // - 멈춤이 적을수록 좋음 (최대 30점)
-    // - 음량이 적절하면 좋음 (최대 30점)
+    const wpm = Math.round((currentText.wordCount / totalTime) * 60);
     const wpmScore =
-      wordsPerMinute >= 80 && wordsPerMinute <= 180
+      wpm >= 90 && wpm <= 160
         ? 40
-        : Math.max(0, 40 - Math.abs(wordsPerMinute - 130) * 0.3);
-    const pauseScore = Math.max(0, 30 - pauseCount * 3);
-    const ampScore = averageAmplitude >= 20 && averageAmplitude <= 60 ? 30 : 15;
-    const readingScore = Math.round(wpmScore + pauseScore + ampScore);
+        : Math.max(0, 40 - Math.abs(wpm - 120) * 0.4);
+    const pauseScore = Math.max(0, 30 - pauses * 2.5);
+    const score = Math.min(Math.round(wpmScore + pauseScore + 30), 100);
 
-    const metrics: ReadingMetrics = {
+    const metrics = {
       textId: currentText.id,
       totalTime,
-      wordsPerMinute,
-      pauseCount,
-      averageAmplitude: Math.round(averageAmplitude * 10) / 10,
-      readingScore: Math.min(readingScore, 100),
+      wordsPerMinute: wpm,
+      pauseCount: pauses,
+      averageAmplitude: 0,
+      readingScore: score,
     };
-
     setCurrentReading(metrics);
     setReadingResults((prev) => [...prev, metrics]);
     setPhase("review");
   };
 
-  // ============================================
-  // 7. 다음 / 완료
-  // ============================================
   const handleNext = () => {
     if (currentIndex < texts.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setPhase("ready");
       setCurrentReading(null);
-      setReadingTime(0);
       setHighlightIndex(-1);
     } else {
-      finishTraining();
+      const avg = Math.round(
+        readingResults.reduce((a, b) => a + b.readingScore, 0) /
+          readingResults.length,
+      );
+      router.push(`/step-6?place=${place}&step4=${step4Score}&step5=${avg}`);
     }
   };
 
-  const finishTraining = () => {
-    const avgScore =
-      readingResults.length > 0
-        ? Math.round(
-            readingResults.reduce((a, b) => a + b.readingScore, 0) /
-              readingResults.length,
-          )
-        : 0;
-
-    router.push(`/step-6?place=${place}&step4=${step4Score}&step5=${avgScore}`);
-  };
-
-  // ============================================
-  // 8. 렌더링
-  // ============================================
   if (!isMounted || !currentText) return null;
-
-  const difficultyColors = {
-    easy: "bg-green-100 text-green-700",
-    medium: "bg-amber-100 text-amber-700",
-    hard: "bg-red-100 text-red-700",
-  };
 
   return (
     <div className="flex flex-col h-full w-full bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden text-black font-sans">
-      {/* HEADER */}
-      <header className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
-        <div className="text-left">
+      <header className="px-6 py-4 border-b border-gray-50 flex justify-between items-center bg-white/80 backdrop-blur-md sticky top-0 z-10">
+        <div>
           <span className="text-[#DAA520] font-black text-[10px] tracking-widest uppercase block mb-0.5">
             Step 05 • {place.toUpperCase()}
           </span>
           <h2 className="text-xl font-black text-[#8B4513] tracking-tighter">
-            읽기 학습
+            문장 읽기 학습
           </h2>
         </div>
         <div className="flex items-center gap-3">
           <div
-            className={`px-3 py-1 rounded-full text-xs font-bold ${difficultyColors[currentText.difficulty]}`}
+            className={`px-4 py-1.5 rounded-2xl text-xs font-black shadow-sm ${currentText.difficulty === "easy" ? "bg-green-100 text-green-700" : currentText.difficulty === "medium" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}
           >
-            {currentText.difficulty === "easy"
-              ? "쉬움"
-              : currentText.difficulty === "medium"
-                ? "보통"
-                : "어려움"}
+            {currentText.difficulty.toUpperCase()}
           </div>
-          {phase === "reading" && (
-            <div className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-600 animate-pulse">
-              🔴 {readingTime}s
-            </div>
-          )}
-          <div className="bg-[#F8F9FA] px-4 py-1.5 rounded-2xl font-black text-lg text-[#DAA520]">
+          <div className="bg-[#F8F9FA] px-4 py-1.5 rounded-2xl font-black text-lg text-[#DAA520] border border-gray-100">
             {currentIndex + 1} / {texts.length}
           </div>
         </div>
       </header>
 
-      {/* MAIN */}
       <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        {/* 좌측: 카메라 */}
-        <div className="w-56 flex flex-col gap-3">
-          <div className="relative bg-black rounded-2xl overflow-hidden aspect-[4/3]">
+        <aside className="w-56 flex flex-col gap-3">
+          <div className="relative bg-black rounded-3xl overflow-hidden aspect-[4/3] shadow-inner">
             <video
               ref={videoRef}
               autoPlay
@@ -494,51 +407,50 @@ export default function Step5Page() {
               muted
               className="w-full h-full object-cover -scale-x-100"
             />
+            {phase === "reading" && (
+              <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-red-500 px-2 py-1 rounded-full animate-pulse">
+                <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                <span className="text-[10px] text-white font-bold">
+                  {readingTime}s
+                </span>
+              </div>
+            )}
           </div>
-
-          <div className="bg-gray-50 rounded-2xl p-3">
-            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-              음성 레벨
+          <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+              Speech Volume
             </h4>
-            <div className="h-6 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-100 ${
-                  audioLevel > 30 ? "bg-green-500" : "bg-amber-400"
-                }`}
-                style={{ width: `${Math.min(audioLevel, 100)}%` }}
+                className={`h-full transition-all duration-100 ${audioLevel > 25 ? "bg-green-500" : "bg-amber-400"}`}
+                style={{ width: `${Math.min(audioLevel * 1.5, 100)}%` }}
               />
             </div>
           </div>
-
-          <div className="bg-amber-50 rounded-2xl p-3 text-center">
-            <p className="text-xs text-amber-600 font-bold">단어 수</p>
-            <p className="text-xl font-black text-amber-700">
-              {currentText.wordCount}개
+          <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 text-center">
+            <p className="text-[10px] text-amber-600 font-black uppercase mb-1">
+              Target Words
+            </p>
+            <p className="text-2xl font-black text-amber-700">
+              {currentText.wordCount}
             </p>
           </div>
-        </div>
+        </aside>
 
-        {/* 우측: 텍스트 + 컨트롤 */}
-        <div className="flex-1 flex flex-col items-center justify-center space-y-6">
-          {/* 텍스트 제목 */}
-          <div className="text-center">
-            <span className="inline-block px-4 py-1 bg-[#8B4513] text-white rounded-full text-sm font-bold">
+        <main className="flex-1 flex flex-col items-center justify-center space-y-6 px-4">
+          <div className="inline-block px-6 py-2 bg-[#8B4513] text-white rounded-2xl shadow-lg transform -rotate-1">
+            <span className="text-lg font-black tracking-tight">
               📖 {currentText.title}
             </span>
           </div>
 
-          {/* 읽기 텍스트 */}
-          <div className="w-full max-w-2xl bg-gradient-to-br from-amber-50 to-orange-50 p-8 rounded-[30px] border-4 border-amber-100">
-            <p className="text-2xl font-bold leading-relaxed text-[#8B4513]">
+          <div className="w-full max-w-2xl bg-gradient-to-br from-white to-amber-50/30 p-10 rounded-[40px] border-4 border-amber-100 shadow-xl relative min-h-[240px] flex items-center justify-center text-center">
+            <p className="text-3xl font-bold leading-[1.6] text-[#4A2C10] break-keep">
               {phase === "reading"
                 ? words.map((word, idx) => (
                     <span
                       key={idx}
-                      className={`${
-                        idx <= highlightIndex
-                          ? "text-amber-600 bg-amber-200/50"
-                          : "text-[#8B4513]"
-                      } transition-colors duration-200`}
+                      className={`${idx <= highlightIndex ? "text-amber-600 bg-amber-200/40 rounded-lg px-1" : "text-[#8B4513]"} transition-all duration-300 inline-block`}
                     >
                       {word}{" "}
                     </span>
@@ -547,83 +459,87 @@ export default function Step5Page() {
             </p>
           </div>
 
-          {/* 컨트롤 */}
-          <div className="flex flex-col items-center space-y-4">
+          <div className="flex flex-col items-center gap-4 w-full">
             {phase === "ready" && (
               <button
                 onClick={startReading}
                 disabled={!isFaceReady}
-                className={`px-12 py-4 rounded-2xl font-black text-xl transition-all ${
-                  isFaceReady
-                    ? "bg-[#DAA520] text-white hover:bg-[#B8860B] active:scale-95"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                }`}
+                className={`group flex items-center gap-3 px-14 py-5 rounded-[24px] font-black text-2xl shadow-xl transition-all ${isFaceReady ? "bg-[#DAA520] text-white hover:bg-[#B8860B] hover:-translate-y-1" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
               >
-                📖 읽기 시작
+                <span className="text-3xl group-hover:rotate-12 transition-transform">
+                  🎤
+                </span>{" "}
+                낭독 시작하기
               </button>
             )}
-
             {phase === "reading" && (
               <button
                 onClick={stopReading}
-                className="px-12 py-4 bg-gray-800 text-white rounded-2xl font-black text-xl hover:bg-gray-700 active:scale-95 transition-all"
+                className="flex items-center gap-3 px-14 py-5 bg-gray-900 text-white rounded-[24px] font-black text-2xl shadow-xl hover:bg-black transition-all"
               >
-                ✅ 읽기 완료
+                <span className="text-2xl">✅</span> 읽기 완료
               </button>
             )}
-
             {phase === "review" && currentReading && (
-              <div className="bg-white border-4 border-amber-200 rounded-[30px] p-6 shadow-lg w-full max-w-md">
-                <h3 className="text-lg font-black text-[#8B4513] mb-4 text-center">
-                  📊 읽기 분석 결과
-                </h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="text-center p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-400">소요 시간</p>
-                    <p className="text-2xl font-black text-blue-600">
-                      {currentReading.totalTime}초
+              <div className="bg-white border-2 border-amber-200 rounded-[35px] p-6 shadow-2xl w-full max-w-md animate-in fade-in zoom-in duration-300">
+                <div className="grid grid-cols-2 gap-4 mb-5">
+                  <div className="text-center p-3 bg-blue-50 rounded-2xl border border-blue-100">
+                    <p className="text-[10px] text-blue-500 font-black mb-1">
+                      TIME
+                    </p>
+                    <p className="text-2xl font-black text-blue-700">
+                      {currentReading.totalTime}s
                     </p>
                   </div>
-                  <div className="text-center p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-400">분당 단어</p>
-                    <p className="text-2xl font-black text-green-600">
+                  <div className="text-center p-3 bg-green-50 rounded-2xl border border-green-100">
+                    <p className="text-[10px] text-green-500 font-black mb-1">
+                      WPM
+                    </p>
+                    <p className="text-2xl font-black text-green-700">
                       {currentReading.wordsPerMinute}
                     </p>
                   </div>
-                  <div className="text-center p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-400">멈춤 횟수</p>
-                    <p className="text-2xl font-black text-purple-600">
-                      {currentReading.pauseCount}회
+                  <div className="text-center p-4 bg-amber-50 rounded-2xl border border-amber-200 col-span-2 shadow-inner">
+                    <p className="text-xs text-amber-600 font-black mb-1">
+                      READING SCORE
                     </p>
-                  </div>
-                  <div className="text-center p-3 bg-amber-50 rounded-xl">
-                    <p className="text-amber-600">읽기 점수</p>
-                    <p className="text-3xl font-black text-amber-700">
+                    <p className="text-4xl font-black text-amber-700">
                       {currentReading.readingScore}
                     </p>
                   </div>
                 </div>
-
                 <button
                   onClick={handleNext}
-                  className="w-full mt-4 py-3 bg-[#DAA520] text-white rounded-2xl font-black text-lg hover:bg-[#B8860B] transition-colors"
+                  className="w-full py-4 bg-[#DAA520] text-white rounded-2xl font-black text-lg hover:bg-[#B8860B] shadow-lg transition-colors"
                 >
-                  {currentIndex < texts.length - 1 ? "다음 텍스트" : "완료"}
+                  {currentIndex < texts.length - 1
+                    ? "다음 문장으로"
+                    : "최종 결과 확인"}
                 </button>
               </div>
             )}
           </div>
-        </div>
+        </main>
       </div>
-
-      {/* FOOTER */}
-      <footer className="py-3 px-6 bg-[#F8F9FA]/50 border-t border-gray-50 flex justify-between items-center text-[10px] font-black text-[#8B4513]/40 uppercase tracking-[0.15em]">
-        <span>Face SI: {faceMetrics.symmetryScore}%</span>
-        <span>Reading Assessment Training</span>
-        <span>
-          Text {currentIndex + 1} / {texts.length}
-        </span>
-      </footer>
     </div>
   );
+}
+
+export default function Step5Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center bg-white">
+          <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <Step4ScoreChecker />
+    </Suspense>
+  );
+}
+
+// URL 파라미터 체크 및 Content 로드
+function Step4ScoreChecker() {
+  return <Step5Content />;
 }
