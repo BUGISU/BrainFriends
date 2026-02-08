@@ -1,6 +1,36 @@
-"use client";
+import { Suspense } from 'react';
 
 export const dynamic = "force-dynamic";
+
+// ============================================
+// 로딩 컴포넌트
+// ============================================
+function LoadingFallback() {
+  return (
+    <div className="flex-1 flex items-center justify-center h-screen bg-white">
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 border-[#DAA520] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-xl font-bold text-[#8B4513]">로딩 중...</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// 메인 페이지
+// ============================================
+export default function Page() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <Step1Client />
+    </Suspense>
+  );
+}
+
+// ============================================
+// 클라이언트 컴포넌트 (useSearchParams 사용)
+// ============================================
+"use client";
 
 import React, {
   useState,
@@ -16,7 +46,7 @@ import { SessionManager, Step1Result } from "@/lib/kwab/SessionManager";
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
-export default function Step1Page() {
+function Step1Client() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const placeParam = (searchParams.get("place") as PlaceType) || "home";
@@ -29,7 +59,7 @@ export default function Step1Page() {
   const [isAnswered, setIsAnswered] = useState(false);
   const [canAnswer, setCanAnswer] = useState(false);
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
-  const [questionResults, setQuestionResults] = useState<
+  const [questionResults, setQuestionResults] = useState
     Array<{
       question: string;
       userAnswer: boolean | null;
@@ -117,20 +147,16 @@ export default function Step1Page() {
 
   const handleAnswer = useCallback(
     (userAnswer: boolean | null) => {
-      // ✅ 중복 답변 방지 및 현재 문항 존재 확인
       if (isAnswered || !currentItem) return;
 
       setIsAnswered(true);
       setCanAnswer(false);
 
-      // ✅ [중요] 사용자가 아무것도 안 눌렀거나(null), 정답과 다르면 false(0점) 처리
       const isCorrect =
         userAnswer === null ? false : currentItem.answer === userAnswer;
 
-      // ✅ 정답일 때만 점수 1점 추가, 아니면 기존 점수 유지 (0점 처리)
       const nextScore = isCorrect ? score + 1 : score;
 
-      // 반응 시간 계산 (시간 초과 시에는 해당 문항의 전체 제한 시간 기록)
       const responseTime =
         userAnswer === null
           ? (currentItem.duration || 10) * 1000
@@ -159,7 +185,6 @@ export default function Step1Page() {
           setCurrentIndex((prev) => prev + 1);
           setIsAnswered(false);
         } else {
-          // 마지막 문제 완료 후 최종 저장
           const patient = loadPatientProfile();
           if (patient) {
             const sessionManager = new SessionManager(
@@ -168,7 +193,7 @@ export default function Step1Page() {
             );
 
             const step1Result: Step1Result = {
-              correctAnswers: nextScore, // ✅ 여기서 계산된 최종 점수가 저장됨
+              correctAnswers: nextScore,
               totalQuestions: trainingData.length,
               averageResponseTime:
                 updatedResults.reduce((acc, cur) => acc + cur.responseTime, 0) /
@@ -195,7 +220,6 @@ export default function Step1Page() {
     ],
   );
 
-  // 🔹 자동 재생 useEffect
   useEffect(() => {
     if (!isMounted || !currentItem) return;
     if (GLOBAL_SPEECH_LOCK[currentIndex]) return;
@@ -214,12 +238,10 @@ export default function Step1Page() {
     return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, playInstruction]);
 
-  // 🔹 타이머 관리 useEffect
   useEffect(() => {
     if (!isMounted || timeLeft === null || isSpeaking) return;
 
     if (timeLeft <= 0) {
-      // ✅ 0초 도달 시 무응답(null) 처리 -> 0점 처리됨
       handleAnswer(null);
       return;
     }
