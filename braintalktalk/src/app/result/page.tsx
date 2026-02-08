@@ -1,21 +1,20 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-export default function ResultPage() {
+// 1️⃣ 실제 로직을 담은 내부 컴포넌트
+function ResultContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
 
-  // ✅ 아코디언 상태 관리
+  // 아코디언 및 오디오 상태 관리
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
-
-  // ✅ 재생 중인 오디오 ID (string으로 변경하여 각 스텝 구분)
   const [playingIndex, setPlayingIndex] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // ✅ Step별 데이터 상태 (요청하신 대로 2, 4, 5 추가)
+  // 데이터 상태
   const [step1Items, setStep1Items] = useState<
     Array<{ question: string; isCorrect: boolean }>
   >([]);
@@ -29,14 +28,18 @@ export default function ResultPage() {
     Array<{ text: string; audioUrl: string }>
   >([]);
 
-  const s = {
-    1: Number(searchParams.get("step1") || 0),
-    2: Number(searchParams.get("step2") || 0),
-    3: Number(searchParams.get("step3") || 0),
-    4: Number(searchParams.get("step4") || 0),
-    5: Number(searchParams.get("step5") || 0),
-    6: Number(searchParams.get("step6") || 0),
-  };
+  // 점수 계산 (searchParams 안전하게 접근)
+  const s = useMemo(
+    () => ({
+      1: Number(searchParams?.get("step1") || 0),
+      2: Number(searchParams?.get("step2") || 0),
+      3: Number(searchParams?.get("step3") || 0),
+      4: Number(searchParams?.get("step4") || 0),
+      5: Number(searchParams?.get("step5") || 0),
+      6: Number(searchParams?.get("step6") || 0),
+    }),
+    [searchParams],
+  );
 
   const stepDetails = useMemo(
     () => [
@@ -45,7 +48,6 @@ export default function ResultPage() {
         title: "청각 이해",
         score: s[1],
         max: 20,
-        color: "#DAA520",
         desc: "예/아니오 및 명령어 이행 능력",
       },
       {
@@ -53,7 +55,6 @@ export default function ResultPage() {
         title: "따라말하기",
         score: s[2],
         max: 10,
-        color: "#DAA520",
         desc: "단어 및 문장 복사 능력",
       },
       {
@@ -61,7 +62,6 @@ export default function ResultPage() {
         title: "이름대기",
         score: s[3],
         max: 10,
-        color: "#DAA520",
         desc: "사물 명칭 인출 및 유창성",
       },
       {
@@ -69,7 +69,6 @@ export default function ResultPage() {
         title: "스스로 말하기",
         score: s[4],
         max: 100,
-        color: "#DAA520",
         desc: "내용 전달력 및 발화 유창성",
       },
       {
@@ -77,7 +76,6 @@ export default function ResultPage() {
         title: "읽기 능력",
         score: s[5],
         max: 100,
-        color: "#8B4513",
         desc: "문자 해독 및 의미 파악",
       },
       {
@@ -85,7 +83,6 @@ export default function ResultPage() {
         title: "쓰기 능력",
         score: s[6],
         max: 8,
-        color: "#8B4513",
         desc: "단어 받아쓰기 및 자형 구성",
       },
     ],
@@ -94,38 +91,22 @@ export default function ResultPage() {
 
   useEffect(() => {
     setIsMounted(true);
-
-    // ✅ Step 2 녹음 데이터 로드
-    const step2Data = localStorage.getItem("step2_recorded_audios");
-    if (step2Data) {
-      try {
-        setStep2Audios(JSON.parse(step2Data));
-      } catch (e) {
-        console.error("Step 2 로드 실패", e);
+    // localStorage 로드 로직
+    const loadData = (key: string, setter: Function) => {
+      const data = localStorage.getItem(key);
+      if (data) {
+        try {
+          setter(JSON.parse(data));
+        } catch (e) {
+          console.error(`${key} 로드 실패`, e);
+        }
       }
-    }
+    };
 
-    // ✅ Step 4 녹음 데이터 로드
-    const step4Data = localStorage.getItem("step4_recorded_audios");
-    if (step4Data) {
-      try {
-        setStep4Audios(JSON.parse(step4Data));
-      } catch (e) {
-        console.error("Step 4 로드 실패", e);
-      }
-    }
+    loadData("step2_recorded_audios", setStep2Audios);
+    loadData("step4_recorded_audios", setStep4Audios);
+    loadData("step5_recorded_audios", setStep5Audios);
 
-    // ✅ Step 5 녹음 데이터 로드
-    const step5Data = localStorage.getItem("step5_recorded_audios");
-    if (step5Data) {
-      try {
-        setStep5Audios(JSON.parse(step5Data));
-      } catch (e) {
-        console.error("Step 5 로드 실패", e);
-      }
-    }
-
-    // ✅ 세션 데이터 로드 (Step 1 정오표 용)
     const sessionData = localStorage.getItem("kwab_training_session");
     if (sessionData) {
       try {
@@ -137,19 +118,7 @@ export default function ResultPage() {
     }
   }, []);
 
-  const toggleAll = () => {
-    if (expandedSteps.length === stepDetails.length) setExpandedSteps([]);
-    else setExpandedSteps(stepDetails.map((step) => step.id));
-  };
-
-  const toggleStep = (id: number) => {
-    setExpandedSteps((prev) =>
-      prev.includes(id)
-        ? prev.filter((stepId) => stepId !== id)
-        : [...prev, id],
-    );
-  };
-
+  // 차트 포인트 계산
   const chartPoints = useMemo(() => {
     const values = [
       s[4],
@@ -175,7 +144,6 @@ export default function ResultPage() {
     setPlayingIndex(id);
     audio.onended = () => {
       setPlayingIndex(null);
-      audioRef.current = null;
     };
     audio.play();
   };
@@ -183,7 +151,6 @@ export default function ResultPage() {
   const stopAudio = () => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current = null;
       setPlayingIndex(null);
     }
   };
@@ -195,7 +162,7 @@ export default function ResultPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <header className="bg-white rounded-[30px] p-8 shadow-lg border-b-4 border-[#DAA520] flex justify-between items-center">
           <h1 className="text-2xl font-black">언어 평가 결과지</h1>
-          <div className="text-right font-black text-[#DAA520]">
+          <div className="text-right font-black text-[#DAA520] text-xl">
             AQ{" "}
             {(
               ((s[4] / 100) * 20 +
@@ -207,7 +174,7 @@ export default function ResultPage() {
           </div>
         </header>
 
-        {/* 01. 역량 프로파일 (SVG 그래프 전체 유지) */}
+        {/* 01. 역량 프로파일 */}
         <section className="bg-white rounded-[30px] p-8 shadow-lg">
           <div className="flex items-center gap-3 mb-8">
             <span className="text-xl font-black text-[#DAA520]">01</span>
@@ -230,32 +197,12 @@ export default function ResultPage() {
                     strokeWidth="1"
                   />
                 ))}
-                {stepDetails.map((_, i) => {
-                  const angle = (Math.PI * 2 * i) / 6 - Math.PI / 2;
-                  return (
-                    <line
-                      key={i}
-                      x1="100"
-                      y1="100"
-                      x2={100 + 75 * Math.cos(angle)}
-                      y2={100 + 75 * Math.sin(angle)}
-                      stroke="#FEF3C7"
-                      strokeWidth="1"
-                    />
-                  );
-                })}
                 <polygon
                   points={chartPoints}
                   fill="rgba(218, 165, 32, 0.1)"
                   stroke="#DAA520"
                   strokeWidth="2.5"
                 />
-                {chartPoints.split(" ").map((p, i) => {
-                  const [x, y] = p.split(",");
-                  return (
-                    <circle key={i} cx={x} cy={y} r="3.5" fill="#DAA520" />
-                  );
-                })}
               </svg>
             </div>
             <div className="grid grid-cols-2 gap-x-8 gap-y-3">
@@ -276,92 +223,52 @@ export default function ResultPage() {
           </div>
         </section>
 
-        {/* 02. 상세 성취도 (아코디언 로직 전체 유지) */}
+        {/* 02. 상세 성취도 (아코디언) */}
         <section className="bg-white rounded-[30px] p-8 shadow-lg">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
               <span className="text-xl font-black text-[#DAA520]">02</span>
               <h2 className="text-lg font-bold">항목별 상세 성취도</h2>
             </div>
-            <button
-              onClick={toggleAll}
-              className="px-4 py-2 bg-amber-50 text-[#DAA520] rounded-xl text-xs font-black border border-amber-100"
-            >
-              {expandedSteps.length === stepDetails.length
-                ? "전체 접기 ▲"
-                : "전체 펼치기 ▼"}
-            </button>
           </div>
-
           <div className="space-y-4">
-            {stepDetails.map((step) => {
-              const isOpen = expandedSteps.includes(step.id);
-              return (
+            {stepDetails.map((step) => (
+              <div
+                key={step.id}
+                className="border border-amber-100 rounded-[24px] overflow-hidden"
+              >
                 <div
-                  key={step.id}
-                  className="border border-amber-100 rounded-[24px] overflow-hidden"
+                  onClick={() =>
+                    setExpandedSteps((prev) =>
+                      prev.includes(step.id)
+                        ? prev.filter((id) => id !== step.id)
+                        : [...prev, step.id],
+                    )
+                  }
+                  className="flex items-center justify-between p-6 cursor-pointer hover:bg-amber-50/30"
                 >
-                  <div
-                    onClick={() => toggleStep(step.id)}
-                    className={`flex items-center justify-between p-6 cursor-pointer ${isOpen ? "bg-amber-50/50" : "bg-white"}`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-1.5 h-6 rounded-full ${isOpen ? "bg-[#DAA520]" : "bg-amber-100"}`}
-                      />
-                      <span className="text-sm font-black">{step.title}</span>
-                    </div>
-                    <span
-                      className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""}`}
-                    >
-                      ▼
-                    </span>
-                  </div>
-                  <div
-                    className="transition-all duration-500 overflow-hidden"
-                    style={{
-                      maxHeight: isOpen ? "2000px" : "0",
-                      opacity: isOpen ? 1 : 0,
-                    }}
-                  >
-                    <div className="p-6 space-y-4 border-t border-amber-50">
-                      <div className="bg-amber-50 p-4 rounded-xl flex justify-between">
-                        <span className="font-black">
-                          {Math.round((step.score / step.max) * 100)}% 달성
-                        </span>
-                        <span className="font-black text-[#8B4513]">
-                          {step.score} / {step.max} 점
-                        </span>
-                      </div>
-                      {step.id === 1 &&
-                        step1Items.map((item, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl text-xs font-bold"
-                          >
-                            <span>{item.isCorrect ? "⭕" : "❌"}</span>
-                            <span className="flex-1 truncate">
-                              {item.question}
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
+                  <span className="text-sm font-black">{step.title}</span>
+                  <span>{expandedSteps.includes(step.id) ? "▲" : "▼"}</span>
                 </div>
-              );
-            })}
+                {expandedSteps.includes(step.id) && (
+                  <div className="p-6 bg-amber-50/20 border-t border-amber-50">
+                    <p className="font-bold text-sm">
+                      성취율: {Math.round((step.score / step.max) * 100)}% (
+                      {step.score}/{step.max})
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* 03. 녹음 다시 듣기 (Step 2, 4, 5 개별 섹션 구현) */}
+        {/* 03. 녹음 다시 듣기 */}
         <section className="bg-white rounded-[30px] p-8 shadow-lg">
           <div className="flex items-center gap-3 mb-6">
             <span className="text-xl font-black text-[#DAA520]">03</span>
-            <h2 className="text-lg font-bold text-[#8B4513]">
-              🎙️ 녹음 다시 듣기
-            </h2>
+            <h2 className="text-lg font-bold">🎙️ 녹음 다시 듣기</h2>
           </div>
-
           {[
             { id: 2, label: "따라말하기", audios: step2Audios, key: "step2" },
             {
@@ -375,19 +282,16 @@ export default function ResultPage() {
             (group) =>
               group.audios.length > 0 && (
                 <div key={group.key} className="mb-6">
-                  <h3 className="text-sm font-bold text-[#8B4513] mb-3 flex items-center gap-2">
-                    <span className="w-6 h-6 bg-[#DAA520] text-white rounded-full flex items-center justify-center text-xs">
-                      {group.id}
-                    </span>
-                    {group.label} 녹음
+                  <h3 className="text-sm font-bold mb-3">
+                    Step {group.id}. {group.label}
                   </h3>
                   <div className="space-y-2">
                     {group.audios.map((audio, idx) => (
                       <div
-                        key={`${group.key}-${idx}`}
+                        key={idx}
                         className="flex items-center gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100"
                       >
-                        <span className="flex-1 text-sm font-bold text-[#8B4513] truncate">
+                        <span className="flex-1 text-sm font-bold truncate">
                           {audio.text}
                         </span>
                         <button
@@ -396,11 +300,11 @@ export default function ResultPage() {
                               ? stopAudio()
                               : playAudio(audio.audioUrl, `${group.key}-${idx}`)
                           }
-                          className={`px-4 py-2 rounded-xl font-bold text-sm ${playingIndex === `${group.key}-${idx}` ? "bg-red-500 text-white" : "bg-[#DAA520] text-white"}`}
+                          className="px-4 py-2 bg-[#DAA520] text-white rounded-xl text-xs font-bold"
                         >
                           {playingIndex === `${group.key}-${idx}`
-                            ? "⏹️ 정지"
-                            : "▶️ 재생"}
+                            ? "정지"
+                            : "재생"}
                         </button>
                       </div>
                     ))}
@@ -413,18 +317,36 @@ export default function ResultPage() {
         <div className="flex gap-4 pt-4 print:hidden">
           <button
             onClick={() => window.print()}
-            className="flex-1 py-5 bg-[#8B4513] text-white rounded-[30px] font-black text-sm shadow-xl"
+            className="flex-1 py-5 bg-[#8B4513] text-white rounded-[30px] font-black"
           >
-            리포트 PDF 저장
+            리포트 저장
           </button>
           <button
             onClick={() => router.push("/")}
-            className="flex-1 py-5 bg-white text-gray-400 rounded-[30px] font-black text-sm border-2 border-amber-100"
+            className="flex-1 py-5 bg-white text-gray-400 rounded-[30px] font-black border-2 border-amber-100"
           >
-            테스트 다시 시작
+            다시 시작
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+// 2️⃣ 메인 Export 컴포넌트 (Suspense 래핑)
+export default function ResultPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex flex-col items-center justify-center bg-white">
+          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="font-black text-gray-400">
+            결과 데이터를 분석하고 있습니다...
+          </p>
+        </div>
+      }
+    >
+      <ResultContent />
+    </Suspense>
   );
 }
