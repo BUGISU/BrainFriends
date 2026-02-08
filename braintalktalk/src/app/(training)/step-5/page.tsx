@@ -12,6 +12,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
 import { PlaceType } from "@/constants/trainingData";
+
 export const dynamic = "force-dynamic";
 // --- 읽기 텍스트 데이터 (기존 데이터 유지) ---
 const READING_TEXTS: Record<

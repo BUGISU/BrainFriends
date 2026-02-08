@@ -6,19 +6,23 @@ import React, {
   useCallback,
   useRef,
   useMemo,
-  Suspense, // ✅ Suspense 추가
+  Suspense,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
 import { VISUAL_MATCHING_PROTOCOLS, PlaceType } from "@/constants/trainingData";
+
+// 빌드 옵션 설정
 export const dynamic = "force-dynamic";
+
+// 전역 잠금 객체 (페이지 새로고침 없이 인덱스 변경 시 중복 음성 방지)
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
-// 1️⃣ 실제 로직을 담당하는 내부 컴포넌트
+// --- 하위 컴포넌트: 실제 로직 포함 ---
 function Step3Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const place = (searchParams.get("place") as PlaceType) || "home";
+  const place = (searchParams?.get("place") as PlaceType) || "home";
 
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -32,72 +36,65 @@ function Step3Content() {
 
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
+  // 컴포넌트 마운트/언마운트 관리
   useEffect(() => {
     setIsMounted(true);
-    GLOBAL_SPEECH_LOCK = {};
+    GLOBAL_SPEECH_LOCK = {}; // 초기화
 
     return () => {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
-        utteranceRef.current = null;
       }
     };
   }, []);
 
+  // 프로토콜 셔플 및 고정
   const protocol = useMemo(() => {
     const allQuestions = (
       VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
     ).slice(0, 10);
 
-    const shuffled = [...allQuestions];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    return shuffled;
+    return [...allQuestions].sort(() => Math.random() - 0.5);
   }, [place]);
 
   const currentItem = protocol[currentIndex];
 
+  // TTS 음성 출력 로직
   const speakWord = useCallback((text: string) => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      setIsSpeaking(true);
-      setCanAnswer(false);
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
 
-      if (utteranceRef.current) {
-        window.speechSynthesis.cancel();
-        utteranceRef.current = null;
-      }
+    // 기존 음성 중단
+    window.speechSynthesis.cancel();
+    setIsSpeaking(true);
+    setCanAnswer(false);
 
-      setTimeout(() => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "ko-KR";
-        utterance.rate = 0.9;
+    // 가끔 브라우저가 이전 cancel을 처리하는 시간이 필요하므로 살짝 지연
+    setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "ko-KR";
+      utterance.rate = 0.9;
 
-        const voices = window.speechSynthesis.getVoices();
-        const koVoice = voices.find((v) => v.lang.includes("ko"));
-        if (koVoice) utterance.voice = koVoice;
+      // 한국어 음성 선택
+      const voices = window.speechSynthesis.getVoices();
+      const koVoice = voices.find((v) => v.lang.includes("ko")) || voices[0];
+      if (koVoice) utterance.voice = koVoice;
 
-        utterance.onend = () => {
-          utteranceRef.current = null;
-          setIsSpeaking(false);
-          setCanAnswer(true);
-        };
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        setCanAnswer(true);
+      };
 
-        utterance.onerror = (e) => {
-          console.error("❌ TTS 에러:", e);
-          utteranceRef.current = null;
-          setIsSpeaking(false);
-          setCanAnswer(true);
-        };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        setCanAnswer(true);
+      };
 
-        utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
-      }, 300);
-    }
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    }, 100);
   }, []);
 
+  // 새로운 문항 진입 시 자동 음성 재생
   useEffect(() => {
     if (!isMounted || !currentItem) return;
     if (GLOBAL_SPEECH_LOCK[currentIndex]) return;
@@ -106,12 +103,9 @@ function Step3Content() {
     setPlayCount(0);
     setCanAnswer(false);
 
-    const timer = setTimeout(
-      () => {
-        speakWord(currentItem.targetWord);
-      },
-      currentIndex === 0 ? 500 : 800,
-    );
+    const timer = setTimeout(() => {
+      speakWord(currentItem.targetWord);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, speakWord]);
@@ -126,11 +120,8 @@ function Step3Content() {
   const handleOptionClick = (id: string) => {
     if (!canAnswer || selectedId || isAnswered) return;
 
-    if (window.speechSynthesis && utteranceRef.current) {
-      window.speechSynthesis.cancel();
-      utteranceRef.current = null;
-      setIsSpeaking(false);
-    }
+    // 정답 선택 시 음성 중단
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
 
     const isCorrect = id === currentItem.answerId;
     setSelectedId(id);
@@ -138,6 +129,7 @@ function Step3Content() {
     setIsAnswered(true);
     setCanAnswer(false);
 
+    // 결과 확인 후 다음 단계로
     setTimeout(() => {
       if (currentIndex < protocol.length - 1) {
         setCurrentIndex((prev) => prev + 1);
@@ -147,7 +139,7 @@ function Step3Content() {
       } else {
         router.push(`/step-4?place=${place}`);
       }
-    }, 1200);
+    }, 1500);
   };
 
   if (!isMounted || !currentItem) return null;
@@ -224,7 +216,7 @@ function Step3Content() {
                 <span
                   className={`text-3xl ${isSpeaking ? "animate-pulse" : ""}`}
                 >
-                  {isSpeaking ? "🔊" : "🔊"}
+                  🔊
                 </span>
               </button>
               <span className="font-black text-sm uppercase tracking-[0.2em] text-[#DAA520]">
@@ -289,7 +281,7 @@ function Step3Content() {
   );
 }
 
-// 2️⃣ 메인 페이지: Suspense Boundary 적용
+// --- 메인 페이지 ---
 export default function Step3Page() {
   return (
     <Suspense

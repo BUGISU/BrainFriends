@@ -1,4 +1,4 @@
-"use client";
+"use client"; // 반드시 첫 번째 줄에 위치해야 합니다.
 
 import React, { useState, useRef, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -10,12 +10,17 @@ import {
   SPEECH_REPETITION_PROTOCOLS,
   PlaceType,
 } from "@/constants/trainingData";
+
+// 빌드 옵션은 지시어 아래에 위치
 export const dynamic = "force-dynamic";
+
 // --- 하위 컴포넌트: 실제 로직 포함 ---
 function Step2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const place = (searchParams.get("place") as PlaceType) || "cafe";
+
+  // searchParams가 null일 경우를 대비한 안전한 처리
+  const place = (searchParams?.get("place") as PlaceType) || "cafe";
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [metrics, setMetrics] = useState({ symmetryScore: 0, openingRatio: 0 });
@@ -39,7 +44,6 @@ function Step2Content() {
 
   const currentItem = protocol[currentIndex];
 
-  // ✅ [SaMD 로직] 하이브리드 점수 산출 및 결과 저장
   const saveStep2Results = (results: any[]) => {
     const patient = loadPatientProfile();
     if (!patient) return;
@@ -49,13 +53,11 @@ function Step2Content() {
       place,
     );
 
-    // 하이브리드 가중치 적용 (음성 60%, 안면 40%)
     const avgSymmetry =
       results.reduce((a, b) => a + b.symmetryScore, 0) / results.length;
     const avgPronunciation =
       results.reduce((a, b) => a + b.pronunciationScore, 0) / results.length;
 
-    // 최종 점수 산출: (음성 * 0.6) + (안면 * 0.4)
     const hybridScore = avgPronunciation * 0.6 + avgSymmetry * 0.4;
 
     sessionManager.saveStep2Result({
@@ -63,7 +65,7 @@ function Step2Content() {
       averageSymmetry: avgSymmetry,
       averagePronunciation: avgPronunciation,
       hybridScore: Number(hybridScore.toFixed(2)),
-      isSuccess: hybridScore >= 85, // 85% 기준 미달 시 리포트에서 별도 처리
+      isSuccess: hybridScore >= 85,
       timestamp: Date.now(),
     });
   };
@@ -113,7 +115,10 @@ function Step2Content() {
         if (!analyzerRef.current) return;
 
         const result = await analyzerRef.current.stopAnalysis(currentItem.text);
-        if (!result.audioBlob) return setIsAnalyzing(false);
+        if (!result.audioBlob) {
+          setIsAnalyzing(false);
+          return;
+        }
 
         const audioUrl = URL.createObjectURL(result.audioBlob);
         setTranscript(result.transcript);
@@ -130,12 +135,11 @@ function Step2Content() {
           },
         ];
         setAnalysisResults(updatedResults);
-        setRecordedAudios([
-          ...recordedAudios,
+        setRecordedAudios((prev) => [
+          ...prev,
           { text: currentItem.text, audioUrl },
         ]);
 
-        // 자동 재생 및 다음 단계 전환
         setTimeout(() => {
           const audio = new Audio(audioUrl);
           audioPlayerRef.current = audio;
@@ -291,7 +295,7 @@ function Step2Content() {
   );
 }
 
-// --- 메인 페이지 컴포넌트: Suspense로 래핑 ---
+// --- 메인 페이지 컴포넌트 ---
 export default function Step2Page() {
   return (
     <Suspense
@@ -308,19 +312,20 @@ export default function Step2Page() {
 
 // --- 공통 컴포넌트 ---
 function MetricBar({ label, value, unit, color }: any) {
+  const displayValue = typeof value === "number" ? value : 0;
   return (
     <div className="space-y-1.5 font-black">
       <div className="flex justify-between text-[10px] text-gray-400 uppercase tracking-tighter">
         <span>{label}</span>
         <span>
-          {value.toFixed(1)}
+          {displayValue.toFixed(1)}
           {unit}
         </span>
       </div>
       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <div
           className={`h-full ${color} transition-all duration-300`}
-          style={{ width: `${Math.min(value, 100)}%` }}
+          style={{ width: `${Math.min(Math.max(displayValue, 0), 100)}%` }}
         />
       </div>
     </div>
