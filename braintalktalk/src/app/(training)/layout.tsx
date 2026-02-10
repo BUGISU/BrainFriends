@@ -6,7 +6,7 @@ import { TrainingProvider, useTraining } from "./TrainingContext";
 function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
   const { footerData } = useTraining();
 
-  // 데이터 파싱 유틸리티 함수 (숫자와 마침표만 추출)
+  // 데이터 파싱 유틸리티 함수
   const parseValue = (text: string | undefined, index: number) => {
     if (!text) return "0";
     const parts = text.split("|");
@@ -16,13 +16,13 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-screen w-full bg-[#F8F9FA] flex items-center justify-center p-0 overflow-hidden font-sans">
       <div className="w-full max-w-[1400px] h-[90vh] bg-white rounded-[48px] shadow-2xl border border-gray-100 flex flex-col overflow-hidden relative">
-        {/* 상단 메인 콘텐츠 영역 */}
+        {/* 메인 콘텐츠 */}
         <div className="flex-1 flex flex-col overflow-hidden">{children}</div>
 
-        {/* 전역 Footer - 데이터 6분할 한 줄 레이아웃 */}
+        {/* 전역 Footer - 6분할 레이아웃 */}
         <footer className="px-10 py-5 border-t border-gray-100 bg-white shrink-0">
           <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
-            {/* 1. 안면 대칭성 (LeftText의 첫 번째 값) */}
+            {/* 1. 안면 대칭성 */}
             <div className="flex flex-col items-start min-w-[100px]">
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-0.5">
                 Symmetry Index
@@ -35,7 +35,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            {/* 2. 음성 정확도 (LeftText의 두 번째 값) */}
+            {/* 2. 음성 정확도 */}
             <div className="flex flex-col items-start min-w-[100px]">
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-0.5">
                 Acoustic Acc.
@@ -48,7 +48,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            {/* 3. 시스템 엔진 상태 (CenterText) */}
+            {/* 3. 시스템 엔진 상태 */}
             <div className="flex flex-col items-start min-w-[120px]">
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-0.5">
                 Engine Status
@@ -58,7 +58,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
               </span>
             </div>
 
-            {/* 4. 비주얼 프레임 (RightText의 첫 번째 값) */}
+            {/* 4. 비주얼 프레임 */}
             <div className="flex flex-col items-start min-w-[100px]">
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-0.5">
                 Visual Feed
@@ -71,7 +71,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            {/* 5. 모달리티 싱크 (RightText의 두 번째 값) */}
+            {/* 5. 모달리티 싱크 */}
             <div className="flex flex-col items-start min-w-[100px]">
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-0.5">
                 Modality Sync
@@ -84,7 +84,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            {/* 6. 전체 지연 시간 (고정 혹은 추가 데이터) */}
+            {/* 6. 전체 지연 시간 */}
             <div className="flex flex-col items-start min-w-[100px]">
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-0.5">
                 Total Latency

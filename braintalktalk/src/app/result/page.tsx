@@ -57,11 +57,11 @@ function ResultContent() {
       },
       {
         id: 4,
-        title: "스스로 말하기",
+        title: "유창성 (K-WAB)",
         score: s[4],
-        max: 100,
+        max: 10,
         color: "#DAA520",
-        desc: "자발화 유창성",
+        desc: "자발화 유창성 (0~10점)",
       },
       {
         id: 5,
@@ -86,10 +86,15 @@ function ResultContent() {
   useEffect(() => {
     setIsMounted(true);
     const loadAllData = () => {
+      console.group("📊 Result 페이지 - 데이터 로드");
       try {
         const fullSession = JSON.parse(
           localStorage.getItem("kwab_training_session") || "{}",
         );
+        console.log("전체 세션 데이터:", fullSession);
+        console.log("Step 4 데이터:", fullSession.step4);
+        console.log("K-WAB 점수:", fullSession.kwabScores);
+
         setSessionData(fullSession);
 
         setStepAudios({
@@ -106,8 +111,10 @@ function ResultContent() {
             localStorage.getItem("step5_recorded_audios") || "[]",
           ),
         });
+        console.groupEnd();
       } catch (e) {
         console.error("데이터 로드 실패:", e);
+        console.groupEnd();
       }
     };
     loadAllData();
@@ -129,7 +136,7 @@ function ResultContent() {
 
   const chartPoints = useMemo(() => {
     const values = [
-      s[4],
+      (s[4] / 10) * 100, // Step 4를 0~100 스케일로 변환
       (s[1] / 20) * 100,
       (s[2] / 100) * 100,
       (s[3] / 100) * 100,
@@ -156,10 +163,10 @@ function ResultContent() {
           <div className="text-right font-black text-[#DAA520] text-xl">
             AQ{" "}
             {(
-              ((s[4] / 100) * 20 +
-                (s[1] / 20) * 10 +
-                (s[2] / 100) * 10 +
-                (s[3] / 100) * 10) *
+              ((s[4] / 10) * 100 * 0.2 +
+                (s[1] / 20) * 100 * 0.1 +
+                (s[2] / 100) * 100 * 0.1 +
+                (s[3] / 100) * 100 * 0.1) *
               2
             ).toFixed(1)}
           </div>
@@ -212,7 +219,9 @@ function ResultContent() {
                     {step.title}
                   </span>
                   <span className="text-sm font-black">
-                    {Math.round((step.score / step.max) * 100)}%
+                    {step.id === 4
+                      ? `${step.score}/10`
+                      : `${Math.round((step.score / step.max) * 100)}%`}
                   </span>
                 </div>
               ))}
@@ -281,7 +290,9 @@ function ResultContent() {
                     <div className="p-6 bg-white border-t border-amber-50 space-y-4">
                       <div className="bg-amber-50 p-4 rounded-xl flex justify-between items-center mb-2">
                         <span className="font-black text-sm">
-                          {Math.round((step.score / step.max) * 100)}% 달성
+                          {step.id === 4
+                            ? `${step.score}/10점 달성`
+                            : `${Math.round((step.score / step.max) * 100)}% 달성`}
                         </span>
                         <span className="text-xs font-bold text-gray-500">
                           {step.score} / {step.max}
@@ -327,6 +338,35 @@ function ResultContent() {
                               <div
                                 className="bg-orange-500 h-full transition-all duration-500"
                                 style={{ width: `${item.pronunciationScore}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+
+                      {/* ✅ Step 4: 유창성 K-WAB 점수 표시 */}
+                      {step.id === 4 &&
+                        stepData?.items?.map((item: any, i: number) => (
+                          <div
+                            key={i}
+                            className="p-4 bg-blue-50/30 rounded-xl border border-blue-100/50 space-y-2"
+                          >
+                            <div className="flex justify-between font-black text-xs text-[#8B4513]">
+                              <span>🎭 {item.situation}</span>
+                              <span className="text-blue-600">
+                                K-WAB {item.kwabScore}/10점
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-[10px] text-gray-600 mt-2">
+                              <div>🗣️ {item.speechDuration}초</div>
+                              <div>🤐 {item.silenceRatio}%</div>
+                              <div>🔢 {item.peakCount}단어</div>
+                            </div>
+                            <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                              <div
+                                className="bg-blue-500 h-full transition-all duration-500"
+                                style={{
+                                  width: `${(item.kwabScore / 10) * 100}%`,
+                                }}
                               />
                             </div>
                           </div>

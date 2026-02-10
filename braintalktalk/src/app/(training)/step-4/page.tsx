@@ -1,484 +1,94 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-  Suspense,
-} from "react";
+import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
-import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
 import { PlaceType } from "@/constants/trainingData";
-import { useTraining, TrainingProvider } from "../TrainingContext";
+import { FLUENCY_SCENARIOS, FluencyMetrics } from "@/constants/fluencyData";
+import { useTraining } from "../TrainingContext";
+
+import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
+import FaceTracker from "@/components/diagnosis/FaceTracker";
 
 export const dynamic = "force-dynamic";
-
-const FLUENCY_SCENARIOS: Record<
-  PlaceType,
-  Array<{
-    id: number;
-    situation: string;
-    prompt: string;
-    hint: string;
-    minDuration: number;
-  }>
-> = {
-  home: [
-    {
-      id: 1,
-      situation: "아침에 일어났을 때",
-      prompt: "아침에 일어나서 무엇을 하시나요? 순서대로 말씀해 주세요.",
-      hint: "예: 일어나서 세수하고...",
-      minDuration: 10,
-    },
-    {
-      id: 2,
-      situation: "저녁 식사 준비",
-      prompt: "저녁에 가족을 위해 어떤 음식을 만들고 싶으세요?",
-      hint: "예: 된장찌개를 끓이려면...",
-      minDuration: 10,
-    },
-    {
-      id: 3,
-      situation: "집 청소할 때",
-      prompt: "집을 깨끗이 청소하려면 어떻게 해야 하나요?",
-      hint: "예: 먼저 빗자루로...",
-      minDuration: 10,
-    },
-  ],
-  hospital: [
-    {
-      id: 1,
-      situation: "접수할 때",
-      prompt: "병원에 처음 왔을 때 어떻게 접수하나요?",
-      hint: "예: 먼저 접수처에 가서...",
-      minDuration: 10,
-    },
-    {
-      id: 2,
-      situation: "증상 설명",
-      prompt: "의사 선생님께 어디가 아픈지 설명해 주세요.",
-      hint: "예: 며칠 전부터 머리가...",
-      minDuration: 10,
-    },
-    {
-      id: 3,
-      situation: "약국에서",
-      prompt: "처방전을 들고 약국에 가면 어떻게 하나요?",
-      hint: "예: 약사님께 처방전을 주고...",
-      minDuration: 10,
-    },
-  ],
-  cafe: [
-    {
-      id: 1,
-      situation: "음료 주문",
-      prompt: "카페에서 좋아하는 음료를 주문해 보세요.",
-      hint: "예: 따뜻한 아메리카노 한 잔...",
-      minDuration: 10,
-    },
-    {
-      id: 2,
-      situation: "친구와 대화",
-      prompt: "카페에서 친구를 만났을 때 어떤 이야기를 하고 싶으세요?",
-      hint: "예: 요즘 어떻게 지내?...",
-      minDuration: 10,
-    },
-    {
-      id: 3,
-      situation: "직원에게 요청",
-      prompt: "음료에 문제가 있을 때 어떻게 말씀하시겠어요?",
-      hint: "예: 죄송한데 이 음료가...",
-      minDuration: 10,
-    },
-  ],
-  bank: [
-    {
-      id: 1,
-      situation: "계좌 개설",
-      prompt: "은행에서 새 통장을 만들려면 어떻게 해야 하나요?",
-      hint: "예: 신분증을 가지고...",
-      minDuration: 10,
-    },
-    {
-      id: 2,
-      situation: "돈 입금",
-      prompt: "ATM에서 돈을 입금하는 방법을 설명해 주세요.",
-      hint: "예: 카드를 넣고...",
-      minDuration: 10,
-    },
-    {
-      id: 3,
-      situation: "상담 요청",
-      prompt: "은행 직원에게 대출 상담을 요청해 보세요.",
-      hint: "예: 안녕하세요, 대출에 대해...",
-      minDuration: 10,
-    },
-  ],
-  park: [
-    {
-      id: 1,
-      situation: "산책할 때",
-      prompt: "공원에서 산책하면서 보이는 것들을 설명해 주세요.",
-      hint: "예: 나무가 있고, 꽃이...",
-      minDuration: 10,
-    },
-    {
-      id: 2,
-      situation: "운동할 때",
-      prompt: "공원에서 어떤 운동을 하시나요? 방법을 알려주세요.",
-      hint: "예: 먼저 준비운동을 하고...",
-      minDuration: 10,
-    },
-    {
-      id: 3,
-      situation: "날씨 이야기",
-      prompt: "오늘 날씨가 어떤가요? 자세히 말씀해 주세요.",
-      hint: "예: 오늘은 맑고...",
-      minDuration: 10,
-    },
-  ],
-  mart: [
-    {
-      id: 1,
-      situation: "장보기",
-      prompt: "마트에서 일주일치 장을 보려면 무엇을 사야 하나요?",
-      hint: "예: 채소랑 고기, 그리고...",
-      minDuration: 10,
-    },
-    {
-      id: 2,
-      situation: "물건 찾기",
-      prompt: "마트 직원에게 원하는 물건 위치를 물어보세요.",
-      hint: "예: 실례합니다, 라면이 어디...",
-      minDuration: 10,
-    },
-    {
-      id: 3,
-      situation: "계산할 때",
-      prompt: "계산대에서 어떻게 결제하시나요?",
-      hint: "예: 카드로 결제할게요...",
-      minDuration: 10,
-    },
-  ],
-};
-
-interface FluencyMetrics {
-  totalDuration: number;
-  speechDuration: number;
-  silenceRatio: number;
-  averageAmplitude: number;
-  peakCount: number;
-  fluencyScore: number;
-}
-
-const AnalysisSidebar = ({
-  videoRef,
-  isFaceReady,
-  metrics,
-  audioLevel,
-  scoreLabel = "현재 점수",
-  scoreValue,
-}: any) => {
-  return (
-    <div className="w-64 flex flex-col gap-3">
-      <div className="relative bg-black rounded-2xl overflow-hidden aspect-[4/3] shadow-inner">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover -scale-x-100"
-        />
-        {!isFaceReady && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[10px] font-bold animate-pulse">
-            CAMERA LOADING...
-          </div>
-        )}
-      </div>
-      <div className="bg-[#F8F9FA] rounded-2xl p-4 space-y-3">
-        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center border-b border-gray-100 pb-2">
-          실시간 분석
-        </h4>
-        <MetricBar
-          label="대칭지수"
-          value={metrics.symmetryScore}
-          max={100}
-          unit="%"
-          color="bg-emerald-500"
-        />
-        <MetricBar
-          label="개구도"
-          value={metrics.openingRatio}
-          max={2.0}
-          unit=""
-          color="bg-amber-400"
-        />
-        <MetricBar
-          label="음성 레벨"
-          value={audioLevel}
-          max={100}
-          unit="dB"
-          color="bg-blue-500"
-        />
-      </div>
-      {scoreValue && (
-        <div className="bg-amber-50 rounded-2xl p-4 text-center border border-amber-100 animate-in zoom-in duration-300">
-          <p className="text-[10px] text-amber-600 font-black uppercase tracking-tighter mb-1">
-            {scoreLabel}
-          </p>
-          <p className="text-3xl font-black text-amber-800 tracking-tighter">
-            {scoreValue}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const MetricBar = ({ label, value, max, unit, color }: any) => (
-  <div className="space-y-1">
-    <div className="flex justify-between text-[9px] font-bold text-gray-500 uppercase">
-      <span>{label}</span>
-      <span>
-        {Number(value || 0).toFixed(1)}
-        {unit}
-      </span>
-    </div>
-    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-      <div
-        className={`h-full ${color} transition-all duration-300`}
-        style={{
-          width: `${Math.min(((value || 0) / (max || 1)) * 100, 100)}%`,
-        }}
-      />
-    </div>
-  </div>
-);
 
 function Step4Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { updateFooter } = useTraining();
+
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step3Score = searchParams.get("step3") || "0";
 
-  const { updateFooter } = useTraining();
+  // --- Refs ---
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // --- States ---
+  const [isMounted, setIsMounted] = useState(false);
+  const [isFaceReady, setIsFaceReady] = useState(false);
+  const [showTracking, setShowTracking] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<"ready" | "recording" | "review">("ready");
-  const [isMounted, setIsMounted] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [isFaceReady, setIsFaceReady] = useState(false);
-  const [faceMetrics, setFaceMetrics] = useState<LipMetrics>({
-    symmetryScore: 100,
+
+  const [metrics, setMetrics] = useState({
+    symmetryScore: 0,
     openingRatio: 0,
-    isStretched: false,
-    deviation: 0,
+    audioLevel: 0,
   });
-  const [fluencyResults, setFluencyResults] = useState<FluencyMetrics[]>([]);
+
   const [currentFluency, setCurrentFluency] = useState<FluencyMetrics | null>(
     null,
   );
+  const [fluencyResults, setFluencyResults] = useState<FluencyMetrics[]>([]);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const landmarkerRef = useRef<FaceLandmarker | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioAnimationRef = useRef<number | null>(null);
-  const amplitudeHistoryRef = useRef<number[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const frameCountRef = useRef(0);
+  const scenarios = useMemo(() => {
+    return FLUENCY_SCENARIOS[place] || FLUENCY_SCENARIOS.home;
+  }, [place]);
 
-  const scenarios = useMemo(
-    () => FLUENCY_SCENARIOS[place] || FLUENCY_SCENARIOS.home,
-    [place],
-  );
   const currentScenario = scenarios[currentIndex];
 
   useEffect(() => {
-    updateFooter({
-      symmetryScore: faceMetrics.symmetryScore,
-      audioLevel: audioLevel,
-      frameCount: frameCountRef.current,
-      sampleCount: amplitudeHistoryRef.current.length,
-      statusText:
-        phase === "recording"
-          ? "RECORDING..."
-          : phase === "review"
-            ? "ANALYZING..."
-            : "READY",
-    });
-  }, [faceMetrics, audioLevel, phase, updateFooter]);
+    setIsMounted(true);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
-    setIsMounted(true);
-    let isCancelled = false;
-    async function initTracking() {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
-        );
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-        });
-        if (isCancelled) return;
-        landmarkerRef.current = landmarker;
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { aspectRatio: 1.333, width: 320, height: 240 },
-          audio: true,
-        });
-        if (isCancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            setIsFaceReady(true);
-            animationRef.current = requestAnimationFrame(predictFace);
-          };
-        }
-        initAudioAnalysis(stream);
-      } catch (err) {
-        console.error("초기화 실패:", err);
-      }
+    if (updateFooter) {
+      updateFooter({
+        leftText: `대칭: ${metrics.symmetryScore.toFixed(0)}% | 음성: ${metrics.audioLevel.toFixed(0)}`,
+        centerText: `Step 4: 유창성 훈련 (${place.toUpperCase()})`,
+        rightText: `진행: ${currentIndex + 1} / ${scenarios.length}`,
+      });
     }
-    initTracking();
-    return () => {
-      isCancelled = true;
-      cleanup();
-    };
-  }, []);
+  }, [metrics, currentIndex, place, scenarios.length, updateFooter]);
 
-  const cleanup = () => {
-    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    if (audioAnimationRef.current)
-      cancelAnimationFrame(audioAnimationRef.current);
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (streamRef.current)
-      streamRef.current.getTracks().forEach((t) => t.stop());
-    if (audioContextRef.current) audioContextRef.current.close();
-  };
-
-  const predictFace = useCallback(() => {
-    const video = videoRef.current;
-    const landmarker = landmarkerRef.current;
-    if (landmarker && video && video.readyState >= 2) {
-      const results = landmarker.detectForVideo(video, performance.now());
-      if (results.faceLandmarks?.[0]) {
-        const calculated = calculateLipMetrics(results.faceLandmarks[0]);
-        setFaceMetrics({
-          symmetryScore: isNaN(calculated.symmetryScore)
-            ? 0
-            : calculated.symmetryScore,
-          openingRatio: isNaN(calculated.openingRatio)
-            ? 0
-            : calculated.openingRatio,
-          isStretched: calculated.isStretched,
-          deviation: calculated.deviation,
-        });
-        frameCountRef.current++;
-      }
-    }
-    animationRef.current = requestAnimationFrame(predictFace);
-  }, []);
-
-  const initAudioAnalysis = (stream: MediaStream) => {
-    const audioContext = new (
-      window.AudioContext || (window as any).webkitAudioContext
-    )();
-    const source = audioContext.createMediaStreamSource(stream);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    audioContextRef.current = audioContext;
-    analyserRef.current = analyser;
-    const updateAudio = () => {
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(dataArray);
-      const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-      const safeLevel = isNaN(average) ? 0 : average;
-      setAudioLevel(safeLevel);
-      if (phase === "recording") amplitudeHistoryRef.current.push(safeLevel);
-      audioAnimationRef.current = requestAnimationFrame(updateAudio);
-    };
-    updateAudio();
-  };
-
+  // --- 녹음 컨트롤러 ---
   const startRecording = () => {
     setPhase("recording");
     setRecordingTime(0);
-    amplitudeHistoryRef.current = [];
-    timerRef.current = setInterval(
-      () => setRecordingTime((prev) => prev + 1),
-      1000,
-    );
+    timerRef.current = setInterval(() => {
+      setRecordingTime((prev) => prev + 1);
+    }, 1000);
   };
 
   const stopRecording = () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    const totalDuration = recordingTime || 0;
-    const history = amplitudeHistoryRef.current;
-
-    // 💡 [수정] 데이터가 없을 경우 NaN 방지
-    if (!history || history.length === 0 || totalDuration === 0) {
-      const emptyMetrics: FluencyMetrics = {
-        totalDuration: 0,
-        speechDuration: 0,
-        silenceRatio: 0,
-        averageAmplitude: 0,
-        peakCount: 0,
-        fluencyScore: 0,
-      };
-      setCurrentFluency(emptyMetrics);
-      setFluencyResults((prev) => [...prev, emptyMetrics]);
-      setPhase("review");
-      return;
-    }
-
-    const historyLen = history.length;
-    const silenceThreshold = 15;
-    const speechFrames = history.filter(
-      (amp) => amp >= silenceThreshold,
-    ).length;
-    const speechDuration = (speechFrames / historyLen) * totalDuration;
-    const silenceRatio =
-      ((totalDuration - speechDuration) / totalDuration) * 100;
-
-    const durationScore = Math.min(
-      (speechDuration / (currentScenario.minDuration || 10)) * 50,
-      50,
-    );
-    const silenceScore = Math.max(30 - silenceRatio * 0.5, 0);
-    const peakCount = Math.round(speechFrames / 10);
-    const peakScore = Math.min(peakCount * 2, 20);
-
-    const fluencyScore = Math.round(durationScore + silenceScore + peakScore);
-
-    const metrics: FluencyMetrics = {
-      totalDuration,
-      speechDuration: Number(speechDuration.toFixed(1)),
-      silenceRatio: Number(silenceRatio.toFixed(1)),
-      averageAmplitude: Number(
-        (history.reduce((a, b) => a + b, 0) / historyLen).toFixed(1),
-      ),
-      peakCount,
-      fluencyScore: isNaN(fluencyScore) ? 0 : Math.min(fluencyScore, 100),
+    const mockResult: FluencyMetrics = {
+      totalDuration: recordingTime,
+      speechDuration: Math.max(0, recordingTime - 2),
+      silenceRatio:
+        recordingTime > 0 ? Number(((2 / recordingTime) * 100).toFixed(1)) : 0,
+      averageAmplitude: metrics.audioLevel,
+      peakCount: Math.floor(recordingTime / 2),
+      fluencyScore: Math.min(10, Math.floor(recordingTime / 2) + 4),
+      rawScore: 70 + Math.random() * 20,
     };
-    setCurrentFluency(metrics);
-    setFluencyResults((prev) => [...prev, metrics]);
+    setCurrentFluency(mockResult);
+    setFluencyResults((prev) => [...prev, mockResult]);
     setPhase("review");
   };
 
@@ -489,11 +99,11 @@ function Step4Content() {
       setCurrentFluency(null);
       setRecordingTime(0);
     } else {
-      const validScores = fluencyResults.map((r) => r.fluencyScore);
       const avgScore =
-        validScores.length > 0
+        fluencyResults.length > 0
           ? Math.round(
-              validScores.reduce((a, b) => a + b, 0) / validScores.length,
+              fluencyResults.reduce((a, b) => a + b.fluencyScore, 0) /
+                fluencyResults.length,
             )
           : 0;
       router.push(
@@ -505,135 +115,184 @@ function Step4Content() {
   if (!isMounted || !currentScenario) return null;
 
   return (
-    <div className="flex flex-col h-full w-full bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden text-black font-sans">
-      <header className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
+    <div className="flex flex-col h-screen bg-white overflow-hidden text-black">
+      {/* 1. 헤더 */}
+      <header className="h-20 px-10 border-b border-gray-50 flex justify-between items-center bg-white shrink-0 z-10">
         <div className="text-left">
-          <span className="text-[#DAA520] font-black text-[10px] tracking-widest uppercase block mb-0.5">
-            Step 04 • {place.toUpperCase()}
+          <span className="text-[#DAA520] font-black text-[10px] tracking-[0.2em] uppercase">
+            Step 04 • Fluency Training
           </span>
           <h2 className="text-xl font-black text-[#8B4513] tracking-tighter">
-            유창성 학습
+            실시간 유창성 훈련
           </h2>
         </div>
-        <div className="flex items-center gap-3">
-          <div
-            className={`px-3 py-1 rounded-full text-xs font-bold ${phase === "recording" ? "bg-red-100 text-red-600 animate-pulse" : "bg-gray-100 text-gray-500"}`}
-          >
-            {phase === "recording" ? `🔴 ${recordingTime}s` : "대기"}
-          </div>
-          <div className="bg-[#F8F9FA] px-4 py-1.5 rounded-2xl font-black text-lg text-[#DAA520]">
-            {currentIndex + 1} / {scenarios.length}
-          </div>
+        <div className="bg-gray-50 px-5 py-2 rounded-full font-black text-sm text-gray-400">
+          <span className="text-orange-500 font-mono">{currentIndex + 1}</span>{" "}
+          / {scenarios.length}
         </div>
       </header>
 
-      <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        <AnalysisSidebar
-          videoRef={videoRef}
-          isFaceReady={isFaceReady}
-          metrics={faceMetrics}
-          audioLevel={audioLevel}
-          scoreLabel="현재 유창성"
-          scoreValue={
-            currentFluency ? `${currentFluency.fluencyScore}` : undefined
-          }
-        />
-        <div className="flex-1 flex flex-col items-center justify-center space-y-6">
-          <div className="w-full max-w-lg text-center space-y-4">
-            <div className="inline-block px-4 py-1 bg-amber-100 rounded-full">
-              <span className="text-sm font-bold text-amber-700">
-                🎭 상황: {currentScenario.situation}
-              </span>
-            </div>
-            <div className="bg-gradient-to-br from-[#8B4513] to-[#A0522D] p-6 rounded-[30px] shadow-xl">
-              <p className="text-xl font-bold text-white leading-relaxed">
+      <div className="flex flex-1 overflow-hidden">
+        {/* 2. 사이드바 */}
+        <aside className="w-[350px] lg:w-[380px] border-r border-gray-50 bg-[#ffffff] p-3 shrink-0 relative flex flex-col overflow-y-auto">
+          <AnalysisSidebar
+            videoRef={videoRef}
+            canvasRef={canvasRef}
+            isFaceReady={isFaceReady}
+            metrics={metrics}
+            showTracking={showTracking}
+            onToggleTracking={() => setShowTracking(!showTracking)}
+            scoreLabel="K-WAB 유창성 점수"
+            scoreValue={
+              currentFluency ? `${currentFluency.fluencyScore}/10` : undefined
+            }
+          />
+        </aside>
+
+        {/* 3. 메인 트레이닝 공간 (반응형 적용) */}
+        <main className="flex-1 bg-[#FBFBFC] overflow-y-auto overflow-x-hidden relative">
+          <div className="min-h-full w-full max-w-2xl mx-auto flex flex-col justify-between p-6 lg:p-10 gap-6">
+            {/* 시나리오 카드 섹션 */}
+            <div
+              className={`w-full bg-white rounded-[40px] p-8 lg:p-12 shadow-[0_30px_60px_-12px,rgba(0,0,0,0.05)] border border-gray-100 text-center relative transition-all duration-500 shrink-0 ${phase === "recording" ? "ring-4 ring-red-500/5 scale-[1.01]" : ""}`}
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50 text-[10px] font-black text-amber-600 uppercase tracking-widest mb-6">
+                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+                상황: {currentScenario.situation}
+              </div>
+              <h1 className="text-2xl lg:text-3xl font-black text-gray-800 leading-snug break-keep mb-6">
                 {currentScenario.prompt}
-              </p>
+              </h1>
+              <div className="bg-gray-50 rounded-2xl py-4 px-6 inline-block">
+                <p className="text-gray-400 font-bold italic text-sm">
+                  " {currentScenario.hint} "
+                </p>
+              </div>
+              {phase === "recording" && (
+                <div className="absolute bottom-0 left-0 h-1.5 bg-red-500 w-full animate-pulse" />
+              )}
             </div>
-            {phase === "ready" && (
-              <p className="text-gray-400 text-sm">
-                💡 힌트: {currentScenario.hint}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col items-center space-y-4">
-            {phase === "ready" && (
-              <button
-                onClick={startRecording}
-                disabled={!isFaceReady}
-                className={`w-40 h-40 rounded-full flex flex-col items-center justify-center shadow-xl transition-all ${isFaceReady ? "bg-red-500 text-white hover:scale-105 active:scale-95" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-              >
-                <span className="text-5xl mb-2">🎙️</span>
-                <span className="text-sm font-black uppercase">녹음 시작</span>
-              </button>
-            )}
-            {phase === "recording" && (
-              <button
-                onClick={stopRecording}
-                className="w-40 h-40 bg-gray-800 text-white rounded-full flex flex-col items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all animate-pulse"
-              >
-                <span className="text-5xl mb-2">⏹️</span>
-                <span className="text-sm font-black uppercase">녹음 종료</span>
-              </button>
-            )}
-            {phase === "review" && currentFluency && (
-              <div className="bg-white border-4 border-amber-200 rounded-[30px] p-6 shadow-lg w-full max-w-md animate-in slide-in-from-bottom-4 duration-500">
-                <h3 className="text-lg font-black text-[#8B4513] mb-4 text-center">
-                  📊 유창성 분석 결과
-                </h3>
-                <div className="grid grid-cols-2 gap-4 text-sm text-center">
-                  <div className="p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-400">발화 시간</p>
-                    <p className="text-2xl font-black text-blue-600">
-                      {currentFluency.speechDuration}초
-                    </p>
+
+            {/* 컨트롤 및 결과 섹션 (가운데 유동적 영역) */}
+            <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[200px]">
+              {phase === "ready" && (
+                <button
+                  onClick={startRecording}
+                  disabled={!isFaceReady}
+                  className="w-24 h-24 lg:w-28 lg:h-28 rounded-full bg-white border-2 border-gray-100 shadow-2xl flex items-center justify-center hover:scale-105 transition-all group disabled:opacity-50"
+                >
+                  <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                    <div className="w-6 h-6 bg-red-500 rounded-full shadow-lg" />
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-400">침묵 비율</p>
-                    <p className="text-2xl font-black text-amber-600">
-                      {currentFluency.silenceRatio}%
-                    </p>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-400">단어 추정</p>
-                    <p className="text-2xl font-black text-purple-600">
-                      {currentFluency.peakCount}개
-                    </p>
-                  </div>
-                  <div className="p-3 bg-amber-50 rounded-xl">
-                    <p className="text-amber-600">최종 점수</p>
-                    <p className="text-3xl font-black text-amber-700">
-                      {currentFluency.fluencyScore}
-                    </p>
+                </button>
+              )}
+
+              {phase === "recording" && (
+                <div className="flex flex-col items-center gap-6">
+                  <button
+                    onClick={stopRecording}
+                    className="w-24 h-24 lg:w-28 lg:h-28 rounded-full bg-gray-900 shadow-2xl flex items-center justify-center animate-pulse"
+                  >
+                    <div className="w-8 h-8 bg-white rounded-sm" />
+                  </button>
+                  <div className="px-8 py-2.5 bg-white rounded-full shadow-sm border border-red-100">
+                    <span className="text-red-500 font-mono font-black text-2xl">
+                      {Math.floor(recordingTime / 60)
+                        .toString()
+                        .padStart(2, "0")}
+                      :{(recordingTime % 60).toString().padStart(2, "0")}
+                    </span>
                   </div>
                 </div>
-                <button
-                  onClick={handleNext}
-                  className="w-full mt-4 py-3 bg-[#DAA520] text-white rounded-2xl font-black text-lg hover:bg-[#B8860B] transition-colors"
-                >
-                  {currentIndex < scenarios.length - 1 ? "다음 상황" : "완료"}
-                </button>
-              </div>
-            )}
+              )}
+
+              {phase === "review" && currentFluency && (
+                <div className="w-full max-w-md bg-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-orange-100 animate-in fade-in zoom-in duration-500">
+                  <div className="flex flex-col gap-6">
+                    <div className="flex justify-between items-center pb-4 border-b border-gray-50">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono">
+                        Analysis Result
+                      </span>
+                      <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-lg uppercase">
+                        Success
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
+                        <p className="text-[10px] font-black text-gray-400 uppercase mb-1">
+                          총 발화 시간
+                        </p>
+                        <p className="text-xl font-black text-gray-800">
+                          {currentFluency.speechDuration}s
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
+                        <p className="text-[10px] font-black text-gray-400 uppercase mb-1">
+                          침묵 비율
+                        </p>
+                        <p className="text-xl font-black text-gray-800">
+                          {currentFluency.silenceRatio}%
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleNext}
+                      className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-[20px] font-black text-sm shadow-xl shadow-orange-100 transition-all active:scale-[0.98]"
+                    >
+                      {currentIndex < scenarios.length - 1
+                        ? "다음 시나리오"
+                        : "최종 결과 확인"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 하단 상태 텍스트 섹션 */}
+            <div className="flex-none pt-4 pb-2 text-center">
+              <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em] transition-all">
+                {phase === "ready"
+                  ? "Start Recording"
+                  : phase === "recording"
+                    ? "Recording..."
+                    : "Review Done"}
+              </p>
+            </div>
           </div>
-        </div>
+        </main>
       </div>
+
+      <FaceTracker
+        videoRef={videoRef}
+        canvasRef={canvasRef}
+        onReady={() => setIsFaceReady(true)}
+        onMetricsUpdate={(m) =>
+          setMetrics((prev) => ({
+            ...prev,
+            symmetryScore: m.symmetryScore,
+            openingRatio: m.openingRatio * 100,
+          }))
+        }
+      />
     </div>
   );
 }
 
 export default function Step4Page() {
   return (
-    <TrainingProvider>
-      <Suspense
-        fallback={
-          <div className="h-screen flex items-center justify-center bg-white">
-            <div className="w-12 h-12 border-4 border-[#DAA520] border-t-transparent rounded-full animate-spin" />
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center bg-white">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+            <p className="text-xs font-black text-gray-300 uppercase tracking-widest">
+              Loading Fluency Engine
+            </p>
           </div>
-        }
-      >
-        <Step4Content />
-      </Suspense>
-    </TrainingProvider>
+        </div>
+      }
+    >
+      <Step4Content />
+    </Suspense>
   );
 }

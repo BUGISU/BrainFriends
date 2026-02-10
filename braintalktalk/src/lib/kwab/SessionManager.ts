@@ -59,14 +59,22 @@ export interface Step3Result {
 }
 
 export interface Step4Result {
-  // 유창성 학습 (문장 완성)
+  // 유창성 학습 (K-WAB 기반 자발화 유창성 평가)
   items: Array<{
-    sentence: string;
-    completed: boolean;
-    pauseDuration: number; // ms
+    situation: string;
+    prompt: string;
+    speechDuration: number;
+    silenceRatio: number;
+    averageAmplitude: number;
+    peakCount: number;
+    kwabScore: number; // K-WAB 0~10점
+    rawScore: number; // 원점수 0~100
   }>;
-  averagePause: number;
-  completionRate: number;
+  averageKwabScore: number;
+  totalScenarios: number;
+  score: number; // Result 페이지용
+  correctCount: number; // 5점 이상 통과 개수
+  totalCount: number;
   timestamp: number;
 }
 
@@ -203,21 +211,20 @@ export class SessionManager {
   // ========================================================================
 
   private convertToSpontaneousSpeech(): SpontaneousSpeechResult {
-    // 현재는 단순화: Step 4의 유창성 데이터를 활용
+    // Step 4의 K-WAB 유창성 데이터를 활용
     const step4 = this.session.step4;
     if (!step4) {
       return { contentScore: 0, fluencyScore: 0 };
     }
 
-    // 유창성 점수: 휴지 시간이 짧을수록 높은 점수
-    const avgPause = step4.averagePause;
-    let fluencyScore = 10;
-    if (avgPause > 1000) fluencyScore = 7;
-    else if (avgPause > 800) fluencyScore = 8;
-    else if (avgPause > 500) fluencyScore = 9;
+    // 유창성 점수: K-WAB 0~10점을 직접 사용
+    const fluencyScore = step4.averageKwabScore;
 
-    // 내용 점수: 완성률 기반
-    const contentScore = Math.round(step4.completionRate * 10);
+    // 내용 점수: 5점 이상을 통과로 간주 (총 10점 만점)
+    const passedCount = step4.items.filter(
+      (item) => item.kwabScore >= 5,
+    ).length;
+    const contentScore = Math.round((passedCount / step4.totalScenarios) * 10);
 
     return { contentScore, fluencyScore };
   }

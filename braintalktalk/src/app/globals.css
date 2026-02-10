@@ -18,7 +18,20 @@
     --foreground: #ededed;
   }
 }
-
+@layer components {
+  .camera-page {
+    @apply flex flex-col h-screen bg-white overflow-hidden text-black;
+  }
+  .camera-page-body {
+    @apply flex flex-1 overflow-hidden;
+  }
+  .camera-page-aside {
+    @apply w-[380px] border-r border-gray-50 bg-white p-3 shrink-0 relative;
+  }
+  .camera-page-main {
+    @apply flex-1 overflow-y-auto px-12;
+  }
+}
 body {
   background: var(--background);
   color: var(--foreground);
