@@ -11,17 +11,18 @@ import React, {
 import { useRouter, useSearchParams } from "next/navigation";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
 import { VISUAL_MATCHING_PROTOCOLS, PlaceType } from "@/constants/trainingData";
+import { SessionManager } from "@/lib/kwab/SessionManager"; // 세션 매니저 임포트
+import { loadPatientProfile } from "@/lib/patientStorage"; // 환자 프로필 임포트
+import { useTraining } from "../TrainingContext"; // 트레이닝 컨텍스트 임포트
 
-// 빌드 옵션 설정
 export const dynamic = "force-dynamic";
 
-// 전역 잠금 객체 (페이지 새로고침 없이 인덱스 변경 시 중복 음성 방지)
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
-// --- 하위 컴포넌트: 실제 로직 포함 ---
 function Step3Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { updateFooter } = useTraining(); // 푸터 업데이트 함수
   const place = (searchParams?.get("place") as PlaceType) || "home";
 
   const [isMounted, setIsMounted] = useState(false);
@@ -34,13 +35,32 @@ function Step3Content() {
   const [isAnswered, setIsAnswered] = useState(false);
   const [canAnswer, setCanAnswer] = useState(false);
 
+  // ✅ 추가된 상태: 문항 결과 저장
+  const [analysisResults, setAnalysisResults] = useState<any[]>([]);
+
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // 컴포넌트 마운트/언마운트 관리
+  // ✅ 실시간 푸터 업데이트 (SI 지표 및 진행 상황 반영)
+  useEffect(() => {
+    // 맞춘 개수 계산
+    const correctCount = analysisResults.filter((r) => r.isCorrect).length;
+
+    updateFooter({
+      leftText: `SI: ${(metrics.symmetryScore / 100).toFixed(2)} | ACC: ${correctCount}/${analysisResults.length}`,
+      centerText: `Step 3: 단어-그림 매칭 (${place.toUpperCase()})`,
+      rightText: `FPS: 120 | Q: ${currentIndex + 1}/${protocol.length}`,
+    });
+  }, [
+    metrics.symmetryScore,
+    analysisResults,
+    currentIndex,
+    place,
+    updateFooter,
+  ]);
+
   useEffect(() => {
     setIsMounted(true);
-    GLOBAL_SPEECH_LOCK = {}; // 초기화
-
+    GLOBAL_SPEECH_LOCK = {};
     return () => {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
@@ -48,53 +68,60 @@ function Step3Content() {
     };
   }, []);
 
-  // 프로토콜 셔플 및 고정
   const protocol = useMemo(() => {
     const allQuestions = (
       VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
     ).slice(0, 10);
-
     return [...allQuestions].sort(() => Math.random() - 0.5);
   }, [place]);
 
   const currentItem = protocol[currentIndex];
 
-  // TTS 음성 출력 로직
+  // ✅ 최종 결과 저장 로직
+  const saveStep3Results = (finalResults: any[]) => {
+    const patient = loadPatientProfile();
+    if (!patient) return;
+
+    const sessionManager = new SessionManager(
+      { age: patient.age, educationYears: patient.educationYears || 0 },
+      place,
+    );
+
+    const correctCount = finalResults.filter((r) => r.isCorrect).length;
+    const score = Math.round((correctCount / finalResults.length) * 100);
+
+    // SessionManager를 통해 kwab_training_session에 저장
+    sessionManager.saveStep3Result({
+      items: finalResults,
+      score: score,
+      correctCount: correctCount,
+      totalCount: finalResults.length,
+      timestamp: Date.now(),
+    });
+  };
+
   const speakWord = useCallback((text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
-
-    // 기존 음성 중단
     window.speechSynthesis.cancel();
     setIsSpeaking(true);
     setCanAnswer(false);
 
-    // 가끔 브라우저가 이전 cancel을 처리하는 시간이 필요하므로 살짝 지연
     setTimeout(() => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "ko-KR";
       utterance.rate = 0.9;
-
-      // 한국어 음성 선택
-      const voices = window.speechSynthesis.getVoices();
-      const koVoice = voices.find((v) => v.lang.includes("ko")) || voices[0];
-      if (koVoice) utterance.voice = koVoice;
-
       utterance.onend = () => {
         setIsSpeaking(false);
         setCanAnswer(true);
       };
-
       utterance.onerror = () => {
         setIsSpeaking(false);
         setCanAnswer(true);
       };
-
-      utteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     }, 100);
   }, []);
 
-  // 새로운 문항 진입 시 자동 음성 재생
   useEffect(() => {
     if (!isMounted || !currentItem) return;
     if (GLOBAL_SPEECH_LOCK[currentIndex]) return;
@@ -102,34 +129,46 @@ function Step3Content() {
     GLOBAL_SPEECH_LOCK[currentIndex] = true;
     setPlayCount(0);
     setCanAnswer(false);
-
-    const timer = setTimeout(() => {
+    setTimeout(() => {
       speakWord(currentItem.targetWord);
     }, 1000);
-
-    return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, speakWord]);
-
-  const handleReplay = () => {
-    if (playCount < 1 && !selectedId && !isSpeaking && !isAnswered) {
-      speakWord(currentItem.targetWord);
-      setPlayCount((prev) => prev + 1);
-    }
-  };
 
   const handleOptionClick = (id: string) => {
     if (!canAnswer || selectedId || isAnswered) return;
 
-    // 정답 선택 시 음성 중단
     if (window.speechSynthesis) window.speechSynthesis.cancel();
 
     const isCorrect = id === currentItem.answerId;
+
+    // ✅ [DEBUG] 클릭 즉시 콘솔에 정답 여부 출력
+    console.group(`🎯 Step 3 - ${currentIndex + 1}번 문항 결과`);
+    console.log(`선택한 단어/이미지 ID: ${id}`);
+    console.log(`실제 정답 ID: ${currentItem.answerId}`);
+    console.log(`결과: ${isCorrect ? "⭕ 정답입니다!" : "❌ 틀렸습니다."}`);
+    console.groupEnd();
+
     setSelectedId(id);
     setShowResult(isCorrect);
     setIsAnswered(true);
     setCanAnswer(false);
 
-    // 결과 확인 후 다음 단계로
+    // 결과 데이터 생성
+    const currentResult = {
+      question: currentItem.targetWord,
+      isCorrect: isCorrect,
+      selectedId: id,
+      answerId: currentItem.answerId,
+      symmetryScore: metrics.symmetryScore,
+    };
+
+    // ✅ 상태 업데이트 및 디버깅을 위한 로그
+    setAnalysisResults((prev) => {
+      const newList = [...prev, currentResult];
+      console.log("📊 현재까지 누적된 결과 리스트:", newList);
+      return newList;
+    });
+
     setTimeout(() => {
       if (currentIndex < protocol.length - 1) {
         setCurrentIndex((prev) => prev + 1);
@@ -137,9 +176,18 @@ function Step3Content() {
         setShowResult(null);
         setIsAnswered(false);
       } else {
+        // 마지막 문항일 때 최종 저장 로그
+        console.log("💾 모든 문항 종료. 로컬 스토리지에 데이터를 저장합니다.");
+        saveStep3Results([...analysisResults, currentResult]);
         router.push(`/step-4?place=${place}`);
       }
     }, 1500);
+  };
+  const handleReplay = () => {
+    if (playCount < 1 && !selectedId && !isSpeaking && !isAnswered) {
+      speakWord(currentItem.targetWord);
+      setPlayCount((prev) => prev + 1);
+    }
   };
 
   if (!isMounted || !currentItem) return null;
@@ -207,11 +255,7 @@ function Step3Content() {
                 onClick={handleReplay}
                 disabled={playCount >= 1 || isInteractionDisabled}
                 className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-xl border-b-4
-                  ${
-                    playCount < 1 && !isInteractionDisabled
-                      ? "bg-white text-[#DAA520] border-gray-100 hover:scale-105 active:scale-95"
-                      : "bg-gray-50 text-gray-300 border-transparent cursor-not-allowed scale-90"
-                  }`}
+                  ${playCount < 1 && !isInteractionDisabled ? "bg-white text-[#DAA520] border-gray-100 hover:scale-105 active:scale-95" : "bg-gray-50 text-gray-300 border-transparent cursor-not-allowed scale-90"}`}
               >
                 <span
                   className={`text-3xl ${isSpeaking ? "animate-pulse" : ""}`}
@@ -234,19 +278,8 @@ function Step3Content() {
                   key={option.id}
                   onClick={() => handleOptionClick(option.id)}
                   disabled={isInteractionDisabled}
-                  className={`
-                    relative aspect-square rounded-[24px] flex items-center justify-center
-                    transition-all duration-300 border-2 shadow-sm overflow-hidden
-                    ${
-                      selectedId === option.id
-                        ? showResult
-                          ? "bg-emerald-50 border-emerald-500 scale-105 z-10"
-                          : "bg-red-50 border-red-500 scale-95 opacity-50"
-                        : isInteractionDisabled
-                          ? "bg-[#FBFBFC] border-gray-100 opacity-50"
-                          : "bg-[#FBFBFC] border-gray-100 hover:border-[#DAA520]/40"
-                    }
-                  `}
+                  className={`relative aspect-square rounded-[24px] flex items-center justify-center transition-all duration-300 border-2 shadow-sm overflow-hidden
+                    ${selectedId === option.id ? (showResult ? "bg-emerald-50 border-emerald-500 scale-105 z-10" : "bg-red-50 border-red-500 scale-95 opacity-50") : isInteractionDisabled ? "bg-[#FBFBFC] border-gray-100 opacity-50" : "bg-[#FBFBFC] border-gray-100 hover:border-[#DAA520]/40"}`}
                 >
                   {option.img ? (
                     <img
@@ -281,18 +314,12 @@ function Step3Content() {
   );
 }
 
-// --- 메인 페이지 ---
 export default function Step3Page() {
   return (
     <Suspense
       fallback={
         <div className="h-screen flex items-center justify-center bg-white">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-10 h-10 border-4 border-[#DAA520] border-t-transparent rounded-full animate-spin" />
-            <p className="font-black text-[#8B4513] animate-pulse">
-              인지 훈련 준비 중...
-            </p>
-          </div>
+          <div className="w-10 h-10 border-4 border-[#DAA520] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

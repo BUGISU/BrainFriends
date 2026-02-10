@@ -13,7 +13,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" suppressHydrationWarning>
-      {/* ✅ 확장 프로그램 간섭 무시 설정 추가 */}
       <body suppressHydrationWarning className="antialiased">
         {children}
       </body>

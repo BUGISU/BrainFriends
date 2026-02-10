@@ -6,13 +6,11 @@ import React, {
   useCallback,
   useRef,
   useMemo,
-  Suspense,
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 
-export const dynamic = "force-dynamic";
-// --- 전체 데이터 보존 (유지) ---
+// --- 데이터 세트 ---
 const WRITING_WORDS: Record<
   PlaceType,
   Array<{
@@ -57,6 +55,38 @@ const WRITING_WORDS: Record<
       answer: "열쇠",
       category: "생활",
     },
+    {
+      id: 5,
+      hint: "얼굴을 보는 물건",
+      image: "",
+      emoji: "🪞",
+      answer: "거울",
+      category: "생활",
+    },
+    {
+      id: 6,
+      hint: "추울 때 덮는 것",
+      image: "",
+      emoji: "☁️",
+      answer: "이불",
+      category: "침구",
+    },
+    {
+      id: 7,
+      hint: "TV 채널을 바꾸는 것",
+      image: "",
+      emoji: "📺",
+      answer: "리모컨",
+      category: "가전",
+    },
+    {
+      id: 8,
+      hint: "빨래를 하는 기계",
+      image: "",
+      emoji: "🧺",
+      answer: "세탁기",
+      category: "가전",
+    },
   ],
   hospital: [
     {
@@ -90,6 +120,38 @@ const WRITING_WORDS: Record<
       emoji: "💉",
       answer: "주사기",
       category: "의료",
+    },
+    {
+      id: 5,
+      hint: "상처에 붙이는 것",
+      image: "",
+      emoji: "🩹",
+      answer: "반창고",
+      category: "의료",
+    },
+    {
+      id: 6,
+      hint: "환자를 옮기는 의자",
+      image: "",
+      emoji: "🦽",
+      answer: "휠체어",
+      category: "의료",
+    },
+    {
+      id: 7,
+      hint: "코와 입을 가리는 것",
+      image: "",
+      emoji: "😷",
+      answer: "마스크",
+      category: "위생",
+    },
+    {
+      id: 8,
+      hint: "의사가 쓰는 처방",
+      image: "",
+      emoji: "📋",
+      answer: "처방전",
+      category: "서류",
     },
   ],
   cafe: [
@@ -125,6 +187,38 @@ const WRITING_WORDS: Record<
       answer: "빨대",
       category: "용품",
     },
+    {
+      id: 5,
+      hint: "주문 후 받는 것",
+      image: "",
+      emoji: "🔔",
+      answer: "진동벨",
+      category: "용품",
+    },
+    {
+      id: 6,
+      hint: "앉는 가구",
+      image: "",
+      emoji: "🪑",
+      answer: "의자",
+      category: "가구",
+    },
+    {
+      id: 7,
+      hint: "메뉴를 보는 것",
+      image: "",
+      emoji: "📜",
+      answer: "메뉴판",
+      category: "용품",
+    },
+    {
+      id: 8,
+      hint: "결제 후 받는 것",
+      image: "",
+      emoji: "🧾",
+      answer: "영수증",
+      category: "서류",
+    },
   ],
   bank: [
     {
@@ -158,6 +252,38 @@ const WRITING_WORDS: Record<
       emoji: "🎫",
       answer: "번호표",
       category: "서류",
+    },
+    {
+      id: 5,
+      hint: "귀중품 보관함",
+      image: "",
+      emoji: "🔐",
+      answer: "금고",
+      category: "보관",
+    },
+    {
+      id: 6,
+      hint: "서류에 찍는 것",
+      image: "",
+      emoji: "⭕",
+      answer: "도장",
+      category: "문구",
+    },
+    {
+      id: 7,
+      hint: "신원을 확인하는 것",
+      image: "",
+      emoji: "🆔",
+      answer: "신분증",
+      category: "서류",
+    },
+    {
+      id: 8,
+      hint: "숫자를 계산하는 것",
+      image: "",
+      emoji: "🧮",
+      answer: "계산기",
+      category: "기기",
     },
   ],
   park: [
@@ -193,6 +319,38 @@ const WRITING_WORDS: Record<
       answer: "자전거",
       category: "이동",
     },
+    {
+      id: 5,
+      hint: "물이 솟아오르는 곳",
+      image: "",
+      emoji: "⛲",
+      answer: "분수대",
+      category: "시설",
+    },
+    {
+      id: 6,
+      hint: "하늘을 나는 곤충",
+      image: "",
+      emoji: "🦋",
+      answer: "나비",
+      category: "동물",
+    },
+    {
+      id: 7,
+      hint: "공중에 띄우는 것",
+      image: "",
+      emoji: "🪁",
+      answer: "연",
+      category: "놀이",
+    },
+    {
+      id: 8,
+      hint: "낮에 빛나는 것",
+      image: "",
+      emoji: "☀️",
+      answer: "해",
+      category: "자연",
+    },
   ],
   mart: [
     {
@@ -227,20 +385,58 @@ const WRITING_WORDS: Record<
       answer: "당근",
       category: "채소",
     },
+    {
+      id: 5,
+      hint: "돈을 내는 곳",
+      image: "",
+      emoji: "🏪",
+      answer: "계산대",
+      category: "시설",
+    },
+    {
+      id: 6,
+      hint: "노란 과일",
+      image: "",
+      emoji: "🍌",
+      answer: "바나나",
+      category: "과일",
+    },
+    {
+      id: 7,
+      hint: "둥근 알",
+      image: "",
+      emoji: "🥚",
+      answer: "계란",
+      category: "식품",
+    },
+    {
+      id: 8,
+      hint: "돈을 넣는 곳",
+      image: "",
+      emoji: "👛",
+      answer: "지갑",
+      category: "용품",
+    },
   ],
 };
 
-function Step6Content() {
+export default function Step6Page() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const place = (searchParams.get("place") as PlaceType) || "home";
-  const step5Score = searchParams.get("step5") || "0";
+
+  // 이전 단계 점수들 획득
+  const step1 = searchParams.get("step1") || "0";
+  const step2 = searchParams.get("step2") || "0";
+  const step3 = searchParams.get("step3") || "0";
+  const step4 = searchParams.get("step4") || "0";
+  const step5 = searchParams.get("step5") || "0";
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<"writing" | "review">("writing");
   const [isMounted, setIsMounted] = useState(false);
   const [showHint, setShowHint] = useState(false);
-  const [scores, setScores] = useState<number[]>([]);
+  const [correctCount, setCorrectCount] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hiddenCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -257,39 +453,40 @@ function Step6Content() {
   }, []);
 
   const getFontSize = useCallback((canvas: HTMLCanvasElement, text: string) => {
-    const padding = 100;
+    const padding = 80;
     const size = Math.min(
       (canvas.width - padding) / text.length,
-      canvas.height * 0.5,
+      canvas.height * 0.6,
     );
     return Math.floor(size);
   }, []);
 
   const initCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !canvas.parentElement) return;
+    const hCanvas = hiddenCanvasRef.current;
+    if (!canvas || !hCanvas) return;
 
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
+    const parent = canvas.parentElement;
+    if (!parent) return;
 
-    if (hiddenCanvasRef.current) {
-      hiddenCanvasRef.current.width = canvas.width;
-      hiddenCanvasRef.current.height = canvas.height;
-    }
+    canvas.width = parent.clientWidth;
+    canvas.height = parent.clientHeight;
+    hCanvas.width = canvas.width;
+    hCanvas.height = canvas.height;
 
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (ctx) {
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      ctx.lineWidth = 28; // 고령층 사용자를 위해 조금 더 두껍게 설정
+      ctx.lineWidth = 35;
       ctx.strokeStyle = "#4A2C2A";
 
       if (showHint) {
         const fontSize = getFontSize(canvas, currentWord.answer);
-        ctx.font = `900 ${fontSize}px 'Noto Sans KR', sans-serif`;
+        ctx.font = `900 ${fontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(0, 0, 0, 0.06)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
         ctx.fillText(currentWord.answer, canvas.width / 2, canvas.height / 2);
       }
     }
@@ -297,12 +494,11 @@ function Step6Content() {
 
   useEffect(() => {
     if (phase === "writing" && isMounted) {
-      const timer = setTimeout(initCanvas, 100);
-      return () => clearTimeout(timer);
+      setTimeout(initCanvas, 150);
     }
-  }, [phase, isMounted, initCanvas, currentIndex]);
+  }, [phase, isMounted, initCanvas, showHint, currentIndex]);
 
-  const handleStart = (e: any) => {
+  const startDrawing = (e: any) => {
     setIsDrawing(true);
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
@@ -312,7 +508,7 @@ function Step6Content() {
     ctx?.moveTo(x, y);
   };
 
-  const handleMove = (e: any) => {
+  const draw = (e: any) => {
     if (!isDrawing) return;
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
@@ -354,30 +550,39 @@ function Step6Content() {
     for (let i = 3; i < targetImg.length; i += 4) {
       if (targetImg[i] > 100) {
         targetTotal++;
-        if (userImg[i] > 30) matchCount++;
+        if (userImg[i] > 50 || userImg[i - 16] > 50 || userImg[i + 16] > 50)
+          matchCount++;
       }
     }
 
     const similarity = (matchCount / targetTotal) * 100;
 
-    // 점수 저장 (힌트를 봤다면 페널티 적용 가능)
-    const currentScore = Math.min(Math.round(similarity * 2.5), 100);
-    setScores((prev) => [...prev, currentScore]);
-    setPhase("review");
+    if (similarity > 20) {
+      setCorrectCount((prev) => prev + 1);
+      setPhase("review");
+    } else {
+      alert(`잘하셨어요! 가이드를 따라 조금 더 써볼까요?`);
+    }
   };
 
+  // ✅ 결과 페이지 이동 로직
   const handleNext = () => {
     if (currentIndex < words.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
+      setCurrentIndex((c) => c + 1);
       setPhase("writing");
       setShowHint(false);
     } else {
-      const avgScore = Math.round(
-        scores.reduce((a, b) => a + b, 0) / scores.length,
-      );
-      router.push(
-        `/step-7?place=${place}&step5=${step5Score}&step6=${avgScore}`,
-      );
+      // 모든 점수를 모아서 결과 페이지로 전송
+      const params = new URLSearchParams({
+        place,
+        step1,
+        step2,
+        step3,
+        step4,
+        step5,
+        step6: correctCount.toString(), // 8점 만점
+      });
+      router.push(`/result?${params.toString()}`);
     }
   };
 
@@ -385,131 +590,95 @@ function Step6Content() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-white text-black font-sans overflow-hidden">
-      <header className="px-8 py-4 border-b border-gray-50 flex justify-between items-center bg-white/80 backdrop-blur-md">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-xl">
-            ✍️
-          </div>
-          <div>
-            <span className="text-[#DAA520] font-black text-[10px] tracking-widest uppercase block">
-              Step 06 • WRITING
-            </span>
-            <h2 className="text-xl font-black text-[#8B4513]">낱말 받아쓰기</h2>
-          </div>
+      <header className="px-6 py-3 border-b border-gray-100 flex justify-between items-center shrink-0 bg-white z-20">
+        <div>
+          <span className="text-[#DAA520] font-black text-[10px] tracking-widest uppercase">
+            Step 06 • {place.toUpperCase()}
+          </span>
+          <h2 className="text-lg font-black text-[#8B4513]">쓰기 학습</h2>
         </div>
-        <div className="bg-[#F8F9FA] px-6 py-2 rounded-2xl font-black text-lg text-[#DAA520] border border-gray-100 shadow-sm">
-          {currentIndex + 1} <span className="text-gray-300 mx-1">/</span>{" "}
-          {words.length}
+        <div className="bg-[#F8F9FA] px-4 py-1 rounded-xl font-black text-md text-[#DAA520]">
+          {currentIndex + 1} / {words.length}
         </div>
       </header>
 
-      <main className="flex-1 flex overflow-hidden p-6 gap-6">
+      <main className="flex-1 flex overflow-hidden p-4 gap-4">
         {phase === "writing" ? (
           <>
-            <div className="w-[320px] flex flex-col gap-4 shrink-0">
-              <div className="flex-1 bg-gradient-to-b from-amber-50/50 to-orange-50/30 rounded-[40px] border-2 border-amber-100/50 p-8 flex flex-col items-center justify-center text-center shadow-sm">
-                <div className="text-[140px] mb-8 leading-none drop-shadow-sm">
-                  {currentWord.emoji}
-                </div>
-                <div className="space-y-2">
-                  <p className="text-[#DAA520] font-black text-xs uppercase tracking-widest">
-                    Description
-                  </p>
-                  <h3 className="text-2xl font-black text-[#8B4513] leading-tight break-keep">
-                    {currentWord.hint}
-                  </h3>
-                </div>
+            <div className="w-[35%] flex flex-col gap-4 shrink-0">
+              <div className="flex-1 bg-amber-50/50 rounded-[32px] border border-amber-100 p-6 flex flex-col items-center justify-center text-center shadow-sm">
+                <div className="text-[120px] mb-6">{currentWord.emoji}</div>
+                <p className="text-[#DAA520] font-bold text-sm mb-1 uppercase tracking-tighter">
+                  HINT
+                </p>
+                <h3 className="text-xl font-black text-[#8B4513] leading-tight break-keep">
+                  {currentWord.hint}
+                </h3>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => {
+                    const ctx = canvasRef.current?.getContext("2d");
+                    ctx?.clearRect(
+                      0,
+                      0,
+                      canvasRef.current!.width,
+                      canvasRef.current!.height,
+                    );
                     initCanvas();
                   }}
-                  className="py-5 bg-white border-2 border-gray-100 rounded-[24px] font-black text-gray-500 shadow-sm hover:bg-gray-50 transition-colors"
+                  className="py-4 bg-white border-2 border-gray-100 rounded-2xl font-black text-sm text-gray-500 shadow-sm"
                 >
                   🔄 다시쓰기
                 </button>
                 <button
                   onClick={() => setShowHint(!showHint)}
-                  className={`py-5 border-2 rounded-[24px] font-black shadow-sm transition-all ${showHint ? "bg-[#DAA520] text-white border-[#B8860B]" : "bg-white text-[#DAA520] border-amber-100 hover:bg-amber-50"}`}
+                  className={`py-4 border-2 rounded-2xl font-black text-sm shadow-sm transition-colors ${showHint ? "bg-[#DAA520] text-white border-[#B8860B]" : "bg-white text-[#DAA520] border-amber-100"}`}
                 >
-                  💡 {showHint ? "가이드 끄기" : "가이드 보기"}
+                  💡 {showHint ? "힌트 끄기" : "힌트 보기"}
                 </button>
               </div>
-
               <button
                 onClick={checkAnswer}
-                className="w-full py-6 bg-[#8B4513] text-white rounded-[28px] font-black text-2xl shadow-xl hover:bg-[#5D2E0A] transform active:scale-[0.97] transition-all"
+                className="w-full py-5 bg-[#8B4513] text-white rounded-[24px] font-black text-xl shadow-lg active:scale-[0.98]"
               >
                 작성 완료
               </button>
             </div>
-
-            <div className="flex-1 relative bg-[#FAFAFA] border-4 border-dashed border-gray-200 rounded-[48px] overflow-hidden shadow-inner group">
-              <div className="absolute top-8 left-8 text-gray-200 font-black text-6xl select-none pointer-events-none group-hover:text-gray-300 transition-colors uppercase">
-                Write Here
-              </div>
+            <div className="flex-1 relative bg-[#FDFDFD] border-4 border-dashed border-gray-200 rounded-[40px] overflow-hidden shadow-inner">
               <canvas
                 ref={canvasRef}
-                onMouseDown={handleStart}
-                onMouseMove={handleMove}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
                 onMouseUp={() => setIsDrawing(false)}
-                onMouseLeave={() => setIsDrawing(false)}
-                onTouchStart={handleStart}
-                onTouchMove={handleMove}
+                onTouchStart={startDrawing}
+                onTouchMove={draw}
                 onTouchEnd={() => setIsDrawing(false)}
-                className="absolute inset-0 w-full h-full touch-none z-10 cursor-crosshair"
+                className="absolute inset-0 w-full h-full touch-none z-10"
               />
               <canvas ref={hiddenCanvasRef} className="hidden" />
             </div>
           </>
         ) : (
-          <div className="w-full flex flex-col items-center justify-center space-y-8 animate-in fade-in zoom-in duration-500">
-            <div className="bg-white w-full max-w-2xl p-16 rounded-[60px] text-center border-4 border-amber-100 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200" />
-              <p className="text-[#DAA520] font-black tracking-[0.3em] text-xl mb-8 uppercase">
-                Perfect Match!
+          <div className="w-full flex flex-col items-center justify-center space-y-8 animate-in fade-in zoom-in duration-300">
+            <div className="bg-amber-50 w-full max-w-lg p-16 rounded-[60px] text-center border-4 border-amber-100 shadow-xl">
+              <p className="text-[#DAA520] font-black tracking-[0.2em] text-lg mb-6 uppercase">
+                {currentIndex < words.length - 1 ? "Great!" : "Excellent!"}
               </p>
-              <div className="text-[160px] mb-6 animate-bounce">
-                {currentWord.emoji}
-              </div>
-              <h4 className="text-[120px] font-black text-[#8B4513] leading-none tracking-tighter">
+              <div className="text-[120px] mb-4">{currentWord.emoji}</div>
+              <h4 className="text-9xl font-black text-[#8B4513]">
                 {currentWord.answer}
               </h4>
             </div>
             <button
               onClick={handleNext}
-              className="w-full max-w-2xl py-8 bg-[#8B4513] text-white rounded-[32px] font-black text-4xl shadow-2xl hover:bg-black transform active:scale-95 transition-all flex items-center justify-center gap-4"
+              className="w-full max-w-lg py-7 bg-[#8B4513] text-white rounded-[32px] font-black text-3xl shadow-2xl active:scale-95 transition-transform"
             >
-              {currentIndex < words.length - 1 ? "다음 문제" : "전체 결과 보기"}{" "}
-              <span className="text-3xl">→</span>
+              {currentIndex < words.length - 1 ? "다음 문제" : "결과 확인하기"}
             </button>
           </div>
         )}
       </main>
-
-      <footer className="px-8 py-4 bg-gray-50/50 border-t border-gray-100 flex justify-between items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
-        <span>Handwriting Recognition Active</span>
-        <div className="flex gap-4">
-          <span>Category: {currentWord.category}</span>
-          <span>Place: {place}</span>
-        </div>
-      </footer>
     </div>
-  );
-}
-
-export default function Step6Page() {
-  return (
-    <Suspense
-      fallback={
-        <div className="h-screen flex items-center justify-center">
-          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      }
-    >
-      <Step6Content />
-    </Suspense>
   );
 }

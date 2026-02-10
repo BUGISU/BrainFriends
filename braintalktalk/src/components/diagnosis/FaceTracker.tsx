@@ -12,6 +12,7 @@ export default function FaceTracker({ onMetricsUpdate }: FaceTrackerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const requestRef = useRef<number | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -38,6 +39,8 @@ export default function FaceTracker({ onMetricsUpdate }: FaceTrackerProps) {
           video: { aspectRatio: 1.777 },
         });
 
+        streamRef.current = stream;
+
         if (videoRef.current && isMounted) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
@@ -54,11 +57,18 @@ export default function FaceTracker({ onMetricsUpdate }: FaceTrackerProps) {
     return () => {
       isMounted = false;
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+
+      // 카메라 스트림 정리
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
     };
   }, []);
 
   const predict = () => {
-    // 🔹 landmarkerRef.current가 null인지 엄격히 체크
     if (
       landmarkerRef.current &&
       videoRef.current &&
@@ -90,6 +100,12 @@ export default function FaceTracker({ onMetricsUpdate }: FaceTrackerProps) {
           muted
           className="w-full h-full object-cover -scale-x-100"
         />
+
+        {/* 얼굴 트래킹 윤곽선 오버레이 */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-32 h-40 border-2 border-dashed border-green-400/50 rounded-full" />
+        </div>
+
         {!isLoaded && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
             <span className="text-white text-[10px] font-black animate-pulse uppercase tracking-widest">

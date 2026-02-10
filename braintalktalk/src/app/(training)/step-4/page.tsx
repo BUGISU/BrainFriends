@@ -8,315 +8,632 @@ import React, {
   useMemo,
   Suspense,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import FaceTracker from "@/components/diagnosis/FaceTracker";
-import { VISUAL_MATCHING_PROTOCOLS, PlaceType } from "@/constants/trainingData";
+import { useSearchParams, useRouter } from "next/navigation";
+import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
+import { PlaceType } from "@/constants/trainingData";
+import { useTraining, TrainingProvider } from "../TrainingContext";
 
-// 빌드 옵션 설정
 export const dynamic = "force-dynamic";
 
-// 전역 잠금 객체 (페이지 새로고침 없이 인덱스 변경 시 중복 음성 방지)
-let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
+const FLUENCY_SCENARIOS: Record<
+  PlaceType,
+  Array<{
+    id: number;
+    situation: string;
+    prompt: string;
+    hint: string;
+    minDuration: number;
+  }>
+> = {
+  home: [
+    {
+      id: 1,
+      situation: "아침에 일어났을 때",
+      prompt: "아침에 일어나서 무엇을 하시나요? 순서대로 말씀해 주세요.",
+      hint: "예: 일어나서 세수하고...",
+      minDuration: 10,
+    },
+    {
+      id: 2,
+      situation: "저녁 식사 준비",
+      prompt: "저녁에 가족을 위해 어떤 음식을 만들고 싶으세요?",
+      hint: "예: 된장찌개를 끓이려면...",
+      minDuration: 10,
+    },
+    {
+      id: 3,
+      situation: "집 청소할 때",
+      prompt: "집을 깨끗이 청소하려면 어떻게 해야 하나요?",
+      hint: "예: 먼저 빗자루로...",
+      minDuration: 10,
+    },
+  ],
+  hospital: [
+    {
+      id: 1,
+      situation: "접수할 때",
+      prompt: "병원에 처음 왔을 때 어떻게 접수하나요?",
+      hint: "예: 먼저 접수처에 가서...",
+      minDuration: 10,
+    },
+    {
+      id: 2,
+      situation: "증상 설명",
+      prompt: "의사 선생님께 어디가 아픈지 설명해 주세요.",
+      hint: "예: 며칠 전부터 머리가...",
+      minDuration: 10,
+    },
+    {
+      id: 3,
+      situation: "약국에서",
+      prompt: "처방전을 들고 약국에 가면 어떻게 하나요?",
+      hint: "예: 약사님께 처방전을 주고...",
+      minDuration: 10,
+    },
+  ],
+  cafe: [
+    {
+      id: 1,
+      situation: "음료 주문",
+      prompt: "카페에서 좋아하는 음료를 주문해 보세요.",
+      hint: "예: 따뜻한 아메리카노 한 잔...",
+      minDuration: 10,
+    },
+    {
+      id: 2,
+      situation: "친구와 대화",
+      prompt: "카페에서 친구를 만났을 때 어떤 이야기를 하고 싶으세요?",
+      hint: "예: 요즘 어떻게 지내?...",
+      minDuration: 10,
+    },
+    {
+      id: 3,
+      situation: "직원에게 요청",
+      prompt: "음료에 문제가 있을 때 어떻게 말씀하시겠어요?",
+      hint: "예: 죄송한데 이 음료가...",
+      minDuration: 10,
+    },
+  ],
+  bank: [
+    {
+      id: 1,
+      situation: "계좌 개설",
+      prompt: "은행에서 새 통장을 만들려면 어떻게 해야 하나요?",
+      hint: "예: 신분증을 가지고...",
+      minDuration: 10,
+    },
+    {
+      id: 2,
+      situation: "돈 입금",
+      prompt: "ATM에서 돈을 입금하는 방법을 설명해 주세요.",
+      hint: "예: 카드를 넣고...",
+      minDuration: 10,
+    },
+    {
+      id: 3,
+      situation: "상담 요청",
+      prompt: "은행 직원에게 대출 상담을 요청해 보세요.",
+      hint: "예: 안녕하세요, 대출에 대해...",
+      minDuration: 10,
+    },
+  ],
+  park: [
+    {
+      id: 1,
+      situation: "산책할 때",
+      prompt: "공원에서 산책하면서 보이는 것들을 설명해 주세요.",
+      hint: "예: 나무가 있고, 꽃이...",
+      minDuration: 10,
+    },
+    {
+      id: 2,
+      situation: "운동할 때",
+      prompt: "공원에서 어떤 운동을 하시나요? 방법을 알려주세요.",
+      hint: "예: 먼저 준비운동을 하고...",
+      minDuration: 10,
+    },
+    {
+      id: 3,
+      situation: "날씨 이야기",
+      prompt: "오늘 날씨가 어떤가요? 자세히 말씀해 주세요.",
+      hint: "예: 오늘은 맑고...",
+      minDuration: 10,
+    },
+  ],
+  mart: [
+    {
+      id: 1,
+      situation: "장보기",
+      prompt: "마트에서 일주일치 장을 보려면 무엇을 사야 하나요?",
+      hint: "예: 채소랑 고기, 그리고...",
+      minDuration: 10,
+    },
+    {
+      id: 2,
+      situation: "물건 찾기",
+      prompt: "마트 직원에게 원하는 물건 위치를 물어보세요.",
+      hint: "예: 실례합니다, 라면이 어디...",
+      minDuration: 10,
+    },
+    {
+      id: 3,
+      situation: "계산할 때",
+      prompt: "계산대에서 어떻게 결제하시나요?",
+      hint: "예: 카드로 결제할게요...",
+      minDuration: 10,
+    },
+  ],
+};
 
-// --- 하위 컴포넌트: 실제 로직 포함 ---
-function Step3Content() {
+interface FluencyMetrics {
+  totalDuration: number;
+  speechDuration: number;
+  silenceRatio: number;
+  averageAmplitude: number;
+  peakCount: number;
+  fluencyScore: number;
+}
+
+const AnalysisSidebar = ({
+  videoRef,
+  isFaceReady,
+  metrics,
+  audioLevel,
+  scoreLabel = "현재 점수",
+  scoreValue,
+}: any) => {
+  return (
+    <div className="w-64 flex flex-col gap-3">
+      <div className="relative bg-black rounded-2xl overflow-hidden aspect-[4/3] shadow-inner">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover -scale-x-100"
+        />
+        {!isFaceReady && (
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[10px] font-bold animate-pulse">
+            CAMERA LOADING...
+          </div>
+        )}
+      </div>
+      <div className="bg-[#F8F9FA] rounded-2xl p-4 space-y-3">
+        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center border-b border-gray-100 pb-2">
+          실시간 분석
+        </h4>
+        <MetricBar
+          label="대칭지수"
+          value={metrics.symmetryScore}
+          max={100}
+          unit="%"
+          color="bg-emerald-500"
+        />
+        <MetricBar
+          label="개구도"
+          value={metrics.openingRatio}
+          max={2.0}
+          unit=""
+          color="bg-amber-400"
+        />
+        <MetricBar
+          label="음성 레벨"
+          value={audioLevel}
+          max={100}
+          unit="dB"
+          color="bg-blue-500"
+        />
+      </div>
+      {scoreValue && (
+        <div className="bg-amber-50 rounded-2xl p-4 text-center border border-amber-100 animate-in zoom-in duration-300">
+          <p className="text-[10px] text-amber-600 font-black uppercase tracking-tighter mb-1">
+            {scoreLabel}
+          </p>
+          <p className="text-3xl font-black text-amber-800 tracking-tighter">
+            {scoreValue}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MetricBar = ({ label, value, max, unit, color }: any) => (
+  <div className="space-y-1">
+    <div className="flex justify-between text-[9px] font-bold text-gray-500 uppercase">
+      <span>{label}</span>
+      <span>
+        {Number(value || 0).toFixed(1)}
+        {unit}
+      </span>
+    </div>
+    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+      <div
+        className={`h-full ${color} transition-all duration-300`}
+        style={{
+          width: `${Math.min(((value || 0) / (max || 1)) * 100, 100)}%`,
+        }}
+      />
+    </div>
+  </div>
+);
+
+function Step4Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const place = (searchParams?.get("place") as PlaceType) || "home";
+  const place = (searchParams.get("place") as PlaceType) || "home";
+  const step3Score = searchParams.get("step3") || "0";
 
-  const [isMounted, setIsMounted] = useState(false);
+  const { updateFooter } = useTraining();
+
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [metrics, setMetrics] = useState({ symmetryScore: 0, openingRatio: 0 });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showResult, setShowResult] = useState<boolean | null>(null);
-  const [playCount, setPlayCount] = useState(0);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [canAnswer, setCanAnswer] = useState(false);
+  const [phase, setPhase] = useState<"ready" | "recording" | "review">("ready");
+  const [isMounted, setIsMounted] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [isFaceReady, setIsFaceReady] = useState(false);
+  const [faceMetrics, setFaceMetrics] = useState<LipMetrics>({
+    symmetryScore: 100,
+    openingRatio: 0,
+    isStretched: false,
+    deviation: 0,
+  });
+  const [fluencyResults, setFluencyResults] = useState<FluencyMetrics[]>([]);
+  const [currentFluency, setCurrentFluency] = useState<FluencyMetrics | null>(
+    null,
+  );
 
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const landmarkerRef = useRef<FaceLandmarker | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioAnimationRef = useRef<number | null>(null);
+  const amplitudeHistoryRef = useRef<number[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const frameCountRef = useRef(0);
 
-  // 컴포넌트 마운트/언마운트 관리
+  const scenarios = useMemo(
+    () => FLUENCY_SCENARIOS[place] || FLUENCY_SCENARIOS.home,
+    [place],
+  );
+  const currentScenario = scenarios[currentIndex];
+
+  useEffect(() => {
+    updateFooter({
+      symmetryScore: faceMetrics.symmetryScore,
+      audioLevel: audioLevel,
+      frameCount: frameCountRef.current,
+      sampleCount: amplitudeHistoryRef.current.length,
+      statusText:
+        phase === "recording"
+          ? "RECORDING..."
+          : phase === "review"
+            ? "ANALYZING..."
+            : "READY",
+    });
+  }, [faceMetrics, audioLevel, phase, updateFooter]);
+
   useEffect(() => {
     setIsMounted(true);
-    GLOBAL_SPEECH_LOCK = {}; // 초기화
-
-    return () => {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
+    let isCancelled = false;
+    async function initTracking() {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
+        );
+        const landmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+        });
+        if (isCancelled) return;
+        landmarkerRef.current = landmarker;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { aspectRatio: 1.333, width: 320, height: 240 },
+          audio: true,
+        });
+        if (isCancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            setIsFaceReady(true);
+            animationRef.current = requestAnimationFrame(predictFace);
+          };
+        }
+        initAudioAnalysis(stream);
+      } catch (err) {
+        console.error("초기화 실패:", err);
       }
+    }
+    initTracking();
+    return () => {
+      isCancelled = true;
+      cleanup();
     };
   }, []);
 
-  // 프로토콜 셔플 및 고정
-  const protocol = useMemo(() => {
-    const allQuestions = (
-      VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
-    ).slice(0, 10);
+  const cleanup = () => {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (audioAnimationRef.current)
+      cancelAnimationFrame(audioAnimationRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (streamRef.current)
+      streamRef.current.getTracks().forEach((t) => t.stop());
+    if (audioContextRef.current) audioContextRef.current.close();
+  };
 
-    return [...allQuestions].sort(() => Math.random() - 0.5);
-  }, [place]);
-
-  const currentItem = protocol[currentIndex];
-
-  // TTS 음성 출력 로직
-  const speakWord = useCallback((text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-
-    // 기존 음성 중단
-    window.speechSynthesis.cancel();
-    setIsSpeaking(true);
-    setCanAnswer(false);
-
-    // 가끔 브라우저가 이전 cancel을 처리하는 시간이 필요하므로 살짝 지연
-    setTimeout(() => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "ko-KR";
-      utterance.rate = 0.9;
-
-      // 한국어 음성 선택
-      const voices = window.speechSynthesis.getVoices();
-      const koVoice = voices.find((v) => v.lang.includes("ko")) || voices[0];
-      if (koVoice) utterance.voice = koVoice;
-
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        setCanAnswer(true);
-      };
-
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        setCanAnswer(true);
-      };
-
-      utteranceRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-    }, 100);
+  const predictFace = useCallback(() => {
+    const video = videoRef.current;
+    const landmarker = landmarkerRef.current;
+    if (landmarker && video && video.readyState >= 2) {
+      const results = landmarker.detectForVideo(video, performance.now());
+      if (results.faceLandmarks?.[0]) {
+        const calculated = calculateLipMetrics(results.faceLandmarks[0]);
+        setFaceMetrics({
+          symmetryScore: isNaN(calculated.symmetryScore)
+            ? 0
+            : calculated.symmetryScore,
+          openingRatio: isNaN(calculated.openingRatio)
+            ? 0
+            : calculated.openingRatio,
+          isStretched: calculated.isStretched,
+          deviation: calculated.deviation,
+        });
+        frameCountRef.current++;
+      }
+    }
+    animationRef.current = requestAnimationFrame(predictFace);
   }, []);
 
-  // 새로운 문항 진입 시 자동 음성 재생
-  useEffect(() => {
-    if (!isMounted || !currentItem) return;
-    if (GLOBAL_SPEECH_LOCK[currentIndex]) return;
+  const initAudioAnalysis = (stream: MediaStream) => {
+    const audioContext = new (
+      window.AudioContext || (window as any).webkitAudioContext
+    )();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+    const updateAudio = () => {
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(dataArray);
+      const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+      const safeLevel = isNaN(average) ? 0 : average;
+      setAudioLevel(safeLevel);
+      if (phase === "recording") amplitudeHistoryRef.current.push(safeLevel);
+      audioAnimationRef.current = requestAnimationFrame(updateAudio);
+    };
+    updateAudio();
+  };
 
-    GLOBAL_SPEECH_LOCK[currentIndex] = true;
-    setPlayCount(0);
-    setCanAnswer(false);
+  const startRecording = () => {
+    setPhase("recording");
+    setRecordingTime(0);
+    amplitudeHistoryRef.current = [];
+    timerRef.current = setInterval(
+      () => setRecordingTime((prev) => prev + 1),
+      1000,
+    );
+  };
 
-    const timer = setTimeout(() => {
-      speakWord(currentItem.targetWord);
-    }, 1000);
+  const stopRecording = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    const totalDuration = recordingTime || 0;
+    const history = amplitudeHistoryRef.current;
 
-    return () => clearTimeout(timer);
-  }, [currentIndex, isMounted, currentItem, speakWord]);
+    // 💡 [수정] 데이터가 없을 경우 NaN 방지
+    if (!history || history.length === 0 || totalDuration === 0) {
+      const emptyMetrics: FluencyMetrics = {
+        totalDuration: 0,
+        speechDuration: 0,
+        silenceRatio: 0,
+        averageAmplitude: 0,
+        peakCount: 0,
+        fluencyScore: 0,
+      };
+      setCurrentFluency(emptyMetrics);
+      setFluencyResults((prev) => [...prev, emptyMetrics]);
+      setPhase("review");
+      return;
+    }
 
-  const handleReplay = () => {
-    if (playCount < 1 && !selectedId && !isSpeaking && !isAnswered) {
-      speakWord(currentItem.targetWord);
-      setPlayCount((prev) => prev + 1);
+    const historyLen = history.length;
+    const silenceThreshold = 15;
+    const speechFrames = history.filter(
+      (amp) => amp >= silenceThreshold,
+    ).length;
+    const speechDuration = (speechFrames / historyLen) * totalDuration;
+    const silenceRatio =
+      ((totalDuration - speechDuration) / totalDuration) * 100;
+
+    const durationScore = Math.min(
+      (speechDuration / (currentScenario.minDuration || 10)) * 50,
+      50,
+    );
+    const silenceScore = Math.max(30 - silenceRatio * 0.5, 0);
+    const peakCount = Math.round(speechFrames / 10);
+    const peakScore = Math.min(peakCount * 2, 20);
+
+    const fluencyScore = Math.round(durationScore + silenceScore + peakScore);
+
+    const metrics: FluencyMetrics = {
+      totalDuration,
+      speechDuration: Number(speechDuration.toFixed(1)),
+      silenceRatio: Number(silenceRatio.toFixed(1)),
+      averageAmplitude: Number(
+        (history.reduce((a, b) => a + b, 0) / historyLen).toFixed(1),
+      ),
+      peakCount,
+      fluencyScore: isNaN(fluencyScore) ? 0 : Math.min(fluencyScore, 100),
+    };
+    setCurrentFluency(metrics);
+    setFluencyResults((prev) => [...prev, metrics]);
+    setPhase("review");
+  };
+
+  const handleNext = () => {
+    if (currentIndex < scenarios.length - 1) {
+      setCurrentIndex((prev) => prev + 1);
+      setPhase("ready");
+      setCurrentFluency(null);
+      setRecordingTime(0);
+    } else {
+      const validScores = fluencyResults.map((r) => r.fluencyScore);
+      const avgScore =
+        validScores.length > 0
+          ? Math.round(
+              validScores.reduce((a, b) => a + b, 0) / validScores.length,
+            )
+          : 0;
+      router.push(
+        `/step-5?place=${place}&step3=${step3Score}&step4=${avgScore}`,
+      );
     }
   };
 
-  const handleOptionClick = (id: string) => {
-    if (!canAnswer || selectedId || isAnswered) return;
-
-    // 정답 선택 시 음성 중단
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-
-    const isCorrect = id === currentItem.answerId;
-    setSelectedId(id);
-    setShowResult(isCorrect);
-    setIsAnswered(true);
-    setCanAnswer(false);
-
-    // 결과 확인 후 다음 단계로
-    setTimeout(() => {
-      if (currentIndex < protocol.length - 1) {
-        setCurrentIndex((prev) => prev + 1);
-        setSelectedId(null);
-        setShowResult(null);
-        setIsAnswered(false);
-      } else {
-        router.push(`/step-4?place=${place}`);
-      }
-    }, 1500);
-  };
-
-  if (!isMounted || !currentItem) return null;
-
-  const isInteractionDisabled =
-    !isMounted || isSpeaking || isAnswered || !canAnswer;
+  if (!isMounted || !currentScenario) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
-      <header className="px-10 py-6 border-b border-gray-50 flex justify-between items-center bg-white shrink-0">
+    <div className="flex flex-col h-full w-full bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden text-black font-sans">
+      <header className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
         <div className="text-left">
-          <span className="text-[#DAA520] font-black text-[11px] tracking-[0.2em] uppercase">
-            Step 03 • {place.toUpperCase()}
+          <span className="text-[#DAA520] font-black text-[10px] tracking-widest uppercase block mb-0.5">
+            Step 04 • {place.toUpperCase()}
           </span>
-          <h2 className="text-2xl font-black text-[#8B4513] tracking-tighter">
-            단어-그림 매칭
+          <h2 className="text-xl font-black text-[#8B4513] tracking-tighter">
+            유창성 학습
           </h2>
         </div>
-        <div className="bg-gray-50 px-5 py-2 rounded-full font-black text-sm text-gray-400">
-          <span className="text-orange-500">{currentIndex + 1}</span> /{" "}
-          {protocol.length}
+        <div className="flex items-center gap-3">
+          <div
+            className={`px-3 py-1 rounded-full text-xs font-bold ${phase === "recording" ? "bg-red-100 text-red-600 animate-pulse" : "bg-gray-100 text-gray-500"}`}
+          >
+            {phase === "recording" ? `🔴 ${recordingTime}s` : "대기"}
+          </div>
+          <div className="bg-[#F8F9FA] px-4 py-1.5 rounded-2xl font-black text-lg text-[#DAA520]">
+            {currentIndex + 1} / {scenarios.length}
+          </div>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <aside className="w-[380px] border-r border-gray-50 bg-[#FCFCFC] p-8 shrink-0">
-          <div className="space-y-4">
-            <FaceTracker
-              onMetricsUpdate={(m) =>
-                setMetrics({
-                  symmetryScore: m.symmetryScore,
-                  openingRatio: m.openingRatio * 100,
-                })
-              }
-            />
-            <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
-              <MetricBar
-                label="안면 대칭"
-                value={metrics.symmetryScore}
-                unit="%"
-                color="bg-emerald-500"
-              />
-              <MetricBar
-                label="입 벌림"
-                value={metrics.openingRatio}
-                unit=""
-                color="bg-amber-400"
-              />
-            </div>
-          </div>
-        </aside>
-
-        <main className="flex-1 flex flex-col items-center justify-center bg-white px-12 overflow-y-auto">
-          <section className="w-full max-w-2xl flex flex-col items-center gap-8 py-4">
-            <div className="w-full flex flex-col items-center gap-6">
-              <div className="h-20 flex items-center justify-center">
-                <p className="text-3xl font-black text-[#8B4513]/40 uppercase tracking-[0.3em] text-center">
-                  {isSpeaking
-                    ? "문제를 잘 들어보세요"
-                    : "알맞은 그림을 찾아보세요"}
-                </p>
-              </div>
-
-              <button
-                onClick={handleReplay}
-                disabled={playCount >= 1 || isInteractionDisabled}
-                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-xl border-b-4
-                  ${
-                    playCount < 1 && !isInteractionDisabled
-                      ? "bg-white text-[#DAA520] border-gray-100 hover:scale-105 active:scale-95"
-                      : "bg-gray-50 text-gray-300 border-transparent cursor-not-allowed scale-90"
-                  }`}
-              >
-                <span
-                  className={`text-3xl ${isSpeaking ? "animate-pulse" : ""}`}
-                >
-                  🔊
-                </span>
-              </button>
-              <span className="font-black text-sm uppercase tracking-[0.2em] text-[#DAA520]">
-                {isSpeaking
-                  ? "재생 중"
-                  : playCount >= 1
-                    ? "다시 듣기 완료"
-                    : "다시 듣기 가능 (1회)"}
+      <div className="flex-1 flex gap-4 p-4 overflow-hidden">
+        <AnalysisSidebar
+          videoRef={videoRef}
+          isFaceReady={isFaceReady}
+          metrics={faceMetrics}
+          audioLevel={audioLevel}
+          scoreLabel="현재 유창성"
+          scoreValue={
+            currentFluency ? `${currentFluency.fluencyScore}` : undefined
+          }
+        />
+        <div className="flex-1 flex flex-col items-center justify-center space-y-6">
+          <div className="w-full max-w-lg text-center space-y-4">
+            <div className="inline-block px-4 py-1 bg-amber-100 rounded-full">
+              <span className="text-sm font-bold text-amber-700">
+                🎭 상황: {currentScenario.situation}
               </span>
             </div>
-
-            <div className="grid grid-cols-3 gap-4 w-full max-w-lg shrink-0 pb-8">
-              {currentItem.options.map((option) => (
-                <button
-                  key={option.id}
-                  onClick={() => handleOptionClick(option.id)}
-                  disabled={isInteractionDisabled}
-                  className={`
-                    relative aspect-square rounded-[24px] flex items-center justify-center
-                    transition-all duration-300 border-2 shadow-sm overflow-hidden
-                    ${
-                      selectedId === option.id
-                        ? showResult
-                          ? "bg-emerald-50 border-emerald-500 scale-105 z-10"
-                          : "bg-red-50 border-red-500 scale-95 opacity-50"
-                        : isInteractionDisabled
-                          ? "bg-[#FBFBFC] border-gray-100 opacity-50"
-                          : "bg-[#FBFBFC] border-gray-100 hover:border-[#DAA520]/40"
-                    }
-                  `}
-                >
-                  {option.img ? (
-                    <img
-                      src={option.img}
-                      alt=""
-                      className="w-full h-full object-cover p-3"
-                    />
-                  ) : (
-                    <span className="text-5xl select-none leading-none">
-                      {option.emoji || "🖼️"}
-                    </span>
-                  )}
-                  {selectedId === option.id && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm">
-                      <span className="text-6xl">
-                        {showResult ? "⭕" : "❌"}
-                      </span>
-                    </div>
-                  )}
-                  {selectedId !== null &&
-                    !showResult &&
-                    option.id === currentItem.answerId && (
-                      <div className="absolute inset-0 border-4 border-emerald-400 rounded-[24px] animate-pulse pointer-events-none" />
-                    )}
-                </button>
-              ))}
+            <div className="bg-gradient-to-br from-[#8B4513] to-[#A0522D] p-6 rounded-[30px] shadow-xl">
+              <p className="text-xl font-bold text-white leading-relaxed">
+                {currentScenario.prompt}
+              </p>
             </div>
-          </section>
-        </main>
-      </div>
-    </div>
-  );
-}
-
-// --- 메인 페이지 ---
-export default function Step3Page() {
-  return (
-    <Suspense
-      fallback={
-        <div className="h-screen flex items-center justify-center bg-white">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-10 h-10 border-4 border-[#DAA520] border-t-transparent rounded-full animate-spin" />
-            <p className="font-black text-[#8B4513] animate-pulse">
-              인지 훈련 준비 중...
-            </p>
+            {phase === "ready" && (
+              <p className="text-gray-400 text-sm">
+                💡 힌트: {currentScenario.hint}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col items-center space-y-4">
+            {phase === "ready" && (
+              <button
+                onClick={startRecording}
+                disabled={!isFaceReady}
+                className={`w-40 h-40 rounded-full flex flex-col items-center justify-center shadow-xl transition-all ${isFaceReady ? "bg-red-500 text-white hover:scale-105 active:scale-95" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+              >
+                <span className="text-5xl mb-2">🎙️</span>
+                <span className="text-sm font-black uppercase">녹음 시작</span>
+              </button>
+            )}
+            {phase === "recording" && (
+              <button
+                onClick={stopRecording}
+                className="w-40 h-40 bg-gray-800 text-white rounded-full flex flex-col items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all animate-pulse"
+              >
+                <span className="text-5xl mb-2">⏹️</span>
+                <span className="text-sm font-black uppercase">녹음 종료</span>
+              </button>
+            )}
+            {phase === "review" && currentFluency && (
+              <div className="bg-white border-4 border-amber-200 rounded-[30px] p-6 shadow-lg w-full max-w-md animate-in slide-in-from-bottom-4 duration-500">
+                <h3 className="text-lg font-black text-[#8B4513] mb-4 text-center">
+                  📊 유창성 분석 결과
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm text-center">
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <p className="text-gray-400">발화 시간</p>
+                    <p className="text-2xl font-black text-blue-600">
+                      {currentFluency.speechDuration}초
+                    </p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <p className="text-gray-400">침묵 비율</p>
+                    <p className="text-2xl font-black text-amber-600">
+                      {currentFluency.silenceRatio}%
+                    </p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <p className="text-gray-400">단어 추정</p>
+                    <p className="text-2xl font-black text-purple-600">
+                      {currentFluency.peakCount}개
+                    </p>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-xl">
+                    <p className="text-amber-600">최종 점수</p>
+                    <p className="text-3xl font-black text-amber-700">
+                      {currentFluency.fluencyScore}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleNext}
+                  className="w-full mt-4 py-3 bg-[#DAA520] text-white rounded-2xl font-black text-lg hover:bg-[#B8860B] transition-colors"
+                >
+                  {currentIndex < scenarios.length - 1 ? "다음 상황" : "완료"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      }
-    >
-      <Step3Content />
-    </Suspense>
+      </div>
+    </div>
   );
 }
 
-function MetricBar({ label, value, unit, color }: any) {
+export default function Step4Page() {
   return (
-    <div className="space-y-1.5 font-black">
-      <div className="flex justify-between text-[10px] text-gray-400 uppercase tracking-tighter">
-        <span>{label}</span>
-        <span>
-          {value.toFixed(1)}
-          {unit}
-        </span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-50">
-        <div
-          className={`h-full ${color} transition-all duration-300`}
-          style={{ width: `${Math.min(value, 100)}%` }}
-        />
-      </div>
-    </div>
+    <TrainingProvider>
+      <Suspense
+        fallback={
+          <div className="h-screen flex items-center justify-center bg-white">
+            <div className="w-12 h-12 border-4 border-[#DAA520] border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <Step4Content />
+      </Suspense>
+    </TrainingProvider>
   );
 }

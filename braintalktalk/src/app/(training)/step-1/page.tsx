@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from 'react';
+import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +42,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { REHAB_PROTOCOLS, PlaceType } from "@/constants/trainingData";
 import { loadPatientProfile } from "@/lib/patientStorage";
 import { SessionManager, Step1Result } from "@/lib/kwab/SessionManager";
+import { useTraining } from "../TrainingContext";
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
@@ -67,7 +68,16 @@ function Step1Client() {
       responseTime: number;
     }>
   >([]);
+  const { updateFooter } = useTraining();
 
+  useEffect(() => {
+    // Step 1 전용 Footer 데이터
+    updateFooter({
+      leftText: "Yes/No Questions",
+      centerText: "Step 1: Auditory Comprehension",
+      rightText: "Question 1 / 20",
+    });
+  }, [updateFooter]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {

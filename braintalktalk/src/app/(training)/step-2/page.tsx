@@ -1,25 +1,23 @@
-"use client"; // 반드시 첫 번째 줄에 위치해야 합니다.
+"use client";
 
-import React, { useState, useRef, useMemo, Suspense } from "react";
+import React, { useState, useRef, useMemo, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import { useTraining } from "../TrainingContext";
 import {
   SPEECH_REPETITION_PROTOCOLS,
   PlaceType,
 } from "@/constants/trainingData";
 
-// 빌드 옵션은 지시어 아래에 위치
 export const dynamic = "force-dynamic";
 
-// --- 하위 컴포넌트: 실제 로직 포함 ---
 function Step2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  // searchParams가 null일 경우를 대비한 안전한 처리
+  const { updateFooter } = useTraining();
   const place = (searchParams?.get("place") as PlaceType) || "cafe";
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -36,6 +34,31 @@ function Step2Content() {
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const analyzerRef = useRef<SpeechAnalyzer | null>(null);
 
+  // 세션 매니저 초기화 확인용 로그
+  const sessionManager = useMemo(() => {
+    const patient = loadPatientProfile();
+    if (!patient) {
+      console.warn(
+        "⚠️ [DEBUG] 환자 프로필이 없습니다. 저장이 불가능할 수 있습니다.",
+      );
+      return null;
+    }
+    console.log("✅ [DEBUG] 세션 매니저 준비 완료:", patient.name);
+    return new SessionManager(
+      { age: patient.age, educationYears: patient.educationYears || 0 },
+      place,
+    );
+  }, [place]);
+
+  // 실시간 푸터 업데이트 (KPI 수치 적용)
+  useEffect(() => {
+    updateFooter({
+      leftText: `${(metrics.symmetryScore / 100).toFixed(2)} SI | ${audioLevel.toFixed(0)}dB`,
+      centerText: `Step 2: 따라말하기 (${place.toUpperCase()})`,
+      rightText: `120 FPS | Q: ${currentIndex + 1}`,
+    });
+  }, [metrics.symmetryScore, audioLevel, currentIndex, place, updateFooter]);
+
   const protocol = useMemo(() => {
     const questions =
       SPEECH_REPETITION_PROTOCOLS[place] || SPEECH_REPETITION_PROTOCOLS.cafe;
@@ -44,30 +67,39 @@ function Step2Content() {
 
   const currentItem = protocol[currentIndex];
 
-  const saveStep2Results = (results: any[]) => {
-    const patient = loadPatientProfile();
-    if (!patient) return;
-
-    const sessionManager = new SessionManager(
-      { age: patient.age, educationYears: patient.educationYears || 0 },
-      place,
-    );
+  // ✅ 물리 저장 디버그 함수
+  const saveStepDataWithDebug = (updatedList: any[]) => {
+    if (!sessionManager) return;
 
     const avgSymmetry =
-      results.reduce((a, b) => a + b.symmetryScore, 0) / results.length;
+      updatedList.reduce((a, b) => a + b.symmetryScore, 0) / updatedList.length;
     const avgPronunciation =
-      results.reduce((a, b) => a + b.pronunciationScore, 0) / results.length;
+      updatedList.reduce((a, b) => a + b.pronunciationScore, 0) /
+      updatedList.length;
+    const hybridScore = Number(
+      (avgPronunciation * 0.6 + avgSymmetry * 0.4).toFixed(2),
+    );
 
-    const hybridScore = avgPronunciation * 0.6 + avgSymmetry * 0.4;
-
-    sessionManager.saveStep2Result({
-      items: results,
+    const saveData = {
+      items: updatedList,
       averageSymmetry: avgSymmetry,
       averagePronunciation: avgPronunciation,
-      hybridScore: Number(hybridScore.toFixed(2)),
+      hybridScore: hybridScore,
       isSuccess: hybridScore >= 85,
       timestamp: Date.now(),
-    });
+    };
+
+    // 콘솔 디버깅 출력
+    console.group(`💾 [저장 디버그] Step 2 - ${updatedList.length}번째 문항`);
+    console.log("저장될 전체 배열 데이터:");
+    console.table(updatedList);
+    console.log("계산된 종합 점수:", hybridScore);
+
+    sessionManager.saveStep2Result(saveData);
+
+    const rawStorage = localStorage.getItem("kwab_training_session");
+    console.log("📂 로컬 스토리지 최종 확인:", JSON.parse(rawStorage || "{}"));
+    console.groupEnd();
   };
 
   const stopAudio = () => {
@@ -86,7 +118,7 @@ function Step2Content() {
       setCurrentIndex((prev) => prev + 1);
       setAudioLevel(0);
     } else {
-      saveStep2Results(analysisResults);
+      console.log("🏁 [DEBUG] 모든 문항 종료. 결과 페이지로 이동합니다.");
       router.push(`/step-3?place=${place}`);
     }
   };
@@ -105,54 +137,60 @@ function Step2Content() {
           setAudioLevel(level),
         );
         setIsRecording(true);
+        console.log("🎙️ [DEBUG] 녹음 시작");
       } catch (err) {
         console.error(err);
       }
     } else {
       try {
+        const startTime = performance.now();
         setIsRecording(false);
         setIsAnalyzing(true);
-        if (!analyzerRef.current) return;
 
-        const result = await analyzerRef.current.stopAnalysis(currentItem.text);
-        if (!result.audioBlob) {
-          setIsAnalyzing(false);
-          return;
-        }
+        const result = await analyzerRef.current!.stopAnalysis(
+          currentItem.text,
+        );
+        const latency = Math.round(performance.now() - startTime);
 
-        const audioUrl = URL.createObjectURL(result.audioBlob);
         setTranscript(result.transcript);
         setResultScore(result.pronunciationScore);
         setIsAnalyzing(false);
 
-        const updatedResults = [
-          ...analysisResults,
-          {
-            text: currentItem.text,
-            symmetryScore: metrics.symmetryScore,
-            pronunciationScore: result.pronunciationScore,
-            audioLevel: result.audioLevel,
-          },
-        ];
-        setAnalysisResults(updatedResults);
-        setRecordedAudios((prev) => [
-          ...prev,
-          { text: currentItem.text, audioUrl },
-        ]);
+        // ✅ 데이터 생성 및 저장 로직 (디버그 포함)
+        const currentData = {
+          text: currentItem.text,
+          symmetryScore: metrics.symmetryScore,
+          pronunciationScore: result.pronunciationScore,
+          audioLevel: result.audioLevel,
+        };
 
+        setAnalysisResults((prev) => {
+          const newList = [...prev, currentData];
+          saveStepDataWithDebug(newList); // 여기서 저장 및 로그 출력
+          return newList;
+        });
+
+        updateFooter({
+          leftText: `${(metrics.symmetryScore / 100).toFixed(2)} SI | ${result.pronunciationScore}% ACC.`,
+          centerText: `분석 완료`,
+          rightText: `LATENCY: ${latency}ms`,
+        });
+
+        const audioUrl = URL.createObjectURL(result.audioBlob!);
         setTimeout(() => {
           const audio = new Audio(audioUrl);
           audioPlayerRef.current = audio;
           setIsPlayingAudio(true);
+          console.log("🔊 [DEBUG] 오디오 재생 시작");
           audio.onended = () => {
             setIsPlayingAudio(false);
             handleNextTransition();
           };
-          audio.play().catch(() => setIsPlayingAudio(false));
+          audio.play().catch(() => handleNextTransition());
         }, 500);
       } catch (err) {
         setIsAnalyzing(false);
-        console.error(err);
+        console.error("❌ [ERROR] 분석 중 오류 발생:", err);
       }
     }
   };
@@ -295,7 +333,6 @@ function Step2Content() {
   );
 }
 
-// --- 메인 페이지 컴포넌트 ---
 export default function Step2Page() {
   return (
     <Suspense
@@ -310,7 +347,6 @@ export default function Step2Page() {
   );
 }
 
-// --- 공통 컴포넌트 ---
 function MetricBar({ label, value, unit, color }: any) {
   const displayValue = typeof value === "number" ? value : 0;
   return (
