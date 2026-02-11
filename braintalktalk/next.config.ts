@@ -1,13 +1,10 @@
-/** @type {import('next').NextConfig} */
+// braintalktalk/next.config.ts
 const nextConfig = {
   typescript: {
-    // 빌드 시 타입 에러가 있어도 무시하고 배포 진행
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: true, // 타입 에러 무시
   },
   eslint: {
-    // 빌드 시 ESLint 에러가 있어도 무시
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true, // ESLint 에러까지 무시해서 빌드 완주
   },
 };
-
 export default nextConfig;

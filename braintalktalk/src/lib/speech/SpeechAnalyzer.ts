@@ -140,7 +140,7 @@ export class WhisperTranscriber {
       formData.append("response_format", "verbose_json");
 
       // 실제 서버의 Proxy API 호출
-      const response = await fetch("/api/proxy/whisper", {
+      const response = await fetch("/api/proxy/stt", {
         method: "POST",
         body: formData,
       });
