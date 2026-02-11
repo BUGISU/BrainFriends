@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs"; // 이전에 오류 났다면 일단 빼고 dynamic만 넣어보세요.
 
+import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === "true";
