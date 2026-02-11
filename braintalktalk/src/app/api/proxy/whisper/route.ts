@@ -1,5 +1,3 @@
-export const runtime = "nodejs"; // 혹은 'edge'로 변경하며 테스트
-export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
