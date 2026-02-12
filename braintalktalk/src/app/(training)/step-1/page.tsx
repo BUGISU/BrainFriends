@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  Suspense,
+} from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 import { REHAB_PROTOCOLS } from "@/constants/auditoryTrainingData";
@@ -11,7 +17,7 @@ import { loadPatientProfile } from "@/lib/patientStorage";
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
-export default function Step1Client() {
+function Step1Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const placeParam = (searchParams.get("place") as PlaceType) || "home";
@@ -90,7 +96,6 @@ export default function Step1Client() {
     [currentItem],
   );
 
-  // ✅ Step 1 결과 저장 함수 (SessionManager + Result 페이지 모두 호환)
   const saveStep1Results = useCallback(
     (results: any[], finalScore: number) => {
       try {
@@ -102,7 +107,7 @@ export default function Step1Client() {
 
         // 1. ✅ Result 페이지용 백업 (text 필드 사용)
         const formattedForResult = results.map((r) => ({
-          text: r.question, // Result 페이지에서 표시할 텍스트
+          text: r.question,
           userAnswer: r.userAnswer,
           isCorrect: r.isCorrect,
           responseTime: r.responseTime,
@@ -114,7 +119,7 @@ export default function Step1Client() {
 
         // 2. ✅ SessionManager용 데이터 (question 필드 사용)
         const formattedForSession = results.map((r) => ({
-          question: r.question, // SessionManager 규격
+          question: r.question,
           userAnswer: r.userAnswer,
           correctAnswer: r.correctAnswer,
           isCorrect: r.isCorrect,
@@ -133,7 +138,6 @@ export default function Step1Client() {
         sessionManager.saveStep1Result(step1Data);
         console.log("✅ Step 1 SessionManager 저장 완료:", step1Data);
 
-        // 3. 저장 검증
         const verification = localStorage.getItem("kwab_training_session");
         const verifiedData = JSON.parse(verification || "{}");
         console.log("✅ 저장 검증 - step1 데이터:", verifiedData.step1);
@@ -160,7 +164,7 @@ export default function Step1Client() {
       const updatedResults = [
         ...questionResults,
         {
-          question: currentItem.question, // ✅ SessionManager 규격
+          question: currentItem.question,
           userAnswer,
           isCorrect,
           responseTime,
@@ -347,5 +351,19 @@ export default function Step1Client() {
       </main>
       <div className="h-4 shrink-0" />
     </div>
+  );
+}
+
+export default function Step1Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center text-orange-500 font-black">
+          LOADING...
+        </div>
+      }
+    >
+      <Step1Content />
+    </Suspense>
   );
 }
