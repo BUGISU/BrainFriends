@@ -3,72 +3,17 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
+import { READING_TEXTS } from "@/constants/readingData"; // ✅ 데이터 임포트
 import { useTraining } from "../TrainingContext";
-
-// ✅ 공통 컴포넌트 임포트
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
 
 export const dynamic = "force-dynamic";
 
-// ============================================
-// 1. 읽기 데이터 (Step 5 전용)
-// ============================================
-const READING_TEXTS: Record<
-  PlaceType,
-  Array<{ id: number; title: string; text: string; wordCount: number }>
-> = {
-  home: [
-    {
-      id: 1,
-      title: "아침 일과",
-      text: "아침에 일어나면 세수를 하고 이를 닦습니다. 그리고 맛있는 아침 밥을 먹습니다.",
-      wordCount: 15,
-    },
-  ],
-  hospital: [
-    {
-      id: 1,
-      title: "진료 받기",
-      text: "병원에 도착하면 먼저 접수를 합니다. 번호표를 받고 대기실에서 기다립니다.",
-      wordCount: 12,
-    },
-  ],
-  cafe: [
-    {
-      id: 1,
-      title: "커피 주문",
-      text: "카페에 가서 따뜻한 커피를 주문합니다. 잠시 기다리면 음료가 나옵니다.",
-      wordCount: 12,
-    },
-  ],
-  bank: [
-    {
-      id: 1,
-      title: "은행 가기",
-      text: "은행에 가서 통장을 만듭니다. 신분증을 꼭 가져가야 합니다.",
-      wordCount: 10,
-    },
-  ],
-  park: [
-    {
-      id: 1,
-      title: "공원 산책",
-      text: "공원에서 산책을 합니다. 나무와 꽃이 많아서 기분이 좋습니다.",
-      wordCount: 11,
-    },
-  ],
-  mart: [
-    {
-      id: 1,
-      title: "장보기",
-      text: "마트에서 과일과 채소를 삽니다. 카트에 담아서 계산대로 갑니다.",
-      wordCount: 10,
-    },
-  ],
-};
-
 interface ReadingMetrics {
+  place: string;
+  text: string;
+  audioUrl: string;
   totalTime: number;
   wordsPerMinute: number;
   pauseCount: number;
@@ -83,30 +28,27 @@ function Step5Content() {
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step4Score = searchParams.get("step4") || "0";
 
-  // --- Refs ---
+  // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null); // ✅ 캔버스 Ref 추가
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // --- 상태 관리 ---
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // State
   const [isMounted, setIsMounted] = useState(false);
   const [isFaceReady, setIsFaceReady] = useState(false);
-  const [showTracking, setShowTracking] = useState(true); // ✅ 트래킹 ON/OFF 상태 추가
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<"ready" | "reading" | "review">("ready");
-  const [readingTime, setRecordingTime] = useState(0);
+  const [readingTime, setReadingTime] = useState(0);
   const [highlightIndex, setHighlightIndex] = useState(-1);
-
-  const [metrics, setMetrics] = useState({
-    symmetryScore: 0,
-    openingRatio: 0,
-    audioLevel: 0,
-  });
+  const [metrics, setMetrics] = useState({ symmetryScore: 0, openingRatio: 0 });
   const [currentResult, setCurrentResult] = useState<ReadingMetrics | null>(
     null,
   );
   const [results, setResults] = useState<ReadingMetrics[]>([]);
 
+  // ✅ 임포트한 데이터 사용
   const texts = useMemo(
     () => READING_TEXTS[place] || READING_TEXTS.home,
     [place],
@@ -116,70 +58,119 @@ function Step5Content() {
 
   useEffect(() => {
     setIsMounted(true);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
   }, []);
 
-  useEffect(() => {
-    if (updateFooter) {
-      updateFooter({
-        leftText: `SI: ${metrics.symmetryScore.toFixed(0)}% | VOL: ${metrics.audioLevel.toFixed(0)}`,
-        centerText: `Step 5: 읽기 학습 (${place.toUpperCase()})`,
-        rightText: `Q: ${currentIndex + 1} / ${texts.length}`,
-      });
+  const startReading = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      mediaRecorder.ondataavailable = (e) =>
+        audioChunksRef.current.push(e.data);
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/wav",
+        });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const wpm = Math.round(
+          (currentItem.wordCount / Math.max(1, readingTime)) * 60,
+        );
+        const score = Math.max(60, 100 - Math.abs(100 - wpm) * 0.5);
+
+        const res: ReadingMetrics = {
+          place,
+          text: currentItem.text,
+          audioUrl,
+          totalTime: readingTime,
+          wordsPerMinute: wpm,
+          pauseCount: Math.floor(readingTime / 5),
+          readingScore: Math.round(score),
+        };
+        console.log(`✅ [${place}] 문항 ${currentIndex + 1} 녹음 완료`, res);
+        setCurrentResult(res);
+      };
+
+      setPhase("reading");
+      setReadingTime(0);
+      setHighlightIndex(0);
+      mediaRecorder.start();
+      // 1. 녹음 시간 타이머 (1초 단위)
+      timerRef.current = setInterval(
+        () => setReadingTime((prev) => prev + 1),
+        1000,
+      );
+
+      // ✅ 2. 하이라이트 이동 타이머 추가 (단어당 약 0.8초 간격)
+      // 이 타이머가 있어야 단어의 불빛이 다음으로 넘어갑니다.
+      highlightTimerRef.current = setInterval(() => {
+        setHighlightIndex((prev) => {
+          if (prev < words.length - 1) {
+            return prev + 1;
+          } else {
+            // 마지막 단어 도달 시 스스로 종료
+            if (highlightTimerRef.current)
+              clearInterval(highlightTimerRef.current);
+            return prev;
+          }
+        });
+      }, 800);
+    } catch (err) {
+      console.error("마이크 에러:", err);
     }
-  }, [metrics, currentIndex, place, texts.length, updateFooter]);
-
-  // --- 읽기 로직 ---
-  const startReading = () => {
-    setPhase("reading");
-    setRecordingTime(0);
-    setHighlightIndex(0);
-
-    timerRef.current = setInterval(() => {
-      setRecordingTime((prev) => prev + 1);
-    }, 1000);
-
-    const interval = setInterval(() => {
-      setHighlightIndex((prev) => {
-        if (prev < words.length - 1) return prev + 1;
-        clearInterval(interval);
-        return prev;
-      });
-    }, 800);
   };
 
   const stopReading = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    const wpm = Math.round(
-      (currentItem.wordCount / Math.max(1, readingTime)) * 60,
-    );
-    const score = Math.max(60, 100 - Math.abs(120 - wpm) * 0.5);
-    const res: ReadingMetrics = {
-      totalTime: readingTime,
-      wordsPerMinute: wpm,
-      pauseCount: Math.floor(readingTime / 5),
-      readingScore: Math.round(score),
-    };
-    setCurrentResult(res);
-    setResults((prev) => [...prev, res]);
+    // ✅ 1. 하이라이트 타이머 즉시 정지
+    if (highlightTimerRef.current) {
+      clearInterval(highlightTimerRef.current);
+      highlightTimerRef.current = null;
+      console.log("⏱️ 하이라이트 타이머 정지됨");
+    }
+
+    // ✅ 2. 녹음 시간 타이머 정지
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // ✅ 3. 녹음기 정지
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.stop();
+    }
+
     setPhase("review");
   };
 
   const handleNext = () => {
+    if (!currentResult) return;
+    const updatedResults = [...results, currentResult];
+    setResults(updatedResults);
+
     if (currentIndex < texts.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setPhase("ready");
       setCurrentResult(null);
       setHighlightIndex(-1);
     } else {
-      const avg =
-        results.length > 0
-          ? Math.round(
-              results.reduce((s, r) => s + r.readingScore, 0) / results.length,
-            )
-          : 0;
+      const avg = Math.round(
+        updatedResults.reduce((s, r) => s + r.readingScore, 0) /
+          updatedResults.length,
+      );
+      const sess = JSON.parse(
+        localStorage.getItem("kwab_training_session") || "{}",
+      );
+      localStorage.setItem(
+        "kwab_training_session",
+        JSON.stringify({
+          ...sess,
+          step5: { place, score: avg, items: updatedResults },
+        }),
+      );
       router.push(`/step-6?place=${place}&step4=${step4Score}&step5=${avg}`);
     }
   };
@@ -187,14 +178,13 @@ function Step5Content() {
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden text-black font-sans">
-      {/* 1. 헤더 (반응형 높이) */}
-      <header className="h-20 px-10 border-b border-gray-50 flex justify-between items-center bg-white shrink-0 z-10">
-        <div className="text-left">
-          <span className="text-[#DAA520] font-black text-[10px] tracking-[0.2em] uppercase">
-            Step 05 • Reading
+    <div className="flex flex-col h-screen bg-white text-black font-sans overflow-hidden">
+      <header className="h-20 px-10 border-b flex justify-between items-center bg-white shrink-0">
+        <div>
+          <span className="text-[#DAA520] font-black text-[10px] tracking-widest uppercase">
+            Step 05 • {place}
           </span>
-          <h2 className="text-xl font-black text-[#8B4513] tracking-tighter">
+          <h2 className="text-xl font-black text-[#8B4513]">
             텍스트 읽기 학습
           </h2>
         </div>
@@ -205,149 +195,107 @@ function Step5Content() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* 2. 사이드바 */}
-        <aside className="w-[350px] lg:w-[380px] border-r border-gray-50 bg-white p-3 shrink-0 relative flex flex-col overflow-y-auto">
+        <aside className="w-[380px] border-r p-3 shrink-0 relative flex flex-col">
           <AnalysisSidebar
             videoRef={videoRef}
-            canvasRef={canvasRef} // ✅ 추가
+            canvasRef={canvasRef}
             isFaceReady={isFaceReady}
-            metrics={metrics}
-            showTracking={showTracking} // ✅ 추가
-            onToggleTracking={() => setShowTracking(!showTracking)} // ✅ 추가
-            scoreLabel="읽기 정확도"
-            scoreValue={
-              currentResult ? `${currentResult.readingScore}%` : undefined
-            }
+            metrics={{ ...metrics, audioLevel: 0 }}
+            showTracking={true}
+            onToggleTracking={() => {}}
+            scoreLabel="현재 성취도"
+            scoreValue={currentResult ? `${currentResult.readingScore}%` : "-"}
           />
         </aside>
 
-        {/* 3. 메인 콘텐츠 (반응형 레이아웃) */}
-        <main className="flex-1 bg-[#FBFBFC] overflow-y-auto relative">
-          <div className="min-h-full w-full max-w-3xl mx-auto flex flex-col justify-between p-6 lg:p-10 gap-6">
-            {/* 텍스트 박스 섹션: phase에 따라 유동적인 크기 */}
-            <div
-              className={`w-full bg-white rounded-[40px] p-8 lg:p-12 shadow-[0_40px_80px_-15px_rgba(0,0,0,0.05)] border border-gray-100 transition-all duration-700 relative overflow-hidden shrink-0 ${phase === "reading" ? "ring-4 ring-orange-400/20 scale-[1.01]" : ""}`}
-            >
-              <div className="flex justify-center mb-6">
-                <span className="px-4 py-1 rounded-full bg-orange-50 text-orange-500 text-[9px] font-black uppercase tracking-widest border border-orange-100">
-                  Topic: {currentItem.title}
-                </span>
-              </div>
-
-              <div className="text-2xl lg:text-3xl font-black text-slate-800 leading-[1.8] break-keep text-center">
-                {words.map((word, idx) => (
-                  <span
-                    key={idx}
-                    className={`transition-all duration-300 px-1 rounded-lg ${idx <= highlightIndex ? "bg-orange-100 text-orange-600 shadow-sm" : "text-slate-400"}`}
-                  >
-                    {word}{" "}
-                  </span>
-                ))}
-              </div>
-
-              {phase === "reading" && (
-                <div className="absolute bottom-0 left-0 h-1.5 bg-orange-400 w-full animate-pulse" />
-              )}
-            </div>
-
-            {/* 하단 컨트롤 및 결과창 영역 */}
-            <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[180px]">
-              {phase === "ready" && (
-                <button
-                  onClick={startReading}
-                  disabled={!isFaceReady}
-                  className="px-10 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-[24px] font-black text-base shadow-2xl shadow-orange-200 transition-all active:scale-95 disabled:opacity-50"
+        <main className="flex-1 bg-[#FBFBFC] flex flex-col items-center justify-center p-10 relative">
+          <div
+            className={`w-full max-w-2xl bg-white rounded-[40px] p-12 shadow-sm border transition-all ${phase === "reading" ? "ring-4 ring-orange-200" : ""}`}
+          >
+            <p className="text-2xl font-black text-slate-800 leading-relaxed text-center break-keep">
+              {words.map((w, i) => (
+                <span
+                  key={i}
+                  className={`transition-all duration-300 ${i <= highlightIndex ? "text-orange-600 bg-orange-50" : "text-gray-300"}`}
                 >
-                  📖 읽기 시작하기
-                </button>
-              )}
+                  {" "}
+                  {w}{" "}
+                </span>
+              ))}
+            </p>
+          </div>
 
-              {phase === "reading" && (
+          <div className="mt-12 min-h-[200px] flex flex-col items-center justify-center w-full">
+            {phase === "ready" && (
+              <button
+                onClick={startReading}
+                className="px-12 py-5 bg-orange-500 text-white rounded-3xl font-black text-lg shadow-lg"
+              >
+                📖 {place.toUpperCase()} 읽기 시작
+              </button>
+            )}
+
+            {phase === "reading" && (
+              <div className="flex flex-col items-center gap-4">
+                <div className="text-red-500 font-bold animate-pulse text-sm">
+                  🔴 녹음 중 ({readingTime}s)
+                </div>
                 <button
                   onClick={stopReading}
-                  className="w-20 h-20 rounded-full bg-gray-900 shadow-2xl flex items-center justify-center animate-bounce transition-all active:scale-90"
+                  className="w-20 h-20 rounded-full bg-slate-900 flex items-center justify-center shadow-2xl"
                 >
-                  <div className="w-6 h-6 bg-white rounded-md" />
+                  <div className="w-6 h-6 bg-white rounded-sm" />
                 </button>
-              )}
+              </div>
+            )}
 
-              {phase === "review" && currentResult && (
-                <div className="w-full max-w-md bg-white rounded-[32px] p-8 shadow-2xl border border-orange-100 animate-in fade-in zoom-in duration-500">
-                  <div className="flex flex-col gap-6">
-                    <div className="flex justify-between items-center border-b border-gray-50 pb-4">
-                      <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">
-                        Reading Stats
-                      </span>
-                      <span className="text-emerald-500 font-black text-[10px] uppercase flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />{" "}
-                        Complete
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-gray-50/50 p-4 rounded-2xl text-center border border-gray-50">
-                        <p className="text-[8px] font-black text-gray-400 uppercase mb-1">
-                          Time
-                        </p>
-                        <p className="text-lg font-black text-slate-700">
-                          {currentResult.totalTime}s
-                        </p>
-                      </div>
-                      <div className="bg-gray-50/50 p-4 rounded-2xl text-center border border-gray-50">
-                        <p className="text-[8px] font-black text-gray-400 uppercase mb-1">
-                          WPM
-                        </p>
-                        <p className="text-lg font-black text-slate-700">
-                          {currentResult.wordsPerMinute}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50/50 p-4 rounded-2xl text-center border border-gray-50">
-                        <p className="text-[8px] font-black text-gray-400 uppercase mb-1">
-                          Pauses
-                        </p>
-                        <p className="text-lg font-black text-slate-700">
-                          {currentResult.pauseCount}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={handleNext}
-                      className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-[20px] font-black text-xs shadow-xl transition-all active:scale-95"
-                    >
-                      {currentIndex < texts.length - 1
-                        ? "다음 텍스트로"
-                        : "최종 결과 확인"}
-                    </button>
+            {phase === "review" && currentResult && (
+              <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-xl border border-orange-100 animate-in zoom-in duration-300">
+                <button
+                  onClick={() => new Audio(currentResult.audioUrl).play()}
+                  className="w-full py-3 mb-4 border-2 border-orange-100 rounded-xl text-orange-500 font-bold hover:bg-orange-50 transition-colors"
+                >
+                  ▶ 녹음 들어보기
+                </button>
+                <div className="grid grid-cols-3 gap-2 mb-6 text-center font-bold">
+                  <div className="bg-gray-50 p-3 rounded-xl">
+                    <p className="text-[10px] text-gray-400">TIME</p>
+                    <p>{currentResult.totalTime}s</p>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-xl">
+                    <p className="text-[10px] text-gray-400">WPM</p>
+                    <p>{currentResult.wordsPerMinute}</p>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-xl">
+                    <p className="text-[10px] text-gray-400">SCORE</p>
+                    <p className="text-orange-500">
+                      {currentResult.readingScore}%
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* 최하단 안내 텍스트 */}
-            <div className="flex-none pb-4 text-center">
-              <p className="text-[9px] font-black text-gray-300 uppercase tracking-[0.5em]">
-                {phase === "ready"
-                  ? "Prepare to read"
-                  : phase === "reading"
-                    ? `Reading Timer: ${readingTime}s`
-                    : "Analysis Result"}
-              </p>
-            </div>
+                <button
+                  onClick={handleNext}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black transition-transform active:scale-95"
+                >
+                  {currentIndex < texts.length - 1
+                    ? "다음 문항으로"
+                    : "Step 6 이동"}
+                </button>
+              </div>
+            )}
           </div>
         </main>
       </div>
 
       <FaceTracker
         videoRef={videoRef}
-        canvasRef={canvasRef} // ✅ 캔버스 추가
+        canvasRef={canvasRef}
         onReady={() => setIsFaceReady(true)}
         onMetricsUpdate={(m) =>
-          setMetrics((prev) => ({
-            ...prev,
+          setMetrics({
             symmetryScore: m.symmetryScore,
             openingRatio: m.openingRatio * 100,
-          }))
+          })
         }
       />
     </div>
@@ -356,13 +304,7 @@ function Step5Content() {
 
 export default function Step5Page() {
   return (
-    <Suspense
-      fallback={
-        <div className="h-screen flex items-center justify-center">
-          Loading...
-        </div>
-      }
-    >
+    <Suspense fallback={<div>Loading...</div>}>
       <Step5Content />
     </Suspense>
   );

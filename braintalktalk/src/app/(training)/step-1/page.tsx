@@ -1,6 +1,22 @@
 "use client";
 
 import { Suspense } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+
+// ✅ 수정된 import 경로: 분리한 파일에서 청각 인지 데이터를 가져옵니다.
+import { REHAB_PROTOCOLS } from "@/constants/auditoryTrainingData";
+import { PlaceType } from "@/constants/trainingData";
+
+import { loadPatientProfile } from "@/lib/patientStorage";
+import { SessionManager, Step1Result } from "@/lib/kwab/SessionManager";
+import { useTraining } from "../TrainingContext";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +35,7 @@ function LoadingFallback() {
 }
 
 // ============================================
-// 메인 페이지
+// 메인 페이지 (Suspense Wrapper)
 // ============================================
 export default function Page() {
   return (
@@ -30,20 +46,8 @@ export default function Page() {
 }
 
 // ============================================
-
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { REHAB_PROTOCOLS, PlaceType } from "@/constants/trainingData";
-import { loadPatientProfile } from "@/lib/patientStorage";
-import { SessionManager, Step1Result } from "@/lib/kwab/SessionManager";
-import { useTraining } from "../TrainingContext";
-
+// Step 1 클라이언트 구현부
+// ============================================
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
 function Step1Client() {
@@ -68,18 +72,11 @@ function Step1Client() {
       responseTime: number;
     }>
   >([]);
-  const { updateFooter } = useTraining();
 
-  useEffect(() => {
-    // Step 1 전용 Footer 데이터
-    updateFooter({
-      leftText: "Yes/No Questions",
-      centerText: "Step 1: Auditory Comprehension",
-      rightText: "Question 1 / 20",
-    });
-  }, [updateFooter]);
+  const { updateFooter } = useTraining();
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
+  // 컴포넌트 마운트 처리
   useEffect(() => {
     setIsMounted(true);
     GLOBAL_SPEECH_LOCK = {};
@@ -92,14 +89,27 @@ function Step1Client() {
     };
   }, []);
 
+  // Footer 정보 업데이트
+  useEffect(() => {
+    updateFooter({
+      leftText: "Yes/No Questions",
+      centerText: "Step 1: Auditory Comprehension",
+      rightText: `Question ${currentIndex + 1} / 10`,
+    });
+  }, [updateFooter, currentIndex]);
+
+  // ✅ 데이터 준비 로직 (분리된 파일의 구조를 반영)
   const trainingData = useMemo(() => {
     const protocol = REHAB_PROTOCOLS[placeParam] || REHAB_PROTOCOLS.home;
+
+    // 기본, 중급, 고급 문제를 하나로 합침
     const combined = [
       ...protocol.basic,
       ...protocol.intermediate,
       ...protocol.advanced,
     ];
 
+    // 실전용으로 10문제만 무작위 추출
     const questions = combined.slice(0, 10);
     const shuffled = [...questions];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -111,6 +121,7 @@ function Step1Client() {
 
   const currentItem = trainingData[currentIndex];
 
+  // TTS 재생 함수
   const playInstruction = useCallback(
     (text: string) => {
       if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -154,6 +165,7 @@ function Step1Client() {
     [currentItem],
   );
 
+  // 정답 처리 로직
   const handleAnswer = useCallback(
     (userAnswer: boolean | null) => {
       if (isAnswered || !currentItem) return;
@@ -163,7 +175,6 @@ function Step1Client() {
 
       const isCorrect =
         userAnswer === null ? false : currentItem.answer === userAnswer;
-
       const nextScore = isCorrect ? score + 1 : score;
 
       const responseTime =
@@ -194,6 +205,7 @@ function Step1Client() {
           setCurrentIndex((prev) => prev + 1);
           setIsAnswered(false);
         } else {
+          // 마지막 문제 완료 시 저장 및 이동
           const patient = loadPatientProfile();
           if (patient) {
             const sessionManager = new SessionManager(
@@ -212,7 +224,7 @@ function Step1Client() {
             };
             sessionManager.saveStep1Result(step1Result);
           }
-          router.push(`/step-2?score=${nextScore}&place=${placeParam}`);
+          router.push(`/step-2?step1=${nextScore}&place=${placeParam}`); // step1 쿼리로 변경하여 결과페이지 연동 강화
         }
       }, 500);
     },
@@ -229,6 +241,7 @@ function Step1Client() {
     ],
   );
 
+  // 문제 바뀔 때마다 TTS 자동 재생
   useEffect(() => {
     if (!isMounted || !currentItem) return;
     if (GLOBAL_SPEECH_LOCK[currentIndex]) return;
@@ -247,6 +260,7 @@ function Step1Client() {
     return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, playInstruction]);
 
+  // 타이머 로직
   useEffect(() => {
     if (!isMounted || timeLeft === null || isSpeaking) return;
 

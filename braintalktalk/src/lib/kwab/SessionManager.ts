@@ -51,10 +51,10 @@ export interface Step2Result {
 }
 
 export interface Step3Result {
-  // 단어-이미지 매칭
-  correctAnswers: number;
-  totalQuestions: number;
-  averageResponseTime: number;
+  items: any[]; // 상세 데이터 보존용
+  score: number; // 0-100 점수
+  correctCount: number; // 맞은 개수 (기존 correctAnswers 대신 사용)
+  totalCount: number; // 전체 개수 (기존 totalQuestions 대신 사용)
   timestamp: number;
 }
 
@@ -233,18 +233,16 @@ export class SessionManager {
     const step1 = this.session.step1;
     const step3 = this.session.step3;
 
-    // Step 1: 예-아니오 검사 (각 3점)
     const yesNoScore = step1
       ? Math.min((step1.correctAnswers / step1.totalQuestions) * 60, 60)
       : 0;
 
-    // Step 3: 청각적 낱말인지 (각 1점)
+    // Step 3 데이터를 K-WAB 청각적 낱말인지 점수(60점 만점)로 변환
     const wordRecognitionScore = step3
-      ? Math.min((step3.correctAnswers / step3.totalQuestions) * 60, 60)
+      ? Math.min((step3.correctCount / step3.totalCount) * 60, 60)
       : 0;
 
-    // 명령이행: 현재 미구현 (기본값 40점 - 평균)
-    const commandScore = 40;
+    const commandScore = 40; // 미구현 항목 기본값
 
     return { yesNoScore, wordRecognitionScore, commandScore };
   }

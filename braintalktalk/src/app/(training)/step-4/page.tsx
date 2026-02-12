@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 import { FLUENCY_SCENARIOS, FluencyMetrics } from "@/constants/fluencyData";
 import { useTraining } from "../TrainingContext";
+import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer"; // ✅ Step 2와 동일한 분석기 임포트
 
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
@@ -23,6 +24,7 @@ function Step4Content() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const analyzerRef = useRef<SpeechAnalyzer | null>(null); // ✅ 분석기 Ref
 
   // --- States ---
   const [isMounted, setIsMounted] = useState(false);
@@ -31,6 +33,7 @@ function Step4Content() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<"ready" | "recording" | "review">("ready");
   const [recordingTime, setRecordingTime] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [metrics, setMetrics] = useState({
     symmetryScore: 0,
@@ -51,6 +54,7 @@ function Step4Content() {
 
   useEffect(() => {
     setIsMounted(true);
+    localStorage.removeItem("step4_recorded_audios");
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -66,30 +70,82 @@ function Step4Content() {
     }
   }, [metrics, currentIndex, place, scenarios.length, updateFooter]);
 
-  // --- 녹음 컨트롤러 ---
-  const startRecording = () => {
-    setPhase("recording");
-    setRecordingTime(0);
-    timerRef.current = setInterval(() => {
-      setRecordingTime((prev) => prev + 1);
-    }, 1000);
+  // --- ✅ Step 2와 동일한 방식의 녹음 컨트롤러 ---
+  const startRecording = async () => {
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+      if (!analyzerRef.current)
+        analyzerRef.current = new SpeechAnalyzer(apiKey!);
+
+      // SpeechAnalyzer 시작 (audioLevel 콜백 포함)
+      await analyzerRef.current.startAnalysis((level) => {
+        setMetrics((prev) => ({ ...prev, audioLevel: level }));
+      });
+
+      setPhase("recording");
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("녹음 시작 실패:", err);
+    }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    const mockResult: FluencyMetrics = {
-      totalDuration: recordingTime,
-      speechDuration: Math.max(0, recordingTime - 2),
-      silenceRatio:
-        recordingTime > 0 ? Number(((2 / recordingTime) * 100).toFixed(1)) : 0,
-      averageAmplitude: metrics.audioLevel,
-      peakCount: Math.floor(recordingTime / 2),
-      fluencyScore: Math.min(10, Math.floor(recordingTime / 2) + 4),
-      rawScore: 70 + Math.random() * 20,
-    };
-    setCurrentFluency(mockResult);
-    setFluencyResults((prev) => [...prev, mockResult]);
     setPhase("review");
+    setIsSaving(true);
+
+    try {
+      // ✅ Step 2와 동일하게 stopAnalysis 호출
+      // 유창성 훈련이므로 특정 정답 텍스트 대신 상황 텍스트를 전달하거나 비워둘 수 있음
+      const result = await analyzerRef.current!.stopAnalysis(
+        currentScenario.prompt,
+      );
+
+      // 분석 지표 생성 (실제 분석 결과와 매칭)
+      const fluencyData: FluencyMetrics = {
+        totalDuration: recordingTime,
+        speechDuration: Math.max(0, recordingTime - 1),
+        silenceRatio: Number(
+          ((1 / Math.max(1, recordingTime)) * 100).toFixed(1),
+        ),
+        averageAmplitude: metrics.audioLevel,
+        peakCount: Math.floor(recordingTime / 2),
+        fluencyScore: Math.min(10, Math.floor(result.pronunciationScore / 10)), // 점수 변환 로직
+        rawScore: result.pronunciationScore,
+      };
+
+      // ✅ 데이터 저장 (오디오 블롭 포함)
+      if (result.audioBlob) {
+        const audioUrl = URL.createObjectURL(result.audioBlob);
+        const existingData = JSON.parse(
+          localStorage.getItem("step4_recorded_audios") || "[]",
+        );
+
+        localStorage.setItem(
+          "step4_recorded_audios",
+          JSON.stringify([
+            ...existingData,
+            {
+              text: currentScenario.situation,
+              audioUrl: audioUrl,
+              kwabScore: fluencyData.fluencyScore,
+              silenceRatio: fluencyData.silenceRatio,
+              speechDuration: fluencyData.speechDuration,
+            },
+          ]),
+        );
+      }
+
+      setCurrentFluency(fluencyData);
+      setFluencyResults((prev) => [...prev, fluencyData]);
+    } catch (err) {
+      console.error("분석 실패:", err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleNext = () => {
@@ -116,7 +172,7 @@ function Step4Content() {
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden text-black">
-      {/* 1. 헤더 */}
+      {/* UI 부분은 이전과 동일하되 버튼 상태에 isSaving 추가 */}
       <header className="h-20 px-10 border-b border-gray-50 flex justify-between items-center bg-white shrink-0 z-10">
         <div className="text-left">
           <span className="text-[#DAA520] font-black text-[10px] tracking-[0.2em] uppercase">
@@ -133,7 +189,6 @@ function Step4Content() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* 2. 사이드바 */}
         <aside className="w-[350px] lg:w-[380px] border-r border-gray-50 bg-[#ffffff] p-3 shrink-0 relative flex flex-col overflow-y-auto">
           <AnalysisSidebar
             videoRef={videoRef}
@@ -149,18 +204,15 @@ function Step4Content() {
           />
         </aside>
 
-        {/* 3. 메인 트레이닝 공간 (반응형 적용) */}
-        <main className="flex-1 bg-[#FBFBFC] overflow-y-auto overflow-x-hidden relative">
+        <main className="flex-1 bg-[#FBFBFC] overflow-y-auto relative">
           <div className="min-h-full w-full max-w-2xl mx-auto flex flex-col justify-between p-6 lg:p-10 gap-6">
-            {/* 시나리오 카드 섹션 */}
             <div
-              className={`w-full bg-white rounded-[40px] p-8 lg:p-12 shadow-[0_30px_60px_-12px,rgba(0,0,0,0.05)] border border-gray-100 text-center relative transition-all duration-500 shrink-0 ${phase === "recording" ? "ring-4 ring-red-500/5 scale-[1.01]" : ""}`}
+              className={`w-full bg-white rounded-[40px] p-8 lg:p-12 shadow-sm border border-gray-100 text-center relative transition-all ${phase === "recording" ? "ring-4 ring-red-500/5" : ""}`}
             >
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-50 text-[10px] font-black text-amber-600 uppercase tracking-widest mb-6">
-                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
                 상황: {currentScenario.situation}
               </div>
-              <h1 className="text-2xl lg:text-3xl font-black text-gray-800 leading-snug break-keep mb-6">
+              <h1 className="text-2xl lg:text-3xl font-black text-gray-800 leading-snug mb-6">
                 {currentScenario.prompt}
               </h1>
               <div className="bg-gray-50 rounded-2xl py-4 px-6 inline-block">
@@ -168,12 +220,8 @@ function Step4Content() {
                   " {currentScenario.hint} "
                 </p>
               </div>
-              {phase === "recording" && (
-                <div className="absolute bottom-0 left-0 h-1.5 bg-red-500 w-full animate-pulse" />
-              )}
             </div>
 
-            {/* 컨트롤 및 결과 섹션 (가운데 유동적 영역) */}
             <div className="flex-1 flex flex-col items-center justify-center w-full min-h-[200px]">
               {phase === "ready" && (
                 <button
@@ -206,51 +254,60 @@ function Step4Content() {
                 </div>
               )}
 
-              {phase === "review" && currentFluency && (
-                <div className="w-full max-w-md bg-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-orange-100 animate-in fade-in zoom-in duration-500">
-                  <div className="flex flex-col gap-6">
-                    <div className="flex justify-between items-center pb-4 border-b border-gray-50">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono">
-                        Analysis Result
-                      </span>
-                      <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-lg uppercase">
-                        Success
-                      </span>
+              {phase === "review" && (
+                <div className="w-full max-w-md bg-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-orange-100 animate-in fade-in zoom-in">
+                  {isSaving ? (
+                    <div className="flex flex-col items-center py-10 gap-4">
+                      <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs font-black text-gray-400 uppercase">
+                        Analyzing Speech...
+                      </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
-                        <p className="text-[10px] font-black text-gray-400 uppercase mb-1">
-                          총 발화 시간
-                        </p>
-                        <p className="text-xl font-black text-gray-800">
-                          {currentFluency.speechDuration}s
-                        </p>
+                  ) : (
+                    currentFluency && (
+                      <div className="flex flex-col gap-6">
+                        <div className="flex justify-between items-center pb-4 border-b border-gray-50">
+                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono">
+                            Analysis Result
+                          </span>
+                          <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-lg uppercase">
+                            Success
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
+                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1">
+                              총 발화 시간
+                            </p>
+                            <p className="text-xl font-black text-gray-800">
+                              {currentFluency.speechDuration}s
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
+                            <p className="text-[10px] font-black text-gray-400 uppercase mb-1">
+                              침묵 비율
+                            </p>
+                            <p className="text-xl font-black text-gray-800">
+                              {currentFluency.silenceRatio}%
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleNext}
+                          className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-[20px] font-black text-sm shadow-xl transition-all"
+                        >
+                          {currentIndex < scenarios.length - 1
+                            ? "다음 시나리오"
+                            : "최종 결과 확인"}
+                        </button>
                       </div>
-                      <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
-                        <p className="text-[10px] font-black text-gray-400 uppercase mb-1">
-                          침묵 비율
-                        </p>
-                        <p className="text-xl font-black text-gray-800">
-                          {currentFluency.silenceRatio}%
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleNext}
-                      className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-[20px] font-black text-sm shadow-xl shadow-orange-100 transition-all active:scale-[0.98]"
-                    >
-                      {currentIndex < scenarios.length - 1
-                        ? "다음 시나리오"
-                        : "최종 결과 확인"}
-                    </button>
-                  </div>
+                    )
+                  )}
                 </div>
               )}
             </div>
-
-            {/* 하단 상태 텍스트 섹션 */}
             <div className="flex-none pt-4 pb-2 text-center">
-              <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em] transition-all">
+              <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em]">
                 {phase === "ready"
                   ? "Start Recording"
                   : phase === "recording"
@@ -261,7 +318,6 @@ function Step4Content() {
           </div>
         </main>
       </div>
-
       <FaceTracker
         videoRef={videoRef}
         canvasRef={canvasRef}
@@ -282,13 +338,8 @@ export default function Step4Page() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen flex items-center justify-center bg-white">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
-            <p className="text-xs font-black text-gray-300 uppercase tracking-widest">
-              Loading Fluency Engine
-            </p>
-          </div>
+        <div className="h-screen flex items-center justify-center bg-white text-gray-300 font-black">
+          LOADING...
         </div>
       }
     >

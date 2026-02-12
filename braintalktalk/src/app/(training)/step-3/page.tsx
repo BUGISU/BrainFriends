@@ -7,10 +7,10 @@ import React, {
   useRef,
   useMemo,
   Suspense,
-  use,
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { VISUAL_MATCHING_PROTOCOLS, PlaceType } from "@/constants/trainingData";
+import { PlaceType } from "@/constants/trainingData";
+import { VISUAL_MATCHING_PROTOCOLS } from "@/constants/visualTrainingData";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
 import { useTraining } from "../TrainingContext";
@@ -20,6 +20,7 @@ import FaceTracker from "@/components/diagnosis/FaceTracker";
 
 export const dynamic = "force-dynamic";
 
+// 전역 락 관리 (컴포넌트 리렌더링 시 초기화 방지용)
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
 function Step3Content() {
@@ -28,6 +29,7 @@ function Step3Content() {
   const { updateFooter } = useTraining();
   const place = (searchParams?.get("place") as PlaceType) || "home";
 
+  // 상태 관리
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -38,11 +40,11 @@ function Step3Content() {
   const [canAnswer, setCanAnswer] = useState(false);
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
 
+  // 미디어 Refs
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isFaceReady, setIsFaceReady] = useState(false);
-
-  const [showTracking, setShowTracking] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isFaceReady, setIsFaceReady] = useState(false);
+  const [showTracking, setShowTracking] = useState(true);
 
   const [metrics, setMetrics] = useState({
     symmetryScore: 0,
@@ -51,6 +53,7 @@ function Step3Content() {
     articulationScore: 0,
   });
 
+  // 데이터 로드 및 셔플
   const protocol = useMemo(() => {
     const allQuestions = (
       VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
@@ -60,10 +63,23 @@ function Step3Content() {
 
   const currentItem = protocol[currentIndex];
 
+  // 마운트 및 정리
   useEffect(() => {
+    setIsMounted(true);
+    GLOBAL_SPEECH_LOCK = {}; // 페이지 진입 시 락 초기화
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // 푸터 업데이트
+  useEffect(() => {
+    if (!updateFooter) return;
     const correctCount = analysisResults.filter((r) => r.isCorrect).length;
     updateFooter({
-      leftText: `SI: ${(metrics.symmetryScore / 100).toFixed(2)} | ACC: ${correctCount}/${analysisResults.length}`,
+      leftText: `SI: ${metrics.symmetryScore.toFixed(0)}% | ACC: ${correctCount}/${analysisResults.length}`,
       centerText: `Step 3: 단어-그림 매칭 (${place.toUpperCase()})`,
       rightText: `Q: ${currentIndex + 1}/${protocol.length}`,
     });
@@ -76,15 +92,7 @@ function Step3Content() {
     protocol.length,
   ]);
 
-  useEffect(() => {
-    setIsMounted(true);
-    return () => {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
-
+  // 음성 출력 로직
   const speakWord = useCallback((text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -101,12 +109,15 @@ function Step3Content() {
     window.speechSynthesis.speak(utterance);
   }, []);
 
+  // 문제 진입 시 자동 음성 재생
   useEffect(() => {
     if (!isMounted || !currentItem || GLOBAL_SPEECH_LOCK[currentIndex]) return;
     GLOBAL_SPEECH_LOCK[currentIndex] = true;
-    setTimeout(() => speakWord(currentItem.targetWord), 1000);
+    const timer = setTimeout(() => speakWord(currentItem.targetWord), 1000);
+    return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, speakWord]);
 
+  // 정답 선택 핸들러
   const handleOptionClick = (id: string) => {
     if (!canAnswer || selectedId || isAnswered) return;
     const isCorrect = id === currentItem.answerId;
@@ -117,7 +128,7 @@ function Step3Content() {
     setCanAnswer(false);
 
     const currentResult = {
-      question: currentItem.targetWord,
+      text: currentItem.targetWord,
       isCorrect,
       selectedId: id,
       answerId: currentItem.answerId,
@@ -133,43 +144,64 @@ function Step3Content() {
         setSelectedId(null);
         setShowResult(null);
         setIsAnswered(false);
+        setPlayCount(0);
       } else {
-        saveStep3Results(updatedResults);
-        router.push(`/step-4?place=${place}`);
+        finishStep(updatedResults);
       }
     }, 1500);
   };
 
-  const saveStep3Results = (finalResults: any[]) => {
-    const patient = loadPatientProfile();
-    if (!patient) return;
-
-    const sessionManager = new SessionManager(
-      { age: patient.age, educationYears: patient.educationYears || 0 },
-      place,
+  const finishStep = (finalResults: any[]) => {
+    const avgScore = Math.round(
+      (finalResults.filter((r) => r.isCorrect).length / finalResults.length) *
+        100,
     );
 
-    const correctCount = finalResults.filter((r) => r.isCorrect).length;
+    // 로컬 스토리지 저장
+    const sess = JSON.parse(
+      localStorage.getItem("kwab_training_session") || "{}",
+    );
+    localStorage.setItem(
+      "kwab_training_session",
+      JSON.stringify({
+        ...sess,
+        step3: { items: finalResults, score: avgScore },
+      }),
+    );
 
-    sessionManager.saveStep3Result({
-      items: finalResults,
-      score: Math.round((correctCount / finalResults.length) * 100),
-      correctCount,
-      totalCount: finalResults.length,
-      timestamp: Date.now(),
-    });
+    // SessionManager를 통한 정교한 결과 저장
+    const patient = loadPatientProfile();
+    if (patient) {
+      const sm = new SessionManager(
+        { age: patient.age, educationYears: patient.educationYears || 0 },
+        place,
+      );
+      sm.saveStep3Result({
+        items: finalResults,
+        score: avgScore,
+        correctCount: finalResults.filter((r) => r.isCorrect).length,
+        totalCount: finalResults.length,
+        timestamp: Date.now(),
+      });
+    }
+
+    router.push(`/step-4?place=${place}&step3=${avgScore}`);
   };
 
   const handleReplay = () => {
-    if (playCount < 1 && !selectedId && !isSpeaking && !isAnswered) {
+    if (
+      playCount < 1 &&
+      !selectedId &&
+      !isSpeaking &&
+      !isAnswered &&
+      canAnswer
+    ) {
       speakWord(currentItem.targetWord);
       setPlayCount((prev) => prev + 1);
     }
   };
 
   if (!isMounted || !currentItem) return null;
-
-  const correctNow = analysisResults.filter((r) => r.isCorrect).length;
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden text-black">
@@ -189,47 +221,28 @@ function Step3Content() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-[380px] border-r border-gray-50 bg-white p-3 shrink-0 relative">
-          {/* ✅ 1. AnalysisSidebar: 토글 함수 및 상태 전달 */}
+        <aside className="w-[380px] border-r border-gray-50 bg-white p-3 shrink-0 relative flex flex-col">
           <AnalysisSidebar
             videoRef={videoRef}
-            canvasRef={canvasRef} // ✅ 추가
+            canvasRef={canvasRef}
             isFaceReady={isFaceReady}
             metrics={metrics}
-            showTracking={showTracking} // ✅ 추가
-            onToggleTracking={() => setShowTracking(!showTracking)} // ✅ 추가
+            showTracking={showTracking}
+            onToggleTracking={() => setShowTracking(!showTracking)}
             scoreLabel="정답 개수"
-            scoreValue={`${correctNow} / ${currentIndex + 1}`}
-          />
-
-          {/* ✅ 2. FaceTracker: 캔버스 Ref 전달 (드로잉 엔진 작동용) */}
-          <FaceTracker
-            videoRef={videoRef}
-            canvasRef={canvasRef} // ✅ 캔버스 연결
-            showPreview={false}
-            maxFps={30}
-            onReady={() => setIsFaceReady(true)}
-            onMetricsUpdate={(m) =>
-              setMetrics((prev) => ({
-                ...prev,
-                symmetryScore: m.symmetryScore,
-                openingRatio: m.openingRatio * 100,
-                audioLevel: (m as any).audioLevel ?? prev.audioLevel,
-                articulationScore:
-                  (m as any).articulationScore ?? prev.articulationScore,
-              }))
-            }
+            scoreValue={`${analysisResults.filter((r) => r.isCorrect).length} / ${currentIndex + (isAnswered ? 1 : 0)}`}
           />
         </aside>
 
-        <main className="flex-1 bg-white overflow-y-auto px-12">
-          <section className="w-full max-w-2xl mx-auto flex flex-col items-center gap-8 py-4">
-            <div className="h-20 flex items-center justify-center">
-              <p className="text-3xl font-black text-[#8B4513]/40 uppercase tracking-[0.3em] text-center">
+        <main className="flex-1 bg-[#FBFBFC] overflow-y-auto px-12">
+          <section className="w-full max-w-2xl mx-auto flex flex-col items-center gap-8 py-10">
+            <div className="h-20 flex flex-col items-center justify-center">
+              <p className="text-2xl font-black text-[#8B4513] text-center">
                 {isSpeaking
                   ? "문제를 잘 들어보세요"
                   : "알맞은 그림을 찾아보세요"}
               </p>
+              <div className="mt-2 h-1 w-24 bg-orange-100 rounded-full animate-pulse" />
             </div>
 
             <button
@@ -237,46 +250,48 @@ function Step3Content() {
               disabled={
                 playCount >= 1 || isSpeaking || isAnswered || !canAnswer
               }
-              className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-xl border-b-4
+              className={`w-24 h-24 rounded-full flex items-center justify-center transition-all shadow-xl border-4
                 ${
                   playCount < 1 && !isSpeaking && !isAnswered && canAnswer
-                    ? "bg-white text-[#DAA520] border-gray-100 hover:scale-105 active:scale-95"
-                    : "bg-gray-50 text-gray-300 border-transparent scale-90"
+                    ? "bg-white border-orange-100 text-[#DAA520] hover:scale-110 active:scale-95"
+                    : "bg-gray-100 border-transparent text-gray-300 scale-90 opacity-50"
                 }`}
             >
-              <span className={`text-3xl ${isSpeaking ? "animate-pulse" : ""}`}>
-                🔊
+              <span
+                className={`text-4xl ${isSpeaking ? "animate-bounce" : ""}`}
+              >
+                {isSpeaking ? "🔊" : "👂"}
               </span>
             </button>
 
-            <div className="grid grid-cols-3 gap-4 w-full max-w-lg shrink-0 pb-8">
+            <div className="grid grid-cols-3 gap-6 w-full max-w-xl pb-10">
               {currentItem.options.map((option) => (
                 <button
                   key={option.id}
                   onClick={() => handleOptionClick(option.id)}
                   disabled={isSpeaking || isAnswered || !canAnswer}
-                  className={`relative aspect-square rounded-[24px] flex items-center justify-center transition-all duration-300 border-2 shadow-sm overflow-hidden bg-[#FBFBFC]
+                  className={`relative aspect-square rounded-[32px] flex items-center justify-center transition-all duration-500 border-2 shadow-sm overflow-hidden bg-white
                     ${
                       selectedId === option.id
                         ? showResult
-                          ? "border-emerald-500 scale-105 z-10"
-                          : "border-red-500 scale-95 opacity-50"
-                        : "border-gray-100 hover:border-[#DAA520]/40"
+                          ? "border-emerald-500 ring-4 ring-emerald-50 scale-105 z-10"
+                          : "border-red-500 opacity-60 scale-95"
+                        : "border-gray-100 hover:border-orange-200 hover:shadow-md"
                     }`}
                 >
                   {option.img ? (
                     <img
                       src={option.img}
                       alt=""
-                      className="w-full h-full object-cover p-3"
+                      className="w-full h-full object-cover p-4"
                     />
                   ) : (
-                    <span className="text-5xl">{option.emoji || "🖼️"}</span>
+                    <span className="text-6xl">{option.emoji || "🖼️"}</span>
                   )}
 
                   {selectedId === option.id && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm">
-                      <span className="text-6xl">
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm animate-in fade-in zoom-in">
+                      <span className="text-7xl">
                         {showResult ? "⭕" : "❌"}
                       </span>
                     </div>
@@ -287,6 +302,20 @@ function Step3Content() {
           </section>
         </main>
       </div>
+
+      {/* 비가시적 얼굴 트래킹 엔진 */}
+      <FaceTracker
+        videoRef={videoRef}
+        canvasRef={canvasRef}
+        onReady={() => setIsFaceReady(true)}
+        onMetricsUpdate={(m) =>
+          setMetrics((prev) => ({
+            ...prev,
+            symmetryScore: m.symmetryScore,
+            openingRatio: m.openingRatio * 100,
+          }))
+        }
+      />
     </div>
   );
 }
@@ -295,8 +324,8 @@ export default function Step3Page() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen flex items-center justify-center">
-          Loading...
+        <div className="h-screen flex items-center justify-center font-black text-slate-300 animate-pulse">
+          데이터 로드 중...
         </div>
       }
     >

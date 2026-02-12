@@ -5,6 +5,7 @@ export interface PatientProfile {
   name: string;
   gender: "M" | "F" | "U";
   age: number;
+  educationYears: number; // ✅ 추가: 0 (무학), 1-6 (초등), 7+ (중등 이상)
   phone?: string;
   hand: "R" | "L" | "U";
   language?: string;
@@ -36,18 +37,21 @@ export function getOrCreateSessionId(): string {
 
 export function loadPatientProfile(): PatientProfile | null {
   if (typeof window === "undefined") return null;
-  // ✅ localStorage 대신 sessionStorage로 변경
   const raw = sessionStorage.getItem(KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as PatientProfile;
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      educationYears: parsed.educationYears ?? 0, // ✅ 안전장치: 값이 없으면 0 반환
+    } as PatientProfile;
   } catch {
     return null;
   }
 }
 
 export function savePatientProfile(
-  input: Omit<PatientProfile, "sessionId" | "createdAt" | "updatedAt">
+  input: Omit<PatientProfile, "sessionId" | "createdAt" | "updatedAt">,
 ): PatientProfile {
   const sessionId = getOrCreateSessionId();
   const now = Date.now();
@@ -60,12 +64,10 @@ export function savePatientProfile(
     updatedAt: now,
   };
 
-  // ✅ localStorage 대신 sessionStorage로 변경
   sessionStorage.setItem(KEY, JSON.stringify(next));
   return next;
 }
 
-// ✅ 앱 초기화 시 사용할 삭제 함수 추가
 export function clearAllStorage() {
   if (typeof window !== "undefined") {
     sessionStorage.removeItem(KEY);

@@ -1,21 +1,6 @@
 "use client";
 import React from "react";
 
-interface Props {
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  isFaceReady: boolean;
-  metrics: {
-    symmetryScore: number;
-    openingRatio: number;
-    audioLevel?: number;
-  };
-  showTracking: boolean; // ✅ 트래킹 표시 여부
-  onToggleTracking: () => void; // ✅ 토글 함수
-  scoreLabel?: string;
-  scoreValue?: string | number;
-}
-
 export const AnalysisSidebar = ({
   videoRef,
   canvasRef,
@@ -23,42 +8,44 @@ export const AnalysisSidebar = ({
   metrics,
   showTracking,
   onToggleTracking,
-  scoreLabel,
-  scoreValue,
-}: Props) => {
+}: any) => {
   return (
-    <div className="w-full flex flex-col gap-4">
-      {/* 🔴 카메라 프리뷰 컨테이너 */}
-      <div className="relative aspect-[4/3] bg-gray-900 rounded-[32px] overflow-hidden shadow-inner border border-gray-100 group">
+    // 전체 높이를 부모에 맞추고 내부 요소 간격을 최적화 (gap-3)
+    <div className="w-full h-full flex flex-col gap-3 overflow-hidden">
+      {/* 카메라 프리뷰 섹션 - 크기를 살짝 줄임 */}
+      <div className="relative aspect-[4/3] bg-gray-900 rounded-[24px] overflow-hidden shrink-0">
         <video
           ref={videoRef}
           autoPlay
-          playsInline
           muted
+          playsInline
           className="w-full h-full object-cover -scale-x-100"
         />
         <canvas
           ref={canvasRef}
-          className={`absolute inset-0 w-full h-full object-cover -scale-x-100 pointer-events-none z-10 transition-opacity duration-500 ${
+          className={`absolute inset-0 w-full h-full -scale-x-100 transition-opacity duration-300 ${
             showTracking ? "opacity-100" : "opacity-0"
           }`}
         />
-
-        {/* ✅ 우측 상단 토글 버튼 */}
-        {isFaceReady && (
+        {!isFaceReady && (
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[10px] font-black tracking-widest">
+            AI INITIALIZING...
+          </div>
+        )}
+        <div className="absolute top-3 right-3 z-10">
           <button
             onClick={onToggleTracking}
-            className={`absolute top-4 right-4 z-30 p-2.5 rounded-2xl backdrop-blur-md transition-all duration-300 border ${
+            className={`w-9 h-9 flex items-center justify-center rounded-xl backdrop-blur-md transition-all ${
               showTracking
-                ? "bg-orange-500/80 border-orange-400 text-white shadow-lg"
-                : "bg-black/40 border-white/10 text-white/60 hover:bg-black/60"
+                ? "bg-[#DAA520]/90 text-white"
+                : "bg-black/40 text-gray-400"
             }`}
           >
             {showTracking ? (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -72,8 +59,8 @@ export const AnalysisSidebar = ({
             ) : (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -85,64 +72,67 @@ export const AnalysisSidebar = ({
               </svg>
             )}
           </button>
-        )}
-
-        {!isFaceReady && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80 backdrop-blur-sm text-white z-20">
-            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin mb-3" />
-            <span className="text-[10px] font-black tracking-[0.2em] animate-pulse uppercase">
-              Initializing AI...
-            </span>
-          </div>
-        )}
-
-        {isFaceReady && (
-          <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
-            <div
-              className={`w-1.5 h-1.5 rounded-full animate-pulse ${showTracking ? "bg-emerald-400" : "bg-gray-400"}`}
-            />
-            <span className="text-[9px] font-black text-white uppercase tracking-widest">
-              {showTracking ? "Live Tracking" : "Sensor Only"}
-            </span>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* 🟢 실시간 지표 */}
-      <div className="bg-[#FBFBFC] rounded-[32px] p-6 space-y-5 border border-gray-50">
-        <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] text-center border-b border-gray-50 pb-3">
-          Face & Mouth Status
-        </h4>
+      {/* 지표 영역 - 패딩과 간격을 조정하여 하단이 잘리지 않게 함 */}
+      <div className="flex-1 bg-[#FBFBFC] rounded-[24px] p-5 space-y-4 border border-gray-50 shadow-sm overflow-y-auto min-h-0">
         <MetricBar
           label="안면 대칭성"
           value={metrics.symmetryScore}
-          unit="%"
           color="bg-emerald-400"
         />
         <MetricBar
           label="구강 개구도"
           value={metrics.openingRatio}
-          unit="%"
           color="bg-amber-400"
         />
+
+        <div className="pt-3 border-t border-gray-100 space-y-4">
+          <MetricBar
+            label="자음 정확도"
+            value={metrics.consonantAcc}
+            color="bg-blue-500"
+          />
+          <MetricBar
+            label="모음 정확도"
+            value={metrics.vowelAcc}
+            color="bg-purple-500"
+          />
+        </div>
+
+        {/* ✅ 오디오 레벨 - 확실히 보이도록 배치 */}
+        <div className="pt-3 border-t border-gray-100">
+          <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase mb-2 tracking-tighter">
+            <span>Audio Level</span>
+            <span className="text-orange-500 font-mono">
+              {Math.round(metrics.audioLevel)} dB
+            </span>
+          </div>
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-orange-400 transition-all duration-75"
+              style={{ width: `${Math.min(100, metrics.audioLevel)}%` }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-const MetricBar = ({ label, value, unit, color }: any) => (
-  <div className="space-y-1.5">
-    <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-tight">
+const MetricBar = ({ label, value, color }: any) => (
+  <div className="space-y-1">
+    <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-tighter">
       <span>{label}</span>
       <span className="text-gray-600 font-mono">
-        {Number(value || 0).toFixed(1)}
-        {unit}
+        {Number(value || 0).toFixed(1)}%
       </span>
     </div>
     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
       <div
-        className={`h-full ${color} transition-all duration-500`}
-        style={{ width: `${Math.min(value || 0, 100)}%` }}
+        className={`h-full ${color} transition-all duration-300`}
+        style={{ width: `${Math.min(Number(value || 0), 100)}%` }}
       />
     </div>
   </div>

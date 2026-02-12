@@ -6,7 +6,6 @@ import {
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
 import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
-
 type Props = {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef?: React.RefObject<HTMLCanvasElement | null>;
@@ -16,7 +15,6 @@ type Props = {
   onFrameLatency?: (ms: number) => void;
   onMetricsUpdate?: (metrics: LipMetrics) => void;
 };
-
 export default function FaceTracker({
   videoRef,
   canvasRef,
@@ -31,34 +29,28 @@ export default function FaceTracker({
   const streamRef = useRef<MediaStream | null>(null);
   const lastTickRef = useRef(0);
   const lastFaceDetectedRef = useRef(false);
-
   // ✅ 사진 느낌의 깔끔한 윤곽선 드로잉 로직
   const drawLandmarks = (face: any[]) => {
     if (!canvasRef?.current || !videoRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
     if (canvas.width !== videoRef.current.videoWidth) {
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
     }
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const drawingUtils = new DrawingUtils(ctx);
-
     // 1. 주요 골격 (눈, 코, 얼굴형 외곽 - 깔끔한 블루톤)
     drawingUtils.drawConnectors(face, FaceLandmarker.FACE_LANDMARKS_CONTOURS, {
       color: "#60A5FA80",
       lineWidth: 1.5,
     });
-
     // 2. 입술 강조 (훈련 포인트 - 오렌지)
     drawingUtils.drawConnectors(face, FaceLandmarker.FACE_LANDMARKS_LIPS, {
       color: "#FB923C",
       lineWidth: 2.5,
     });
-
     // 3. 테크니컬 포인트 (흰색 작은 점)
     drawingUtils.drawLandmarks(face, {
       color: "#FFFFFF",
@@ -66,7 +58,6 @@ export default function FaceTracker({
       radius: 1,
     });
   };
-
   const tick = () => {
     const now = performance.now();
     const minInterval = 1000 / Math.max(1, maxFps);
@@ -74,10 +65,8 @@ export default function FaceTracker({
       rafRef.current = requestAnimationFrame(tick);
       return;
     }
-
     const landmarker = landmarkerRef.current;
     const video = videoRef.current;
-
     if (
       landmarker &&
       video &&
@@ -88,7 +77,6 @@ export default function FaceTracker({
         const results = landmarker.detectForVideo(video, Math.round(now));
         const face = results.faceLandmarks?.[0];
         const detected = !!face;
-
         if (detected !== lastFaceDetectedRef.current) {
           lastFaceDetectedRef.current = detected;
           onFaceDetected?.(detected);
@@ -113,7 +101,6 @@ export default function FaceTracker({
     onFrameLatency?.(performance.now() - now);
     rafRef.current = requestAnimationFrame(tick);
   };
-
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -159,6 +146,5 @@ export default function FaceTracker({
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
-
   return null;
 }
