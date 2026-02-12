@@ -1,5 +1,6 @@
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
+import { useTraining } from "../../app/(training)/TrainingContext";
 
 export const AnalysisSidebar = ({
   videoRef,
@@ -9,11 +10,105 @@ export const AnalysisSidebar = ({
   showTracking,
   onToggleTracking,
 }: any) => {
+  const { sidebarMetrics } = useTraining(); // 전역 좌표 데이터 가져오기
+
+  // ✅ [수정] 카메라 스트림 직접 연결 로직
+  // layout.tsx의 엔진과는 별개로, 현재 화면의 video 태그에 스트림을 꽂아줍니다.
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+
+    async function startCamera() {
+      try {
+        if (
+          navigator.mediaDevices &&
+          navigator.mediaDevices.getUserMedia &&
+          videoRef.current
+        ) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480 },
+            audio: false,
+          });
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            // 일부 브라우저 대응: 저전력 모드 등에서 play() 호출 필요
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play().catch(console.error);
+            };
+          }
+        }
+      } catch (err) {
+        console.error("사이드바 카메라 스트림 연결 실패:", err);
+      }
+    }
+
+    startCamera();
+
+    // Cleanup: 컴포넌트 종료 시 카메라 자원 해제
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [videoRef]);
+
+  // ✅ 실시간 드로잉 로직 (색상 연하게, 점 크기 작게 수정)
+  // ✅ 실시간 드로잉 로직 (세련된 화이트 도트 스타일)
+  useEffect(() => {
+    if (!canvasRef || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const landmarks = sidebarMetrics?.landmarks;
+
+    if (!canvas || !landmarks || !showTracking) {
+      const ctx = canvas.getContext("2d");
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let rafId: number;
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (landmarks && landmarks.length > 0) {
+        // ✅ 1. 점의 스타일 설정
+        ctx.fillStyle = "rgba(255, 255, 255, 0.8)"; // 80% 불투명한 흰색
+
+        // ✅ 2. 배경이 밝을 때를 대비한 미세한 그림자 효과 (가독성 확보)
+        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+        ctx.shadowBlur = 2;
+
+        landmarks.forEach((pt: any) => {
+          ctx.beginPath();
+          // ✅ 3. 크기를 0.7로 더 줄여서 훨씬 세밀하게 표현
+          ctx.arc(
+            pt.x * canvas.width,
+            pt.y * canvas.height,
+            0.7,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        });
+
+        // 다음 드로잉을 위해 그림자 효과 초기화
+        ctx.shadowBlur = 0;
+      }
+      rafId = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => cancelAnimationFrame(rafId);
+  }, [sidebarMetrics.landmarks, showTracking, canvasRef]);
+
   return (
-    // 전체 높이를 부모에 맞추고 내부 요소 간격을 최적화 (gap-3)
     <div className="w-full h-full flex flex-col gap-3 overflow-hidden">
-      {/* 카메라 프리뷰 섹션 - 크기를 살짝 줄임 */}
-      <div className="relative aspect-[4/3] bg-gray-900 rounded-[24px] overflow-hidden shrink-0">
+      {/* 카메라 프리뷰 섹션 */}
+      <div className="relative aspect-[4/3] bg-gray-900 rounded-[24px] overflow-hidden shrink-0 shadow-inner">
         <video
           ref={videoRef}
           autoPlay
@@ -27,11 +122,13 @@ export const AnalysisSidebar = ({
             showTracking ? "opacity-100" : "opacity-0"
           }`}
         />
+
         {!isFaceReady && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[10px] font-black tracking-widest">
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[10px] font-black tracking-widest z-[5]">
             AI INITIALIZING...
           </div>
         )}
+
         <div className="absolute top-3 right-3 z-10">
           <button
             onClick={onToggleTracking}
@@ -75,7 +172,6 @@ export const AnalysisSidebar = ({
         </div>
       </div>
 
-      {/* 지표 영역 - 패딩과 간격을 조정하여 하단이 잘리지 않게 함 */}
       <div className="flex-1 bg-[#FBFBFC] rounded-[24px] p-5 space-y-4 border border-gray-50 shadow-sm overflow-y-auto min-h-0">
         <MetricBar
           label="안면 대칭성"
@@ -101,7 +197,6 @@ export const AnalysisSidebar = ({
           />
         </div>
 
-        {/* ✅ 오디오 레벨 - 확실히 보이도록 배치 */}
         <div className="pt-3 border-t border-gray-100">
           <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase mb-2 tracking-tighter">
             <span>Audio Level</span>

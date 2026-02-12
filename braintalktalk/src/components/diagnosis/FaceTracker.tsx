@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useRef } from "react";
 import {
   FaceLandmarker,
@@ -6,101 +7,72 @@ import {
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
 import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
+
+// ✅ 타입을 확장해서 landmarks를 포함시킵니다.
+interface ExtendedMetrics extends LipMetrics {
+  landmarks: any[];
+}
+
 type Props = {
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  canvasRef?: React.RefObject<HTMLCanvasElement | null>;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
   maxFps?: number;
   onReady?: () => void;
-  onFaceDetected?: (detected: boolean) => void;
-  onFrameLatency?: (ms: number) => void;
-  onMetricsUpdate?: (metrics: LipMetrics) => void;
+  onMetricsUpdate: (metrics: ExtendedMetrics) => void; // ✅ 변경
 };
+
 export default function FaceTracker({
   videoRef,
   canvasRef,
   maxFps = 30,
   onReady,
-  onFaceDetected,
-  onFrameLatency,
   onMetricsUpdate,
 }: Props) {
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const rafRef = useRef<number | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const lastTickRef = useRef(0);
-  const lastFaceDetectedRef = useRef(false);
-  // ✅ 사진 느낌의 깔끔한 윤곽선 드로잉 로직
-  const drawLandmarks = (face: any[]) => {
-    if (!canvasRef?.current || !videoRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    if (canvas.width !== videoRef.current.videoWidth) {
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-    }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const drawingUtils = new DrawingUtils(ctx);
-    // 1. 주요 골격 (눈, 코, 얼굴형 외곽 - 깔끔한 블루톤)
-    drawingUtils.drawConnectors(face, FaceLandmarker.FACE_LANDMARKS_CONTOURS, {
-      color: "#60A5FA80",
-      lineWidth: 1.5,
-    });
-    // 2. 입술 강조 (훈련 포인트 - 오렌지)
-    drawingUtils.drawConnectors(face, FaceLandmarker.FACE_LANDMARKS_LIPS, {
-      color: "#FB923C",
-      lineWidth: 2.5,
-    });
-    // 3. 테크니컬 포인트 (흰색 작은 점)
-    drawingUtils.drawLandmarks(face, {
-      color: "#FFFFFF",
-      lineWidth: 1,
-      radius: 1,
-    });
-  };
+  const lastUpdateRef = useRef(0);
+
   const tick = () => {
     const now = performance.now();
     const minInterval = 1000 / Math.max(1, maxFps);
+
     if (now - lastTickRef.current < minInterval) {
       rafRef.current = requestAnimationFrame(tick);
       return;
     }
-    const landmarker = landmarkerRef.current;
-    const video = videoRef.current;
+
     if (
-      landmarker &&
-      video &&
-      video.readyState >= 2 &&
-      now > lastTickRef.current
+      landmarkerRef.current &&
+      videoRef.current &&
+      videoRef.current.readyState >= 2
     ) {
       try {
-        const results = landmarker.detectForVideo(video, Math.round(now));
+        const results = landmarkerRef.current.detectForVideo(
+          videoRef.current,
+          Math.round(now),
+        );
         const face = results.faceLandmarks?.[0];
-        const detected = !!face;
-        if (detected !== lastFaceDetectedRef.current) {
-          lastFaceDetectedRef.current = detected;
-          onFaceDetected?.(detected);
-        }
-        if (detected && face) {
-          onMetricsUpdate?.(calculateLipMetrics(face));
-          drawLandmarks(face);
-        } else if (!detected && canvasRef?.current) {
-          const ctx = canvasRef.current.getContext("2d");
-          ctx?.clearRect(
-            0,
-            0,
-            canvasRef.current.width,
-            canvasRef.current.height,
-          );
+
+        if (face) {
+          if (now - lastUpdateRef.current > 100) {
+            // ✅ 수치 데이터와 좌표 데이터를 합쳐서 보냅니다.
+            const metrics = calculateLipMetrics(face);
+            onMetricsUpdate({
+              ...metrics,
+              landmarks: face, // 👈 이게 있어야 사이드바가 그림을 그립니다.
+            });
+            lastUpdateRef.current = now;
+          }
         }
         lastTickRef.current = now;
       } catch (err) {
-        console.warn("Skip:", err);
+        console.warn("Analysis skip:", err);
       }
     }
-    onFrameLatency?.(performance.now() - now);
     rafRef.current = requestAnimationFrame(tick);
   };
+
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -109,6 +81,7 @@ export default function FaceTracker({
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
         );
         if (cancelled) return;
+
         landmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath:
@@ -118,33 +91,35 @@ export default function FaceTracker({
           runningMode: "VIDEO",
           numFaces: 1,
         });
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480 },
           audio: false,
         });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
+
+        if (videoRef.current && !cancelled) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
-            onReady?.();
             videoRef.current?.play();
+            onReady?.();
             tick();
           };
         }
-      } catch (e) {
-        console.error("Init Error:", e);
+      } catch (error) {
+        console.error("FaceTracker 초기화 실패:", error);
       }
     };
+
     init();
     return () => {
       cancelled = true;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => track.stop());
+      }
     };
   }, []);
+
   return null;
 }

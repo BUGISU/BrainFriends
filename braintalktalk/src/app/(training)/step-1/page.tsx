@@ -1,56 +1,17 @@
 "use client";
 
-import { Suspense } from "react";
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-// ✅ 수정된 import 경로: 분리한 파일에서 청각 인지 데이터를 가져옵니다.
 import { REHAB_PROTOCOLS } from "@/constants/auditoryTrainingData";
 import { PlaceType } from "@/constants/trainingData";
-
-import { loadPatientProfile } from "@/lib/patientStorage";
-import { SessionManager, Step1Result } from "@/lib/kwab/SessionManager";
 import { useTraining } from "../TrainingContext";
+import { SessionManager } from "@/lib/kwab/SessionManager";
+import { loadPatientProfile } from "@/lib/patientStorage";
 
-export const dynamic = "force-dynamic";
-
-// ============================================
-// 로딩 컴포넌트
-// ============================================
-function LoadingFallback() {
-  return (
-    <div className="flex-1 flex items-center justify-center h-screen bg-white">
-      <div className="text-center">
-        <div className="w-16 h-16 border-4 border-[#DAA520] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-xl font-bold text-[#8B4513]">로딩 중...</p>
-      </div>
-    </div>
-  );
-}
-
-// ============================================
-// 메인 페이지 (Suspense Wrapper)
-// ============================================
-export default function Page() {
-  return (
-    <Suspense fallback={<LoadingFallback />}>
-      <Step1Client />
-    </Suspense>
-  );
-}
-
-// ============================================
-// Step 1 클라이언트 구현부
-// ============================================
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
-function Step1Client() {
+export default function Step1Client() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const placeParam = (searchParams.get("place") as PlaceType) || "home";
@@ -63,170 +24,191 @@ function Step1Client() {
   const [isAnswered, setIsAnswered] = useState(false);
   const [canAnswer, setCanAnswer] = useState(false);
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
-  const [questionResults, setQuestionResults] = useState<
-    Array<{
-      question: string;
-      userAnswer: boolean | null;
-      correctAnswer: boolean;
-      isCorrect: boolean;
-      responseTime: number;
-    }>
-  >([]);
+  const [questionResults, setQuestionResults] = useState<any[]>([]);
 
-  const { updateFooter } = useTraining();
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const { updateClinical, sidebarMetrics } = useTraining();
 
-  // 컴포넌트 마운트 처리
   useEffect(() => {
     setIsMounted(true);
     GLOBAL_SPEECH_LOCK = {};
 
+    console.group("🎯 Step 1 초기화");
+    console.log("장소:", placeParam);
+    console.log("초기 점수:", 0);
+    console.log("총 문제 수:", 10);
+    console.groupEnd();
+
     return () => {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        utteranceRef.current = null;
-      }
+      if (typeof window !== "undefined") window.speechSynthesis.cancel();
     };
-  }, []);
+  }, [placeParam]);
 
-  // Footer 정보 업데이트
   useEffect(() => {
-    updateFooter({
-      leftText: "Yes/No Questions",
-      centerText: "Step 1: Auditory Comprehension",
-      rightText: `Question ${currentIndex + 1} / 10`,
-    });
-  }, [updateFooter, currentIndex]);
+    if (!updateClinical) return;
 
-  // ✅ 데이터 준비 로직 (분리된 파일의 구조를 반영)
+    const totalAttempted = currentIndex + (isAnswered ? 1 : 0);
+    const accuracy = totalAttempted > 0 ? (score / totalAttempted) * 100 : 95.2;
+
+    updateClinical({
+      analysisAccuracy: accuracy,
+    });
+  }, [score, currentIndex, isAnswered, updateClinical]);
+
   const trainingData = useMemo(() => {
     const protocol = REHAB_PROTOCOLS[placeParam] || REHAB_PROTOCOLS.home;
-
-    // 기본, 중급, 고급 문제를 하나로 합침
     const combined = [
       ...protocol.basic,
       ...protocol.intermediate,
       ...protocol.advanced,
     ];
-
-    // 실전용으로 10문제만 무작위 추출
-    const questions = combined.slice(0, 10);
-    const shuffled = [...questions];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
+    return combined.sort(() => Math.random() - 0.5).slice(0, 10);
   }, [placeParam]);
 
   const currentItem = trainingData[currentIndex];
 
-  // TTS 재생 함수
-  const playInstruction = useCallback(
+  const speakWord = useCallback(
     (text: string) => {
       if (typeof window !== "undefined" && window.speechSynthesis) {
+        console.log(`🔊 음성 출력: "${text}"`);
         setIsSpeaking(true);
         setCanAnswer(false);
         setTimeLeft(null);
-
-        if (utteranceRef.current) {
-          window.speechSynthesis.cancel();
-          utteranceRef.current = null;
-        }
-
-        setTimeout(() => {
-          const msg = new SpeechSynthesisUtterance(text);
-          msg.lang = "ko-KR";
-          msg.rate = 0.85;
-
-          const voices = window.speechSynthesis.getVoices();
-          const koVoice = voices.find((v) => v.lang.includes("ko"));
-          if (koVoice) msg.voice = koVoice;
-
-          msg.onend = () => {
-            utteranceRef.current = null;
-            setIsSpeaking(false);
-            setCanAnswer(true);
-            setTimeLeft(currentItem?.duration || 10);
-            setQuestionStartTime(Date.now());
-          };
-
-          msg.onerror = () => {
-            setIsSpeaking(false);
-            setCanAnswer(true);
-            setTimeLeft(currentItem?.duration || 10);
-          };
-
-          utteranceRef.current = msg;
-          window.speechSynthesis.speak(msg);
-        }, 300);
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = "ko-KR";
+        msg.rate = 0.85;
+        msg.onend = () => {
+          setIsSpeaking(false);
+          setCanAnswer(true);
+          setTimeLeft(currentItem?.duration || 10);
+          setQuestionStartTime(Date.now());
+          console.log("✅ 음성 출력 완료, 답변 가능");
+        };
+        window.speechSynthesis.speak(msg);
       }
     },
     [currentItem],
   );
 
-  // 정답 처리 로직
+  // ✅ Step 1 결과 저장 함수 (SessionManager + Result 페이지 모두 호환)
+  const saveStep1Results = useCallback(
+    (results: any[], finalScore: number) => {
+      try {
+        const patient = loadPatientProfile();
+        const sessionManager = new SessionManager(
+          (patient || { age: 70, educationYears: 12 }) as any,
+          placeParam,
+        );
+
+        // 1. ✅ Result 페이지용 백업 (text 필드 사용)
+        const formattedForResult = results.map((r) => ({
+          text: r.question, // Result 페이지에서 표시할 텍스트
+          userAnswer: r.userAnswer,
+          isCorrect: r.isCorrect,
+          responseTime: r.responseTime,
+          timestamp: new Date().toLocaleTimeString(),
+        }));
+
+        localStorage.setItem("step1_data", JSON.stringify(formattedForResult));
+        console.log("✅ Step 1 Result 페이지용 백업 저장:", formattedForResult);
+
+        // 2. ✅ SessionManager용 데이터 (question 필드 사용)
+        const formattedForSession = results.map((r) => ({
+          question: r.question, // SessionManager 규격
+          userAnswer: r.userAnswer,
+          correctAnswer: r.correctAnswer,
+          isCorrect: r.isCorrect,
+          responseTime: r.responseTime,
+        }));
+
+        const step1Data = {
+          correctAnswers: results.filter((r) => r.isCorrect).length,
+          totalQuestions: results.length,
+          averageResponseTime:
+            results.reduce((a, b) => a + b.responseTime, 0) / results.length,
+          timestamp: Date.now(),
+          items: formattedForSession,
+        };
+
+        sessionManager.saveStep1Result(step1Data);
+        console.log("✅ Step 1 SessionManager 저장 완료:", step1Data);
+
+        // 3. 저장 검증
+        const verification = localStorage.getItem("kwab_training_session");
+        const verifiedData = JSON.parse(verification || "{}");
+        console.log("✅ 저장 검증 - step1 데이터:", verifiedData.step1);
+      } catch (error) {
+        console.error("❌ Step 1 저장 실패:", error);
+      }
+    },
+    [placeParam],
+  );
+
   const handleAnswer = useCallback(
     (userAnswer: boolean | null) => {
       if (isAnswered || !currentItem) return;
-
       setIsAnswered(true);
       setCanAnswer(false);
 
       const isCorrect =
         userAnswer === null ? false : currentItem.answer === userAnswer;
-      const nextScore = isCorrect ? score + 1 : score;
-
       const responseTime =
         userAnswer === null
           ? (currentItem.duration || 10) * 1000
-          : questionStartTime > 0
-            ? Date.now() - questionStartTime
-            : 0;
+          : Date.now() - questionStartTime;
 
-      const questionResult = {
-        question: currentItem.question,
-        userAnswer: userAnswer,
-        correctAnswer: currentItem.answer,
-        isCorrect: isCorrect,
-        responseTime: responseTime,
-      };
+      const updatedResults = [
+        ...questionResults,
+        {
+          question: currentItem.question, // ✅ SessionManager 규격
+          userAnswer,
+          isCorrect,
+          responseTime,
+          correctAnswer: currentItem.answer,
+        },
+      ];
 
-      const updatedResults = [...questionResults, questionResult];
+      console.group(`📝 ${currentIndex + 1}번 문제 완료`);
+      console.log("질문:", currentItem.question);
+      console.log("정답:", currentItem.answer ? "O" : "X");
+      console.log(
+        "사용자 답변:",
+        userAnswer === null ? "시간초과" : userAnswer ? "O" : "X",
+      );
+      console.log("정답 여부:", isCorrect ? "✅ 정답" : "❌ 오답");
+      console.log("응답 시간:", `${(responseTime / 1000).toFixed(1)}초`);
+      console.log("현재 누적 점수:", isCorrect ? score + 1 : score);
+      console.groupEnd();
+
       setQuestionResults(updatedResults);
-
-      if (isCorrect) setScore((prev) => prev + 1);
-
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-      setTimeLeft(null);
+      if (isCorrect) setScore((s) => s + 1);
 
       setTimeout(() => {
         if (currentIndex < trainingData.length - 1) {
+          console.log(
+            `➡️ 다음 문제 (${currentIndex + 2}/${trainingData.length})로 이동`,
+          );
           setCurrentIndex((prev) => prev + 1);
           setIsAnswered(false);
         } else {
-          // 마지막 문제 완료 시 저장 및 이동
-          const patient = loadPatientProfile();
-          if (patient) {
-            const sessionManager = new SessionManager(
-              { age: patient.age, educationYears: patient.educationYears || 0 },
-              placeParam,
-            );
+          const finalScore = isCorrect ? score + 1 : score;
 
-            const step1Result: Step1Result = {
-              correctAnswers: nextScore,
-              totalQuestions: trainingData.length,
-              averageResponseTime:
-                updatedResults.reduce((acc, cur) => acc + cur.responseTime, 0) /
-                updatedResults.length,
-              timestamp: Date.now(),
-              items: updatedResults,
-            };
-            sessionManager.saveStep1Result(step1Result);
-          }
-          router.push(`/step-2?step1=${nextScore}&place=${placeParam}`); // step1 쿼리로 변경하여 결과페이지 연동 강화
+          console.group("🏁 Step 1 최종 완료");
+          console.log("최종 점수:", finalScore);
+          console.log(
+            "정답률:",
+            `${((finalScore / trainingData.length) * 100).toFixed(1)}%`,
+          );
+          console.groupEnd();
+
+          saveStep1Results(updatedResults, finalScore);
+
+          console.log(
+            `🚀 Step 2로 이동 (step1=${finalScore}, place=${placeParam})`,
+          );
+          router.push(`/step-2?step1=${finalScore}&place=${placeParam}`);
         }
-      }, 500);
+      }, 800);
     },
     [
       currentIndex,
@@ -238,141 +220,132 @@ function Step1Client() {
       isAnswered,
       questionStartTime,
       questionResults,
+      saveStep1Results,
     ],
   );
 
-  // 문제 바뀔 때마다 TTS 자동 재생
   useEffect(() => {
-    if (!isMounted || !currentItem) return;
-    if (GLOBAL_SPEECH_LOCK[currentIndex]) return;
-
+    if (!isMounted || !currentItem || GLOBAL_SPEECH_LOCK[currentIndex]) return;
     GLOBAL_SPEECH_LOCK[currentIndex] = true;
-    setCanAnswer(false);
-    setIsSpeaking(true);
-
-    const timer = setTimeout(
-      () => {
-        playInstruction(currentItem.question);
-      },
-      currentIndex === 0 ? 500 : 800,
-    );
-
+    console.log(`🎬 ${currentIndex + 1}번 문제 시작`);
+    const timer = setTimeout(() => speakWord(currentItem.question), 800);
     return () => clearTimeout(timer);
-  }, [currentIndex, isMounted, currentItem, playInstruction]);
+  }, [currentIndex, isMounted, currentItem, speakWord]);
 
-  // 타이머 로직
   useEffect(() => {
     if (!isMounted || timeLeft === null || isSpeaking) return;
-
     if (timeLeft <= 0) {
+      console.warn("⏰ 시간 초과!");
       handleAnswer(null);
       return;
     }
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
+    const timer = setInterval(
+      () => setTimeLeft((prev) => (prev && prev > 0 ? prev - 1 : 0)),
+      1000,
+    );
     return () => clearInterval(timer);
   }, [isMounted, timeLeft, isSpeaking, handleAnswer]);
 
   if (!isMounted || !currentItem) return null;
 
-  const isInteractionDisabled =
-    !isMounted || isSpeaking || isAnswered || !canAnswer;
-
   return (
-    <div className="flex-1 flex flex-col h-full bg-white overflow-hidden">
-      <header className="px-10 py-6 border-b border-gray-50 flex justify-between items-center bg-white shrink-0">
-        <div className="text-left">
-          <span className="text-[#DAA520] font-black text-[11px] tracking-[0.2em] uppercase">
-            Step 01 • {placeParam.toUpperCase()}
-          </span>
-          <h2 className="text-2xl font-black text-[#8B4513] tracking-tighter">
-            청각 이해 사실 판단
-          </h2>
+    <div className="flex flex-col h-full bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans">
+      <header className="h-16 lg:h-20 px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm">
+            01
+          </div>
+          <div className="flex flex-col">
+            <h2 className="text-sm lg:text-base font-black text-slate-800 leading-none">
+              청각 이해 판단 훈련
+            </h2>
+            <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter italic">
+              {sidebarMetrics.faceDetected
+                ? "Face Tracking Active"
+                : "Waiting for Camera..."}
+            </p>
+          </div>
         </div>
-        <div
-          className={`px-6 py-2 rounded-full font-black text-2xl transition-all duration-500 shadow-sm ${
-            isSpeaking
-              ? "bg-gray-50 text-gray-200"
-              : "bg-[#F8F9FA] text-[#DAA520]"
-          }`}
-        >
-          {isSpeaking ? "LISTENING" : `${timeLeft ?? currentItem.duration}s`}
+
+        <div className="flex items-center gap-3">
+          <div
+            className={`px-3 py-1.5 rounded-full font-black text-[11px] transition-all border ${
+              isSpeaking
+                ? "bg-slate-50 border-slate-100 text-slate-300"
+                : "bg-white border-orange-100 text-orange-500"
+            }`}
+          >
+            {isSpeaking
+              ? "LISTENING..."
+              : `${timeLeft ?? currentItem.duration}s`}
+          </div>
+          <div className="bg-orange-50 px-3 py-1.5 rounded-full font-black text-[11px] text-orange-600">
+            {currentIndex + 1} / 10
+          </div>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center p-6 overflow-hidden relative">
-        <div className="w-full max-w-4xl flex flex-col items-center gap-10">
-          <div className="h-32 flex items-center justify-center">
-            <div
-              className={`px-10 py-6 rounded-[40px] shadow-xl transition-all duration-500 border-4 ${
-                !isSpeaking && timeLeft !== null && timeLeft <= 5
-                  ? "bg-amber-500 border-transparent scale-105 text-white"
-                  : "bg-white border-[#DAA520]/15 text-[#8B4513]"
-              }`}
-            >
-              <p className="text-3xl font-black tracking-tight leading-tight">
-                {isSpeaking ? "문제를 잘 들어보세요" : "정답을 골라주세요"}
-              </p>
+      <main className="flex-1 flex flex-col items-center justify-center py-10 px-6">
+        <div className="w-full max-w-lg mx-auto flex flex-col items-center gap-8 lg:gap-12">
+          <div className="text-center space-y-6">
+            <div className="space-y-3">
+              <h1 className="text-2xl lg:text-3xl font-black text-slate-800 break-keep leading-tight">
+                {isSpeaking ? "질문을 잘 들어보세요" : "사실이 맞나요?"}
+              </h1>
+              <div className="h-1.5 w-12 bg-orange-500/20 rounded-full mx-auto" />
             </div>
-          </div>
 
-          <div className="h-44 flex flex-col items-center justify-center gap-3">
             <button
-              onClick={() => playInstruction(currentItem.question)}
-              disabled={isInteractionDisabled}
-              className={`w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-2xl transition-all active:scale-95 border-4 ${
-                isInteractionDisabled
-                  ? "bg-gray-50 border-gray-200 pointer-events-none opacity-30"
-                  : "bg-white border-[#DAA520]/10 hover:border-[#DAA520]"
-              }`}
+              onClick={() => speakWord(currentItem.question)}
+              disabled={isSpeaking || isAnswered}
+              className="group flex items-center gap-2 mx-auto px-5 py-2.5 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-orange-200 hover:bg-orange-50/30 transition-all disabled:opacity-30 active:scale-95"
             >
-              <span className={`text-5xl ${isSpeaking ? "animate-pulse" : ""}`}>
-                🔊
+              <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center group-hover:bg-orange-500 transition-colors">
+                <svg
+                  className="w-4 h-4 text-orange-600 group-hover:text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <span className="text-sm font-black text-slate-600 group-hover:text-orange-600">
+                다시 듣기
               </span>
             </button>
-            <span className="text-[10px] font-black text-[#DAA520] tracking-widest uppercase">
-              {isSpeaking ? "재생 중" : "다시 듣기"}
-            </span>
           </div>
 
-          <div className="flex gap-10">
+          <div className="flex gap-8 lg:gap-12 w-full max-w-md shrink-0 mb-4">
             <button
-              disabled={isInteractionDisabled}
+              disabled={isSpeaking || isAnswered || !canAnswer}
               onClick={() => handleAnswer(true)}
-              className="w-52 h-52 bg-white rounded-[60px] text-[120px] shadow-2xl border-2 border-gray-50 flex items-center justify-center transition-all hover:border-blue-200 active:scale-90 disabled:opacity-20 disabled:cursor-not-allowed"
+              className="flex-1 aspect-square max-h-[180px] bg-white rounded-[40px] text-8xl shadow-[0_12px_24px_rgba(0,0,0,0.04)] border-2 border-slate-50 flex items-center justify-center transition-all hover:border-emerald-100 hover:text-emerald-500 active:scale-95 disabled:opacity-20 text-slate-300 font-black"
             >
-              ⭕
+              O
             </button>
             <button
-              disabled={isInteractionDisabled}
+              disabled={isSpeaking || isAnswered || !canAnswer}
               onClick={() => handleAnswer(false)}
-              className="w-52 h-52 bg-white rounded-[60px] text-[120px] shadow-2xl border-2 border-gray-50 flex items-center justify-center transition-all hover:border-red-200 active:scale-90 disabled:opacity-20 disabled:cursor-not-allowed"
+              className="flex-1 aspect-square max-h-[180px] bg-white rounded-[40px] text-8xl shadow-[0_12px_24px_rgba(0,0,0,0.04)] border-2 border-slate-50 flex items-center justify-center transition-all hover:border-orange-100 hover:text-orange-500 active:scale-95 disabled:opacity-20 text-slate-300 font-black"
             >
-              ❌
+              X
             </button>
           </div>
         </div>
       </main>
-
-      <footer className="px-10 py-6 border-t border-gray-50 bg-white shrink-0">
-        <div className="max-w-xl mx-auto flex items-center gap-5">
-          <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner">
-            <div
-              className="h-full bg-[#DAA520] transition-all duration-1000 ease-out"
-              style={{
-                width: `${((currentIndex + 1) / trainingData.length) * 100}%`,
-              }}
-            />
-          </div>
-          <span className="shrink-0 font-black text-[#8B4513]/30 text-xs tracking-widest">
-            {Math.min(currentIndex + 1, trainingData.length)} /{" "}
-            {trainingData.length}
-          </span>
-        </div>
-      </footer>
+      <div className="h-4 shrink-0" />
     </div>
   );
 }

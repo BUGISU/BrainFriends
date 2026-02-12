@@ -83,14 +83,25 @@ export interface Step5Result {
   correctAnswers: number;
   totalQuestions: number;
   timestamp: number;
+  items: Array<{
+    text: string;
+    audioUrl?: string;
+    readingScore?: number;
+    totalTime?: number;
+    wordsPerMinute?: number;
+  }>;
 }
-
 export interface Step6Result {
-  // 쓰기 학습
+  //쓰기학습
   completedTasks: number;
   totalTasks: number;
-  accuracy: number; // 0-100
+  accuracy: number;
   timestamp: number;
+  items: Array<{
+    word: string;
+    expectedStrokes: number;
+    userImage: string;
+  }>;
 }
 
 // ============================================================================
