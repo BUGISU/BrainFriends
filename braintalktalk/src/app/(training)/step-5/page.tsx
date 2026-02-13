@@ -123,7 +123,15 @@ function Step5Content() {
 
   const startReading = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 16000,
+        },
+      });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -132,6 +140,7 @@ function Step5Content() {
         audioChunksRef.current.push(e.data);
 
       mediaRecorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
         const audioBlob = new Blob(audioChunksRef.current, {
           type: "audio/wav",
         });

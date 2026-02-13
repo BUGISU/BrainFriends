@@ -243,7 +243,13 @@ function Step2Content() {
             try {
               const base64Audio = reader.result as string;
               const rawData = localStorage.getItem("step2_recorded_audios");
-              const existingAudios = JSON.parse(rawData || "[]");
+              let existingAudios: any[] = [];
+              try {
+                existingAudios = JSON.parse(rawData || "[]");
+                if (!Array.isArray(existingAudios)) existingAudios = [];
+              } catch {
+                existingAudios = [];
+              }
 
               // ✅ Result 페이지 규격
               const newEntry = {

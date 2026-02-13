@@ -34,6 +34,7 @@ export class AudioRecorder {
   private analyser: AnalyserNode | null = null;
   private dataArray: Uint8Array<ArrayBuffer> | null = null;
   private animationId: number | null = null;
+  private mimeType = "audio/webm";
 
   async startRecording(onAudioLevel?: (level: number) => void): Promise<void> {
     try {
@@ -41,6 +42,8 @@ export class AudioRecorder {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
           sampleRate: 16000,
         },
       });
@@ -65,9 +68,20 @@ export class AudioRecorder {
         updateLevel();
       }
 
-      this.mediaRecorder = new MediaRecorder(this.stream, {
-        mimeType: "audio/webm",
-      });
+      const preferredMimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ];
+      const selectedMimeType = preferredMimeTypes.find((type) =>
+        MediaRecorder.isTypeSupported(type),
+      );
+      this.mimeType = selectedMimeType?.split(";")[0] || "audio/webm";
+
+      this.mediaRecorder = selectedMimeType
+        ? new MediaRecorder(this.stream, { mimeType: selectedMimeType })
+        : new MediaRecorder(this.stream);
       this.audioChunks = [];
       this.mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) this.audioChunks.push(event.data);
@@ -84,7 +98,7 @@ export class AudioRecorder {
       if (!this.mediaRecorder)
         return reject(new Error("MediaRecorder 미초기화"));
       this.mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(this.audioChunks, { type: "audio/webm" });
+        const audioBlob = new Blob(this.audioChunks, { type: this.mimeType });
         this.cleanup();
         resolve(audioBlob);
       };
@@ -94,7 +108,7 @@ export class AudioRecorder {
 
   getLastAudioBlob(): Blob | null {
     if (this.audioChunks.length === 0) return null;
-    return new Blob(this.audioChunks, { type: "audio/webm" });
+    return new Blob(this.audioChunks, { type: this.mimeType });
   }
 
   private cleanup() {
@@ -112,8 +126,17 @@ export class WhisperTranscriber {
   async transcribe(
     audioBlob: Blob,
   ): Promise<{ text: string; confidence: number }> {
+    const mimeToExt: Record<string, string> = {
+      "audio/webm": "webm",
+      "audio/mp4": "m4a",
+      "audio/ogg": "ogg",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
+    };
+    const extension = mimeToExt[audioBlob.type] || "webm";
+
     const formData = new FormData();
-    formData.append("file", audioBlob, "audio.webm");
+    formData.append("file", audioBlob, `audio.${extension}`);
     formData.append("model", "whisper-1");
     formData.append("language", "ko");
     formData.append("response_format", "verbose_json");
@@ -310,23 +333,39 @@ export class SpeechAnalyzer {
       };
     }
 
-    const { text, confidence } = await this.transcriber.transcribe(audioBlob);
-    const metrics = this.pronunciationAnalyzer.analyzeDetailed(
-      expectedText,
-      text,
-    );
+    try {
+      const { text, confidence } = await this.transcriber.transcribe(audioBlob);
+      const metrics = this.pronunciationAnalyzer.analyzeDetailed(
+        expectedText,
+        text,
+      );
 
-    return {
-      transcript: text,
-      confidence,
-      pronunciationScore: Math.round(metrics.clarityScore),
-      duration,
-      audioLevel: 0,
-      audioBlob,
-      details: {
-        consonantAccuracy: metrics.consonantAccuracy,
-        vowelAccuracy: metrics.vowelAccuracy,
-      },
-    };
+      return {
+        transcript: text,
+        confidence,
+        pronunciationScore: Math.round(metrics.clarityScore),
+        duration,
+        audioLevel: 0,
+        audioBlob,
+        details: {
+          consonantAccuracy: metrics.consonantAccuracy,
+          vowelAccuracy: metrics.vowelAccuracy,
+        },
+      };
+    } catch (error) {
+      console.error("STT 분석 실패, 로컬 오디오 저장만 진행:", error);
+      return {
+        transcript: "",
+        confidence: 0,
+        pronunciationScore: 0,
+        duration,
+        audioLevel: 0,
+        audioBlob,
+        details: {
+          consonantAccuracy: 0,
+          vowelAccuracy: 0,
+        },
+      };
+    }
   }
 }

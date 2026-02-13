@@ -10,7 +10,11 @@ import React, {
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
-import { VISUAL_MATCHING_PROTOCOLS } from "@/constants/visualTrainingData";
+import {
+  VISUAL_MATCHING_IMAGE_FILENAME_MAP,
+  VISUAL_MATCHING_PROTOCOLS,
+  VISUAL_MATCHING_RECOMMENDED_COUNT,
+} from "@/constants/visualTrainingData";
 import { useTraining } from "../TrainingContext";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
 import { SessionManager } from "@/lib/kwab/SessionManager";
@@ -18,7 +22,71 @@ import { loadPatientProfile } from "@/lib/patientStorage";
 
 export const dynamic = "force-dynamic";
 
+type VisualOption = {
+  id: string;
+  label: string;
+  img?: string;
+  emoji?: string;
+};
+
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
+const STEP3_IMAGE_BASE_URL =
+  (
+    process.env.NEXT_PUBLIC_STEP3_IMAGE_BASE_URL ||
+    "https://cdn.jsdelivr.net/gh/BUGISU/braintalktalk-assets@main/step3"
+  ).replace(/\/$/, "");
+
+const toTwemojiSvgUrl = (emoji: string) => {
+  const codePoints = Array.from(emoji).map((char) =>
+    char.codePointAt(0)?.toString(16),
+  );
+  return `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints.join("-")}.svg`;
+};
+
+const buildNameVariants = (baseName: string) => {
+  const variants = new Set<string>();
+  variants.add(baseName);
+  variants.add(baseName.replace(/-/g, ""));
+  variants.add(baseName.replace(/-/g, "_"));
+  variants.add(baseName.split("-")[0]);
+  return Array.from(variants).filter(Boolean);
+};
+
+const buildImageCandidates = (
+  place: PlaceType,
+  option: VisualOption,
+): string[] => {
+  const candidates: string[] = [];
+
+  if (option.img) candidates.push(option.img);
+
+  const mappedBaseName = VISUAL_MATCHING_IMAGE_FILENAME_MAP[place]?.[option.label];
+  if (mappedBaseName) {
+    for (const nameVariant of buildNameVariants(mappedBaseName)) {
+      candidates.push(
+        `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.png`,
+        `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.jpg`,
+        `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.jpeg`,
+        `${STEP3_IMAGE_BASE_URL}/${nameVariant}.png`,
+        `${STEP3_IMAGE_BASE_URL}/${nameVariant}.jpg`,
+        `${STEP3_IMAGE_BASE_URL}/${nameVariant}.jpeg`,
+      );
+    }
+  }
+
+  candidates.push(
+    `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(option.label)}.png`,
+    `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(option.label)}.jpg`,
+    `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(option.label)}.jpeg`,
+    `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(option.label)}.png`,
+    `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(option.label)}.jpg`,
+    `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(option.label)}.jpeg`,
+  );
+
+  if (option.emoji) candidates.push(toTwemojiSvgUrl(option.emoji));
+
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
 
 function Step3Content() {
   const router = useRouter();
@@ -43,7 +111,7 @@ function Step3Content() {
   const protocol = useMemo(() => {
     const allQuestions = (
       VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
-    ).slice(0, 10);
+    ).slice(0, VISUAL_MATCHING_RECOMMENDED_COUNT);
     return [...allQuestions].sort(() => Math.random() - 0.5);
   }, [place]);
 
@@ -116,6 +184,8 @@ function Step3Content() {
       setPlayCount((prev) => prev + 1);
     }
   };
+  const replayEnabled =
+    playCount < 1 && !isSpeaking && !isAnswered && canAnswer;
 
   const handleOptionClick = (id: string) => {
     if (!canAnswer || selectedId || isAnswered) return;
@@ -227,13 +297,17 @@ function Step3Content() {
 
               <button
                 onClick={handleReplay}
-                disabled={
-                  playCount >= 1 || isSpeaking || isAnswered || !canAnswer
-                }
-                className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm active:scale-95 shrink-0 mb-1 pointer-events-auto"
+                disabled={!replayEnabled}
+                className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm active:scale-95 shrink-0 mb-1 pointer-events-auto transition-colors ${
+                  replayEnabled
+                    ? "bg-orange-50 border-orange-200 hover:bg-orange-100"
+                    : "bg-white border-slate-200 opacity-60"
+                }`}
               >
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${isSpeaking ? "bg-orange-500" : "bg-orange-100"}`}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                    replayEnabled ? "bg-orange-500" : "bg-slate-300"
+                  }`}
                 >
                   <svg
                     className="w-3 h-3 text-white"
@@ -249,7 +323,11 @@ function Step3Content() {
                     />
                   </svg>
                 </div>
-                <span className="text-xs font-black text-slate-600">
+                <span
+                  className={`text-xs font-black ${
+                    replayEnabled ? "text-orange-700" : "text-slate-400"
+                  }`}
+                >
                   다시 듣기
                 </span>
               </button>
@@ -257,8 +335,9 @@ function Step3Content() {
 
             <div className="flex-1 min-h-0 flex items-center justify-center pb-6">
               <div className="grid grid-cols-3 gap-4 w-full h-full max-h-[60vh]">
-                {currentItem.options.map(
-                  (option: { id: string; img?: string; emoji?: string }) => (
+                {currentItem.options.map((option: VisualOption) => {
+                  const imageCandidates = buildImageCandidates(place, option);
+                  return (
                     <button
                       key={option.id}
                       onClick={() => handleOptionClick(option.id)}
@@ -267,12 +346,39 @@ function Step3Content() {
                     ${selectedId === option.id ? (showResult ? "border-emerald-500 ring-4 ring-emerald-50 scale-105" : "border-slate-800 opacity-60 scale-95") : "border-slate-100 hover:border-orange-100 hover:shadow-md"}`}
                     >
                       <div className="w-full h-full p-4 flex items-center justify-center pointer-events-none">
-                        {option.img ? (
-                          <img
-                            src={option.img}
-                            alt=""
-                            className="max-w-full max-h-full object-contain"
-                          />
+                        {option.img || option.emoji ? (
+                          <>
+                            <img
+                              src={imageCandidates[0]}
+                              data-candidate-index="0"
+                              alt={option.label}
+                              className="w-16 h-16 lg:w-20 lg:h-20 object-contain"
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                const currentIndex = Number(
+                                  e.currentTarget.dataset.candidateIndex || "0",
+                                );
+                                const nextIndex = currentIndex + 1;
+                                const nextSrc = imageCandidates[nextIndex];
+
+                                if (nextSrc) {
+                                  e.currentTarget.dataset.candidateIndex =
+                                    String(nextIndex);
+                                  e.currentTarget.src = nextSrc;
+                                } else {
+                                  e.currentTarget.style.display = "none";
+                                  const fallback =
+                                    e.currentTarget
+                                      .nextElementSibling as HTMLSpanElement | null;
+                                  if (fallback) fallback.style.display = "inline";
+                                }
+                              }}
+                            />
+                            <span className="text-4xl lg:text-5xl hidden">
+                              {option.emoji || "🖼️"}
+                            </span>
+                          </>
                         ) : (
                           <span className="text-4xl lg:text-5xl">
                             {option.emoji || "🖼️"}
@@ -289,8 +395,8 @@ function Step3Content() {
                         </div>
                       )}
                     </button>
-                  ),
-                )}
+                  );
+                })}
               </div>
             </div>
           </div>
