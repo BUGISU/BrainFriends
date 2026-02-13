@@ -23,7 +23,7 @@ function Step2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { updateFooter, sidebarMetrics, updateClinical } = useTraining();
+  const { sidebarMetrics, updateClinical } = useTraining();
   const place = (searchParams?.get("place") as PlaceType) || "home";
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -72,34 +72,43 @@ function Step2Content() {
   }, []);
 
   useEffect(() => {
-    if (!updateFooter || !isMounted) return;
+    if (!isMounted) return;
 
     const currentAcc =
       analysisResults.length > 0
         ? analysisResults.reduce((a, b) => a + b.finalScore, 0) /
           analysisResults.length
         : 95.2;
-
-    updateFooter({
-      leftText: sidebarMetrics.faceDetected
-        ? "TRACKING ACTIVE"
-        : "CAMERA STANDBY",
-      centerText: `Step 2: 문장 복창 훈련 (${place.toUpperCase()})`,
-      rightText: `${currentIndex + 1} / ${protocol.length}`,
-    });
+    const symmetry = sidebarMetrics.facialSymmetry || 0;
+    const opening = sidebarMetrics.mouthOpening || 0;
+    const progress = analysisResults.length / Math.max(1, protocol.length);
 
     updateClinical({
-      systemLatency: 32 + Math.floor(Math.random() * 8),
-      trackingPrecision: 0.15 + Math.random() * 0.1,
+      systemLatency: 30 + Math.floor(Math.random() * 6),
+      trackingPrecision: 0.12 + (1 - symmetry) * 0.12 + Math.random() * 0.03,
       analysisAccuracy: currentAcc,
+      correlation: Math.min(
+        0.99,
+        0.84 + symmetry * 0.1 + progress * 0.04 + opening * 0.02,
+      ),
+      reliability: Math.min(0.99, 0.78 + symmetry * 0.14 + progress * 0.05),
+      stability: Math.max(
+        1.8,
+        Number(
+          (7.5 - currentAcc * 0.04 - symmetry * 2.0 - opening * 1.2).toFixed(
+            1,
+          ),
+        ),
+      ),
     });
   }, [
     sidebarMetrics.faceDetected,
+    sidebarMetrics.facialSymmetry,
+    sidebarMetrics.mouthOpening,
     analysisResults,
     currentIndex,
     protocol.length,
     place,
-    updateFooter,
     updateClinical,
     isMounted,
   ]);
@@ -167,6 +176,17 @@ function Step2Content() {
     searchParams,
   ]);
 
+  const handleSkipPlayback = useCallback(() => {
+    if (!isPlayingAudio) return;
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      audioPlayerRef.current.onended = null;
+    }
+    setIsPlayingAudio(false);
+    handleNext();
+  }, [isPlayingAudio, handleNext]);
+
   const handleToggleRecording = async () => {
     if (!isRecording) {
       setResultScore(null);
@@ -213,7 +233,8 @@ function Step2Content() {
         setAnalysisResults((prev) => [...prev, recordData]);
 
         // ✅ 음성 파일이 있으면 Base64 변환 후 저장
-        if (result.audioBlob) {
+        const audioBlob = result.audioBlob;
+        if (audioBlob) {
           console.log("🎤 Step 2: 음성 파일 저장 시작");
           setIsSaving(true);
 
@@ -246,7 +267,7 @@ function Step2Content() {
               console.log("📊 현재 누적 데이터:", updatedAudios);
 
               // ✅ 오디오 재생
-              const audio = new Audio(URL.createObjectURL(result.audioBlob));
+              const audio = new Audio(URL.createObjectURL(audioBlob));
               audioPlayerRef.current = audio;
               setIsPlayingAudio(true);
               audio.onended = () => {
@@ -266,7 +287,7 @@ function Step2Content() {
             setIsSaving(false);
           };
 
-          reader.readAsDataURL(result.audioBlob);
+          reader.readAsDataURL(audioBlob);
         } else {
           console.warn("⚠️ audioBlob이 없습니다");
           setIsSaving(false);
@@ -305,7 +326,7 @@ function Step2Content() {
 
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 flex flex-col min-h-0 relative p-6 lg:p-10 order-1">
-          <div className="w-full max-w-2xl mx-auto flex flex-col h-full justify-center gap-8">
+          <div className="w-full max-w-2xl mx-auto flex flex-col h-full justify-center gap-5">
             <div
               className={`w-full bg-white rounded-[40px] p-8 lg:p-12 shadow-[0_10px_40px_rgba(0,0,0,0.02)] text-center transition-all ${
                 isRecording
@@ -325,27 +346,52 @@ function Step2Content() {
               </h1>
             </div>
 
-            <div className="h-32 lg:h-40 flex items-center justify-center">
-              {resultScore !== null && (
-                <div className="w-full bg-white rounded-[32px] p-6 shadow-xl border border-orange-50 animate-in zoom-in flex items-center gap-6 relative">
-                  <div className="border-r border-slate-100 pr-6 text-center shrink-0">
-                    <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">
+            <div
+              className={`${resultScore !== null ? "h-36 lg:h-44" : "h-12"} flex items-center justify-center relative transition-all duration-500 ease-out`}
+            >
+              <div
+                className={`w-full bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-6 shadow-xl border border-orange-100/70 flex items-center gap-6 relative overflow-hidden transition-all duration-500 ease-out ${
+                  resultScore !== null
+                    ? "opacity-100 translate-y-0 scale-100"
+                    : "opacity-0 translate-y-2 scale-[0.985] pointer-events-none"
+                }`}
+              >
+                {resultScore !== null && (
+                  <>
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(251,146,60,0.12),transparent_45%)] pointer-events-none" />
+                  <div className="border-r border-orange-100 pr-6 text-center shrink-0 relative z-[1]">
+                    <span className="text-[9px] font-black text-orange-300 uppercase block mb-1">
                       Accuracy
                     </span>
-                    <span className="text-3xl lg:text-4xl font-black text-orange-500">
+                    <span className="text-3xl lg:text-4xl font-black text-orange-500 tracking-tight">
                       {resultScore}%
                     </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[9px] font-black text-slate-300 uppercase mb-1">
+                  <div className="flex-1 min-w-0 relative z-[1]">
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-wider">
                       Detected
                     </p>
-                    <p className="text-sm lg:text-lg font-bold text-slate-700 italic truncate">
+                    <p className="text-sm lg:text-lg font-bold text-slate-700 italic truncate pr-32">
                       "{transcript}"
                     </p>
+                    <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/90 border border-orange-100">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                      <span className="text-[10px] font-black uppercase tracking-wide text-orange-500">
+                        {isPlayingAudio ? "Playback Active" : "Analysis Ready"}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                  {isPlayingAudio && (
+                    <button
+                      onClick={handleSkipPlayback}
+                      className="absolute top-4 right-4 px-3 py-1.5 rounded-full text-[10px] font-black text-white bg-orange-500 hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 z-[2]"
+                    >
+                      스킵하기
+                    </button>
+                  )}
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col items-center gap-4 shrink-0">

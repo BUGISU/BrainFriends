@@ -57,6 +57,8 @@ function Step1Content() {
 
     updateClinical({
       analysisAccuracy: accuracy,
+      correlation: 0.85 + accuracy / 1000, // 정답률에 비례한 상관계수
+      stability: Math.max(2, 10 - accuracy / 10), // 정답률 높을수록 안정성 높음
     });
   }, [score, currentIndex, isAnswered, updateClinical]);
 

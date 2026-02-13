@@ -39,45 +39,49 @@ function ResultContent() {
     [s],
   );
 
+  // src/app/result/page.tsx (useEffect 수정)
+
   useEffect(() => {
     setIsMounted(true);
+
     try {
-      // 1. 모든 가능성 있는 로컬스토리지 키에서 데이터 수집
-      const backups = {
-        step1: JSON.parse(localStorage.getItem("step1_data") || "[]"),
-        step2: JSON.parse(
-          localStorage.getItem("step2_recorded_audios") || "[]",
-        ),
-        step3: JSON.parse(localStorage.getItem("step3_data") || "[]"),
-        step4: JSON.parse(
-          localStorage.getItem("step4_recorded_audios") || "[]",
-        ),
-        step5: JSON.parse(localStorage.getItem("step5_recorded_data") || "[]"),
-        step6: JSON.parse(localStorage.getItem("step6_recorded_data") || "[]"),
-      };
+      // ✅ 데이터 로드 전 100ms 대기 (비동기 저장 여유 시간)
+      setTimeout(() => {
+        const backups = {
+          step1: JSON.parse(localStorage.getItem("step1_data") || "[]"),
+          step2: JSON.parse(
+            localStorage.getItem("step2_recorded_audios") || "[]",
+          ),
+          step3: JSON.parse(localStorage.getItem("step3_data") || "[]"),
+          step4: JSON.parse(
+            localStorage.getItem("step4_recorded_audios") || "[]",
+          ),
+          step5: JSON.parse(
+            localStorage.getItem("step5_recorded_data") || "[]",
+          ),
+          step6: JSON.parse(
+            localStorage.getItem("step6_recorded_data") || "[]",
+          ),
+        };
 
-      // 2. SessionManager는 환자 프로필용으로만 사용 (데이터 누락 방지)
-      const patient = loadPatientProfile();
-      const sm = new SessionManager(
-        patient as any,
-        searchParams.get("place") || "home",
-      );
-      const fullSession = sm.getSession();
+        console.log("📊 [LOAD] Step 1:", backups.step1.length);
+        console.log("📊 [LOAD] Step 2:", backups.step2.length);
+        console.log("📊 [LOAD] Step 3:", backups.step3.length);
+        console.log("📊 [LOAD] Step 4:", backups.step4.length);
+        console.log("📊 [LOAD] Step 5:", backups.step5.length);
+        console.log("📊 [LOAD] Step 6:", backups.step6.length);
 
-      // 3. ✅ 강제 데이터 매핑: 세션 매니저에 없으면 백업에서 무조건 가져옴
-      setSessionData({
-        ...fullSession,
-        step1: { items: backups.step1 },
-        step2: { items: backups.step2 },
-        step3: { items: backups.step3 },
-        step4: { items: backups.step4 },
-        step5: { items: backups.step5 },
-        step6: { items: backups.step6 },
-      });
-
-      console.log("📊 [DEBUG] 전체 로드된 데이터:", backups);
+        setSessionData({
+          step1: { items: backups.step1 },
+          step2: { items: backups.step2 },
+          step3: { items: backups.step3 },
+          step4: { items: backups.step4 },
+          step5: { items: backups.step5 },
+          step6: { items: backups.step6 },
+        });
+      }, 100);
     } catch (e) {
-      console.error("Data Load Error:", e);
+      console.error("❌ Data Load Error:", e);
     }
   }, [searchParams]);
 

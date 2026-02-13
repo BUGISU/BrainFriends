@@ -391,7 +391,7 @@ export function scoreRepetition(correctSyllables: number): number {
  */
 export function scoreObjectNaming(scores: Array<0 | 1 | 2 | 3>): number {
   return Math.min(
-    scores.reduce((sum, score) => sum + score, 0),
+    scores.reduce<number>((sum, score) => sum + score, 0),
     60
   );
 }

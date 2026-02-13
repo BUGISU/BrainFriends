@@ -2,30 +2,28 @@
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 
+interface ClinicalMetrics {
+  systemLatency: number;
+  trackingPrecision: number;
+  analysisAccuracy: number;
+  correlation: number;
+  reliability: number;
+  stability: number;
+}
+
+interface SidebarMetrics {
+  facialSymmetry: number;
+  mouthOpening: number;
+  faceDetected: boolean;
+  cameraActive: boolean;
+  landmarks?: any[];
+}
+
 interface TrainingContextType {
-  clinicalMetrics: {
-    systemLatency: number;
-    trackingPrecision: number;
-    analysisAccuracy: number;
-    correlation: number;
-    reliability: number;
-    stability: number;
-  };
-  sidebarMetrics: {
-    facialSymmetry: number;
-    faceDetected: boolean;
-    cameraActive: boolean;
-    landmarks?: any[]; // ✅ 안면 좌표 데이터 타입 추가
-  };
-  footerData: {
-    leftText: string;
-    rightText: string;
-  };
-  updateClinical: (
-    data: Partial<TrainingContextType["clinicalMetrics"]>,
-  ) => void;
-  updateSidebar: (data: Partial<TrainingContextType["sidebarMetrics"]>) => void;
-  updateFooter: (data: Partial<TrainingContextType["footerData"]>) => void;
+  clinicalMetrics: ClinicalMetrics;
+  sidebarMetrics: SidebarMetrics;
+  updateClinical: (data: Partial<ClinicalMetrics>) => void;
+  updateSidebar: (data: Partial<SidebarMetrics>) => void;
 }
 
 const TrainingContext = createContext<TrainingContextType | undefined>(
@@ -33,7 +31,7 @@ const TrainingContext = createContext<TrainingContextType | undefined>(
 );
 
 export function TrainingProvider({ children }: { children: React.ReactNode }) {
-  const [clinicalMetrics, setClinicalMetrics] = useState({
+  const [clinicalMetrics, setClinicalMetrics] = useState<ClinicalMetrics>({
     systemLatency: 0,
     trackingPrecision: 0,
     analysisAccuracy: 95.2,
@@ -42,28 +40,20 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
     stability: 0,
   });
 
-  const [sidebarMetrics, setSidebarMetrics] = useState({
+  const [sidebarMetrics, setSidebarMetrics] = useState<SidebarMetrics>({
     facialSymmetry: 0,
+    mouthOpening: 0,
     faceDetected: false,
     cameraActive: false,
     landmarks: [],
   });
 
-  const [footerData, setFooterData] = useState({
-    leftText: "",
-    rightText: "",
-  });
-
-  const updateClinical = useCallback((data: any) => {
+  const updateClinical = useCallback((data: Partial<ClinicalMetrics>) => {
     setClinicalMetrics((prev) => ({ ...prev, ...data }));
   }, []);
 
-  const updateSidebar = useCallback((data: any) => {
+  const updateSidebar = useCallback((data: Partial<SidebarMetrics>) => {
     setSidebarMetrics((prev) => ({ ...prev, ...data }));
-  }, []);
-
-  const updateFooter = useCallback((data: any) => {
-    setFooterData((prev) => ({ ...prev, ...data }));
   }, []);
 
   return (
@@ -71,10 +61,8 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
       value={{
         clinicalMetrics,
         sidebarMetrics,
-        footerData,
         updateClinical,
         updateSidebar,
-        updateFooter,
       }}
     >
       {children}

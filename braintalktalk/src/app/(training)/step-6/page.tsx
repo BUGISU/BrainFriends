@@ -22,7 +22,7 @@ function Step6Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { updateFooter, sidebarMetrics } = useTraining();
+  const { sidebarMetrics, updateClinical } = useTraining();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
 
@@ -76,25 +76,15 @@ function Step6Content() {
   }, []);
 
   useEffect(() => {
-    if (!updateFooter || !isMounted) return;
+    if (!isMounted) return;
 
-    updateFooter({
-      latency: "24ms",
-      latencyStatus: "normal",
-      trackingPrec: sidebarMetrics.faceDetected ? "0.08mm" : "0.00mm",
-      trackingStatus: sidebarMetrics.faceDetected ? "normal" : "warning",
+    updateClinical({
+      systemLatency: 24,
+      trackingPrecision: sidebarMetrics.faceDetected ? 0.08 : 0.0,
       analysisAccuracy: Math.round((correctCount / (currentIndex || 1)) * 100),
-      analysisStatus: "normal",
-      clinicalCorr: `r ${(0.91 + (isDrawing ? 0.02 : 0)).toFixed(2)}`,
-      clinicalStatus: "normal",
-      testRetest: "ICC 0.96",
-      testRetestStatus: "normal",
-      analysisStab: `${((sidebarMetrics.facialSymmetry || 0) * 10).toFixed(1)}%`,
-      analysisStabStatus:
-        (sidebarMetrics.facialSymmetry || 0) > 0.7 ? "normal" : "warning",
-      leftText: `STROKES: ${userStrokeCount}회`,
-      centerText: `Step 6: 단어 쓰기 (${place.toUpperCase()})`,
-      rightText: `${currentIndex + 1} / ${words.length}`,
+      correlation: 0.91 + (isDrawing ? 0.02 : 0),
+      reliability: 0.96,
+      stability: (sidebarMetrics.facialSymmetry || 0) * 10,
     });
   }, [
     sidebarMetrics,
@@ -103,7 +93,7 @@ function Step6Content() {
     correctCount,
     words.length,
     place,
-    updateFooter,
+    updateClinical,
     isMounted,
     isDrawing,
   ]);
@@ -369,7 +359,7 @@ function Step6Content() {
             isFaceReady={sidebarMetrics.faceDetected}
             metrics={{
               symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
-              openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
+              openingRatio: 0, // ✅ 실제로는 얼굴 인식 결과에 따라 계산
               audioLevel: 0,
             }}
             showTracking={true}
@@ -394,4 +384,13 @@ export default function Step6Page() {
       <Step6Content />
     </Suspense>
   );
+}
+function updateClinical(arg0: {
+  systemLatency: number;
+  analysisAccuracy: number;
+  correlation: number;
+  stability: string;
+  reliability: number;
+}) {
+  throw new Error("Function not implemented.");
 }

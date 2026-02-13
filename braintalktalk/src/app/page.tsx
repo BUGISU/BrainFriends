@@ -106,6 +106,7 @@ export default function HomePage() {
         name: form.name.trim(),
         age: Number(form.age),
         gender: form.gender,
+        educationYears: 0,
         phone: form.phone || undefined,
         hand: "U",
         language: "한국어",

@@ -47,14 +47,16 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
           <div className="grid grid-cols-6 gap-4 w-full max-w-7xl mx-auto">
             <MetricBox
               label="System Latency"
+              subLabel="처리 속도"
               value={`${clinicalMetrics.systemLatency}ms`}
-              target="≤ 50ms"
+              target="≤ 50"
               color={getStatusColor(clinicalMetrics.systemLatency, 50, false)}
             />
             <MetricBox
               label="Tracking Prec."
+              subLabel="추적 정밀도"
               value={`${clinicalMetrics.trackingPrecision.toFixed(2)}mm`}
-              target="≤ 0.5mm"
+              target="≤ 0.5"
               color={getStatusColor(
                 clinicalMetrics.trackingPrecision,
                 0.5,
@@ -63,8 +65,9 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
             />
             <MetricBox
               label="Analysis Acc."
+              subLabel="분석 정확도"
               value={`${clinicalMetrics.analysisAccuracy.toFixed(1)}%`}
-              target="≥ 95.2%"
+              target="≥ 95.2"
               color={getStatusColor(
                 clinicalMetrics.analysisAccuracy,
                 95.2,
@@ -73,20 +76,23 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
             />
             <MetricBox
               label="Clinical Corr."
+              subLabel="임상 상관도"
               value={`r ${clinicalMetrics.correlation.toFixed(2)}`}
               target="r ≥ 0.85"
               color={getStatusColor(clinicalMetrics.correlation, 0.85, true)}
             />
             <MetricBox
               label="Test-Retest"
+              subLabel="신뢰도 지수"
               value={`ICC ${clinicalMetrics.reliability.toFixed(2)}`}
-              target="ICC ≥ 0.80"
+              target="ICC ≥ 0.8"
               color={getStatusColor(clinicalMetrics.reliability, 0.8, true)}
             />
             <MetricBox
               label="Analysis Stab."
+              subLabel="분석 안정성"
               value={`${clinicalMetrics.stability.toFixed(1)}%`}
-              target="≤ 10%"
+              target="≤ 10"
               color={getStatusColor(clinicalMetrics.stability, 10, false)}
             />
           </div>
@@ -101,6 +107,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
             onMetricsUpdate={(m: any) => {
               updateSidebar({
                 facialSymmetry: m.symmetryScore / 100,
+                mouthOpening: (m.openingRatio || 0) / 100,
                 faceDetected: true,
                 landmarks: m.landmarks, // Context로 좌표 전달
               });

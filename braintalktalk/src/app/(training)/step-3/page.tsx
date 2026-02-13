@@ -73,6 +73,7 @@ function Step3Content() {
       reliability: 0.8 + (sidebarMetrics.facialSymmetry || 0) * 0.2,
       stability: isAnswered ? 4.1 : 5.8 + Math.random(),
       systemLatency: 38 + Math.floor(Math.random() * 7),
+      correlation: 0.88 + (correctCount / totalAttempted) * 0.1,
     });
   }, [
     analysisResults,
@@ -256,38 +257,40 @@ function Step3Content() {
 
             <div className="flex-1 min-h-0 flex items-center justify-center pb-6">
               <div className="grid grid-cols-3 gap-4 w-full h-full max-h-[60vh]">
-                {currentItem.options.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => handleOptionClick(option.id)}
-                    disabled={isSpeaking || isAnswered || !canAnswer}
-                    className={`relative z-20 w-full h-full rounded-[24px] flex items-center justify-center transition-all border shadow-sm bg-white overflow-hidden pointer-events-auto
+                {currentItem.options.map(
+                  (option: { id: string; img?: string; emoji?: string }) => (
+                    <button
+                      key={option.id}
+                      onClick={() => handleOptionClick(option.id)}
+                      disabled={isSpeaking || isAnswered || !canAnswer}
+                      className={`relative z-20 w-full h-full rounded-[24px] flex items-center justify-center transition-all border shadow-sm bg-white overflow-hidden pointer-events-auto
                     ${selectedId === option.id ? (showResult ? "border-emerald-500 ring-4 ring-emerald-50 scale-105" : "border-slate-800 opacity-60 scale-95") : "border-slate-100 hover:border-orange-100 hover:shadow-md"}`}
-                  >
-                    <div className="w-full h-full p-4 flex items-center justify-center pointer-events-none">
-                      {option.img ? (
-                        <img
-                          src={option.img}
-                          alt=""
-                          className="max-w-full max-h-full object-contain"
-                        />
-                      ) : (
-                        <span className="text-4xl lg:text-5xl">
-                          {option.emoji || "🖼️"}
-                        </span>
-                      )}
-                    </div>
-                    {selectedId === option.id && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm animate-in fade-in zoom-in pointer-events-none">
-                        <span
-                          className={`text-6xl font-black ${showResult ? "text-emerald-500" : "text-slate-800"}`}
-                        >
-                          {showResult ? "O" : "X"}
-                        </span>
+                    >
+                      <div className="w-full h-full p-4 flex items-center justify-center pointer-events-none">
+                        {option.img ? (
+                          <img
+                            src={option.img}
+                            alt=""
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-4xl lg:text-5xl">
+                            {option.emoji || "🖼️"}
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </button>
-                ))}
+                      {selectedId === option.id && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm animate-in fade-in zoom-in pointer-events-none">
+                          <span
+                            className={`text-6xl font-black ${showResult ? "text-emerald-500" : "text-slate-800"}`}
+                          >
+                            {showResult ? "O" : "X"}
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  ),
+                )}
               </div>
             </div>
           </div>

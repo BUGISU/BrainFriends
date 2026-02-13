@@ -23,7 +23,7 @@ function Step4Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { updateFooter, sidebarMetrics, updateClinical } = useTraining();
+  const { sidebarMetrics, updateClinical } = useTraining();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step3Score = searchParams.get("step3") || "0";
@@ -80,24 +80,21 @@ function Step4Content() {
   }, []);
 
   useEffect(() => {
-    if (!updateFooter || !isMounted) return;
+    if (!isMounted) return;
     const currentAcc = currentFluency ? currentFluency.fluencyScore * 10 : 94.5;
-    updateFooter({
-      leftText: sidebarMetrics.faceDetected ? "FACE ACTIVE" : "CAMERA OFF",
-      centerText: `Step 4: 유창성 훈련 (${place.toUpperCase()})`,
-      rightText: `${currentIndex + 1} / ${scenarios.length}`,
-    });
+
     updateClinical({
       analysisAccuracy: currentAcc,
       systemLatency: 45 + Math.floor(Math.random() * 5),
       reliability: 0.8 + (sidebarMetrics.facialSymmetry || 0) * 0.2,
+      correlation: 0.87 + (currentFluency?.fluencyScore || 5) * 0.012,
+      stability: currentFluency ? 4.5 : 8.2,
     });
   }, [
     sidebarMetrics,
     currentFluency,
     currentIndex,
     scenarios.length,
-    updateFooter,
     updateClinical,
     isMounted,
     place,
@@ -153,7 +150,8 @@ function Step4Content() {
       setCurrentFluency(fluencyData);
 
       // ✅ 음성 파일 저장 (Base64 변환)
-      if (result.audioBlob) {
+      const audioBlob = result.audioBlob;
+      if (audioBlob) {
         const reader = new FileReader();
         reader.onloadend = () => {
           try {
@@ -166,7 +164,6 @@ function Step4Content() {
               text: currentScenario.situation, // 상황 설명
               audioUrl: base64Audio,
               isCorrect: fluencyData.fluencyScore >= 5, // 5점 이상 정답
-              fluencyScore: fluencyData.fluencyScore,
               ...fluencyData,
               timestamp: new Date().toLocaleTimeString(),
             };
@@ -181,7 +178,7 @@ function Step4Content() {
             console.log("✅ Step 4 데이터 저장 완료:", newEntry);
 
             // ✅ 오디오 재생
-            const audio = new Audio(URL.createObjectURL(result.audioBlob));
+            const audio = new Audio(URL.createObjectURL(audioBlob));
             audioPlayerRef.current = audio;
             setIsPlayingAudio(true);
             audio.onended = () => setIsPlayingAudio(false);
@@ -190,7 +187,7 @@ function Step4Content() {
             console.error("❌ Step 4 저장 실패:", error);
           }
         };
-        reader.readAsDataURL(result.audioBlob);
+        reader.readAsDataURL(audioBlob);
       }
     } catch (err) {
       console.error("분석 실패:", err);

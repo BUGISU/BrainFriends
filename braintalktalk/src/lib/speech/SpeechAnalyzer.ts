@@ -32,7 +32,7 @@ export class AudioRecorder {
   private stream: MediaStream | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
-  private dataArray: Uint8Array | null = null;
+  private dataArray: Uint8Array<ArrayBuffer> | null = null;
   private animationId: number | null = null;
 
   async startRecording(onAudioLevel?: (level: number) => void): Promise<void> {

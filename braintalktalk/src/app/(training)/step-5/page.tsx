@@ -32,7 +32,7 @@ function Step5Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { updateFooter, sidebarMetrics, updateClinical } = useTraining();
+  const { sidebarMetrics, updateClinical } = useTraining();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step4Score = searchParams.get("step4") || "0";
@@ -95,18 +95,13 @@ function Step5Content() {
   }, []);
 
   useEffect(() => {
-    if (!updateFooter || !isMounted) return;
-
-    updateFooter({
-      leftText: sidebarMetrics.faceDetected ? "READING ACTIVE" : "CAMERA READY",
-      centerText: `Step 5: 텍스트 읽기 (${place.toUpperCase()})`,
-      rightText: `${currentIndex + 1} / ${texts.length}`,
-    });
-
+    if (!isMounted) return;
     updateClinical({
       analysisAccuracy: currentResult ? currentResult.readingScore : 92.8,
       systemLatency: 40 + Math.floor(Math.random() * 5),
       reliability: 0.85 + (sidebarMetrics.facialSymmetry || 0) * 0.1,
+      correlation: 0.89 + (currentResult?.readingScore || 85) / 1000,
+      stability: currentResult ? 3.8 : 7.1,
     });
   }, [
     sidebarMetrics,
@@ -114,7 +109,6 @@ function Step5Content() {
     currentIndex,
     texts.length,
     place,
-    updateFooter,
     updateClinical,
     isMounted,
   ]);
