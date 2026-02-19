@@ -1,11 +1,17 @@
 // src/lib/patientStorage.ts
+import { sessionStoreAdapter } from "@/lib/storage/adapters";
 
 export interface PatientProfile {
   sessionId: string;
   name: string;
+  birthDate?: string; // YYYY-MM-DD
   gender: "M" | "F" | "U";
   age: number;
   educationYears: number; // ✅ 추가: 0 (무학), 1-6 (초등), 7+ (중등 이상)
+  onsetDate?: string; // YYYY-MM-DD
+  daysSinceOnset?: number; // 발병 후 경과일
+  hemiplegia?: "Y" | "N";
+  hemianopsia?: "NONE" | "RIGHT" | "LEFT";
   phone?: string;
   hand: "R" | "L" | "U";
   language?: string;
@@ -17,7 +23,7 @@ const KEY = "btt.patient_profile";
 
 export function getOrCreateSessionId(): string {
   if (typeof window === "undefined") return "server";
-  const existing = sessionStorage.getItem("btt.sessionId");
+  const existing = sessionStoreAdapter.getItem("btt.sessionId");
   if (existing) return existing;
 
   let sid: string;
@@ -31,19 +37,24 @@ export function getOrCreateSessionId(): string {
     });
   }
 
-  sessionStorage.setItem("btt.sessionId", sid);
+  sessionStoreAdapter.setItem("btt.sessionId", sid);
   return sid;
 }
 
 export function loadPatientProfile(): PatientProfile | null {
   if (typeof window === "undefined") return null;
-  const raw = sessionStorage.getItem(KEY);
+  const raw = sessionStoreAdapter.getItem(KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
     return {
       ...parsed,
+      birthDate: parsed.birthDate ?? "",
       educationYears: parsed.educationYears ?? 0, // ✅ 안전장치: 값이 없으면 0 반환
+      onsetDate: parsed.onsetDate ?? "",
+      daysSinceOnset: parsed.daysSinceOnset ?? undefined,
+      hemiplegia: parsed.hemiplegia ?? "N",
+      hemianopsia: parsed.hemianopsia ?? "NONE",
     } as PatientProfile;
   } catch {
     return null;
@@ -64,13 +75,13 @@ export function savePatientProfile(
     updatedAt: now,
   };
 
-  sessionStorage.setItem(KEY, JSON.stringify(next));
+  sessionStoreAdapter.setItem(KEY, JSON.stringify(next));
   return next;
 }
 
 export function clearAllStorage() {
   if (typeof window !== "undefined") {
-    sessionStorage.removeItem(KEY);
-    sessionStorage.removeItem("btt.sessionId");
+    sessionStoreAdapter.removeItem(KEY);
+    sessionStoreAdapter.removeItem("btt.sessionId");
   }
 }

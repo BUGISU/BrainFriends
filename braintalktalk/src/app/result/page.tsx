@@ -3,7 +3,135 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { loadPatientProfile } from "@/lib/patientStorage";
-import { SessionManager } from "@/lib/kwab/SessionManager";
+
+type ExportFile = {
+  name: string;
+  data: Uint8Array;
+};
+
+function makeCrc32Table() {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = (c & 1) ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+}
+
+const CRC32_TABLE = makeCrc32Table();
+
+function crc32(data: Uint8Array) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    const idx = (crc ^ data[i]) & 0xff;
+    crc = (CRC32_TABLE[idx] ^ (crc >>> 8)) >>> 0;
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function concatUint8Arrays(chunks: Uint8Array[]) {
+  const total = chunks.reduce((sum, c) => sum + c.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
+
+function dataUrlToBytes(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return { bytes: new Uint8Array(), mime: "application/octet-stream" };
+  const mime = match[1] || "application/octet-stream";
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { bytes, mime };
+}
+
+function extensionFromMime(mime: string) {
+  if (mime.includes("webm")) return "webm";
+  if (mime.includes("mpeg")) return "mp3";
+  if (mime.includes("mp4")) return "m4a";
+  if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("wav")) return "wav";
+  if (mime.includes("png")) return "png";
+  if (mime.includes("jpeg") || mime.includes("jpg")) return "jpg";
+  if (mime.includes("webp")) return "webp";
+  return "bin";
+}
+
+function createZipBlob(files: ExportFile[]) {
+  const localChunks: Uint8Array[] = [];
+  const centralChunks: Uint8Array[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBytes = new TextEncoder().encode(file.name);
+    const crc = crc32(file.data);
+    const size = file.data.length;
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, 0, true);
+    localView.setUint16(12, 0, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, size, true);
+    localView.setUint32(22, size, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    localChunks.push(localHeader, file.data);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, 0, true);
+    centralView.setUint16(14, 0, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, size, true);
+    centralView.setUint32(24, size, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    centralChunks.push(centralHeader);
+    offset += localHeader.length + file.data.length;
+  }
+
+  const centralSize = centralChunks.reduce((sum, c) => sum + c.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, offset, true);
+  endView.setUint16(20, 0, true);
+
+  const zipBytes = concatUint8Arrays([...localChunks, ...centralChunks, end]);
+  return new Blob([zipBytes], { type: "application/zip" });
+}
 
 function ResultContent() {
   const router = useRouter();
@@ -92,6 +220,92 @@ function ResultContent() {
     setPlayingIndex(id);
     audio.onended = () => setPlayingIndex(null);
     audio.play();
+  };
+
+  const handleExportData = () => {
+    if (!sessionData) return;
+
+    const patient = loadPatientProfile();
+    const now = new Date();
+    const testDateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+    const safeToken = (v: string) =>
+      v.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "");
+
+    const rawBirthDate =
+      (patient as any)?.birthDate ||
+      (patient as any)?.birthdate ||
+      (patient as any)?.dob ||
+      "";
+    const birthDate = rawBirthDate
+      ? String(rawBirthDate).replace(/[^\d]/g, "")
+      : "unknown";
+    const patientName = safeToken(patient?.name || "patient");
+
+    const exportPayload = {
+      exportedAt: now.toISOString(),
+      patient,
+      summaryScores: {
+        step1: s[1],
+        step2: s[2],
+        step3: s[3],
+        step4: s[4],
+        step5: s[5],
+        step6: s[6],
+      },
+      details: sessionData,
+    };
+
+    const files: ExportFile[] = [
+      {
+        name: "scores.json",
+        data: new TextEncoder().encode(JSON.stringify(exportPayload, null, 2)),
+      },
+    ];
+
+    const stepEntries = [
+      { key: "step2", items: sessionData.step2?.items || [] },
+      { key: "step4", items: sessionData.step4?.items || [] },
+      { key: "step5", items: sessionData.step5?.items || [] },
+    ];
+
+    stepEntries.forEach((step) => {
+      (step.items as any[]).forEach((item, idx) => {
+        const audioUrl = item?.audioUrl;
+        if (typeof audioUrl !== "string" || !audioUrl.startsWith("data:")) return;
+        const { bytes, mime } = dataUrlToBytes(audioUrl);
+        if (!bytes.length) return;
+        const ext = extensionFromMime(mime);
+        files.push({
+          name: `audio/${step.key}_${idx + 1}.${ext}`,
+          data: bytes,
+        });
+      });
+    });
+
+    const step6Items = (sessionData.step6?.items || []) as any[];
+    step6Items.forEach((item, idx) => {
+      const imageUrl = item?.userImage;
+      if (typeof imageUrl !== "string" || !imageUrl.startsWith("data:")) return;
+      const { bytes, mime } = dataUrlToBytes(imageUrl);
+      if (!bytes.length) return;
+      const ext = extensionFromMime(mime);
+      files.push({
+        name: `images/step6_${idx + 1}.${ext}`,
+        data: bytes,
+      });
+    });
+
+    const zipBlob = createZipBlob(files);
+    const url = URL.createObjectURL(zipBlob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${patientName}-${birthDate}-${testDateTime}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
   };
 
   const chartPoints = useMemo(() => {
@@ -294,16 +508,22 @@ function ResultContent() {
         </section>
 
         {/* 하단 버튼 영역 */}
-        <div className="flex gap-4 pb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-12">
+          <button
+            onClick={handleExportData}
+            className="py-5 bg-orange-500 text-white rounded-[24px] font-black"
+          >
+            데이터 저장하기
+          </button>
           <button
             onClick={() => window.print()}
-            className="flex-1 py-5 bg-slate-900 text-white rounded-[24px] font-black"
+            className="py-5 bg-slate-900 text-white rounded-[24px] font-black"
           >
             리포트 PDF 저장
           </button>
           <button
             onClick={() => router.push("/")}
-            className="flex-1 py-5 bg-white text-slate-400 border border-slate-200 rounded-[24px] font-black"
+            className="py-5 bg-white text-slate-400 border border-slate-200 rounded-[24px] font-black"
           >
             처음으로
           </button>

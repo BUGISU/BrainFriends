@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   try {
     const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === "true";
 
-    // 1. 테스트 모드 처리
+    // 테스트 모드: STT API 호출 없이 고정 응답
     if (isDevMode) {
       return NextResponse.json({
         text: "테스트 모드 응답입니다.",
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. FormData 및 API 키 확인
+    // 1. FormData 및 API 키 확인
     const formData = await req.formData();
     const apiKey = process.env.OPENAI_API_KEY;
 
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "서버 API 키 누락" }, { status: 500 });
     }
 
-    // 3. OpenAI API 호출
+    // 2. OpenAI API 호출
     const response = await fetch(
       "https://api.openai.com/v1/audio/transcriptions",
       {

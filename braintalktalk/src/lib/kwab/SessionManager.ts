@@ -17,6 +17,7 @@ import {
   ReadingResult,
   WritingResult,
 } from "./KWABScoring";
+import { localStoreAdapter } from "@/lib/storage/adapters";
 
 // ============================================================================
 // 1. Step별 결과 타입
@@ -112,6 +113,7 @@ export interface TrainingSession {
   sessionId: string;
   patient: PatientProfile;
   place: string; // "공원", "마트" 등
+  patientKey: string;
   startedAt: number;
   completedAt?: number;
 
@@ -131,21 +133,25 @@ export interface TrainingSession {
 // 3. SessionManager 클래스
 // ============================================================================
 
-const SESSION_STORAGE_KEY = "kwab_training_session";
+const SESSION_STORAGE_PREFIX = "kwab_training_session";
 
 export class SessionManager {
   private session: TrainingSession;
+  private storageKey: string;
 
   constructor(patient: PatientProfile, place: string) {
+    this.storageKey = SessionManager.getStorageKey(patient, place);
+
     // 기존 세션 로드 또는 새로 생성
-    const existing = this.loadSession();
-    if (existing && existing.patient.age === patient.age) {
+    const existing = this.loadSession(this.storageKey);
+    if (existing) {
       this.session = existing;
     } else {
       this.session = {
         sessionId: `session_${Date.now()}`,
         patient,
         place,
+        patientKey: SessionManager.getPatientKey(patient),
         startedAt: Date.now(),
       };
       this.saveSession();
@@ -307,13 +313,13 @@ export class SessionManager {
 
   private saveSession() {
     if (typeof window !== "undefined") {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(this.session));
+      localStoreAdapter.setItem(this.storageKey, JSON.stringify(this.session));
     }
   }
 
-  private loadSession(): TrainingSession | null {
+  private loadSession(storageKey: string): TrainingSession | null {
     if (typeof window !== "undefined") {
-      const data = localStorage.getItem(SESSION_STORAGE_KEY);
+      const data = localStoreAdapter.getItem(storageKey);
       if (data) {
         try {
           return JSON.parse(data);
@@ -354,15 +360,96 @@ export class SessionManager {
   // 세션 초기화
   // ========================================================================
 
+  private static getPatientKey(patient: PatientProfile): string {
+    const normalize = (v: unknown) =>
+      String(v ?? "")
+        .trim()
+        .toLowerCase();
+
+    const p = patient as any;
+    return [
+      normalize(p.name),
+      normalize(p.gender),
+      normalize(patient.age),
+      normalize(patient.educationYears),
+      normalize(p.onsetDate),
+      normalize(p.hemiplegia),
+      normalize(p.hemianopsia),
+    ].join("|");
+  }
+
+  private static getStorageKey(patient: PatientProfile, place: string): string {
+    return `${SESSION_STORAGE_PREFIX}:${SessionManager.getPatientKey(patient)}:${place}`;
+  }
+
+  private static buildProgressParams(session: TrainingSession) {
+    const step1 = String(session.step1?.correctAnswers ?? 0);
+    const step2 = String(Math.round(session.step2?.averagePronunciation ?? 0));
+    const step3 = String(session.step3?.score ?? 0);
+    const step4 = String(session.step4?.score ?? 0);
+    const step5 = session.step5
+      ? String(
+          Math.round(
+            (session.step5.correctAnswers / session.step5.totalQuestions) * 100,
+          ),
+        )
+      : "0";
+    const step6 = String(session.step6?.accuracy ?? 0);
+
+    return { step1, step2, step3, step4, step5, step6 };
+  }
+
+  static getResumePath(patient: PatientProfile, place: string): string {
+    if (typeof window === "undefined") {
+      return `/step-1?place=${encodeURIComponent(place)}`;
+    }
+
+    const key = SessionManager.getStorageKey(patient, place);
+    const raw = localStoreAdapter.getItem(key);
+    if (!raw) return `/step-1?place=${encodeURIComponent(place)}`;
+
+    try {
+      const session = JSON.parse(raw) as TrainingSession;
+      const s = SessionManager.buildProgressParams(session);
+      const p = encodeURIComponent(place);
+
+      if (!session.step1) return `/step-1?place=${p}`;
+      if (!session.step2) return `/step-2?place=${p}&step1=${s.step1}`;
+      if (!session.step3)
+        return `/step-3?place=${p}&step1=${s.step1}&step2=${s.step2}`;
+      if (!session.step4)
+        return `/step-4?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}`;
+      if (!session.step5)
+        return `/step-5?place=${p}&step3=${s.step3}&step4=${s.step4}`;
+      if (!session.step6)
+        return `/step-6?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}&step4=${s.step4}&step5=${s.step5}`;
+
+      return `/result?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}&step4=${s.step4}&step5=${s.step5}&step6=${s.step6}`;
+    } catch {
+      return `/step-1?place=${encodeURIComponent(place)}`;
+    }
+  }
+
   static clearSession() {
     if (typeof window !== "undefined") {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
+      const keysToRemove = localStoreAdapter.keys().filter((k) =>
+        k.startsWith(`${SESSION_STORAGE_PREFIX}:`),
+      );
+      keysToRemove.forEach((k) => localStoreAdapter.removeItem(k));
     }
+  }
+
+  static clearSessionFor(patient: PatientProfile, place: string) {
+    if (typeof window === "undefined") return;
+    const key = SessionManager.getStorageKey(patient, place);
+    localStoreAdapter.removeItem(key);
   }
 
   static hasActiveSession(): boolean {
     if (typeof window !== "undefined") {
-      return localStorage.getItem(SESSION_STORAGE_KEY) !== null;
+      return localStoreAdapter.keys().some((k) =>
+        k.startsWith(`${SESSION_STORAGE_PREFIX}:`),
+      );
     }
     return false;
   }

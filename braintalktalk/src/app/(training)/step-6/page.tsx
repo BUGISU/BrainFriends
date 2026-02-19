@@ -362,7 +362,7 @@ function Step6Content() {
               openingRatio: 0, // ✅ 실제로는 얼굴 인식 결과에 따라 계산
               audioLevel: 0,
             }}
-            showTracking={true}
+            showTracking={false}
             scoreLabel="진행률"
             scoreValue={`${currentIndex + (phase === "review" ? 1 : 0)} / ${words.length}`}
           />

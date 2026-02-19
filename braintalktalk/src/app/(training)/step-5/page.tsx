@@ -132,7 +132,17 @@ function Step5Content() {
           sampleRate: 16000,
         },
       });
-      const mediaRecorder = new MediaRecorder(stream);
+      const preferredMimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+      ];
+      const selectedMimeType = preferredMimeTypes.find((type) =>
+        MediaRecorder.isTypeSupported(type),
+      );
+      const mediaRecorder = selectedMimeType
+        ? new MediaRecorder(stream, { mimeType: selectedMimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -141,8 +151,10 @@ function Step5Content() {
 
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
+        const recordedMimeType =
+          mediaRecorder.mimeType?.split(";")[0] || "audio/webm";
         const audioBlob = new Blob(audioChunksRef.current, {
-          type: "audio/wav",
+          type: recordedMimeType,
         });
 
         const wpm = Math.round(
@@ -414,7 +426,7 @@ function Step5Content() {
                 openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
                 audioLevel: phase === "reading" ? 40 : 0,
               }}
-              showTracking={true}
+              showTracking={false}
               scoreLabel="현재 성취도"
               scoreValue={
                 currentResult ? `${currentResult.readingScore}%` : "-"

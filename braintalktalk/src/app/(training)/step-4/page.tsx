@@ -110,9 +110,7 @@ function Step4Content() {
 
   const startRecording = async () => {
     try {
-      const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-      if (!analyzerRef.current)
-        analyzerRef.current = new SpeechAnalyzer(apiKey!);
+      if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
       await analyzerRef.current.startAnalysis((level) => setAudioLevel(level));
       setPhase("recording");
       setRecordingTime(0);
@@ -389,7 +387,7 @@ function Step4Content() {
                 openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
                 audioLevel: audioLevel,
               }}
-              showTracking={true}
+              showTracking={false}
               scoreLabel="K-WAB 유창성"
               scoreValue={
                 currentFluency ? `${currentFluency.fluencyScore}/10` : undefined

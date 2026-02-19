@@ -122,7 +122,6 @@ export class AudioRecorder {
 
 // 2. Whisper API 연동
 export class WhisperTranscriber {
-  constructor(private apiKey: string) {}
   async transcribe(
     audioBlob: Blob,
   ): Promise<{ text: string; confidence: number }> {
@@ -307,8 +306,8 @@ export class SpeechAnalyzer {
   private pronunciationAnalyzer = new PronunciationAnalyzer();
   private startTime: number = 0;
 
-  constructor(apiKey: string) {
-    this.transcriber = new WhisperTranscriber(apiKey);
+  constructor() {
+    this.transcriber = new WhisperTranscriber();
   }
 
   async startAnalysis(onAudioLevel?: (level: number) => void) {
@@ -319,8 +318,8 @@ export class SpeechAnalyzer {
   async stopAnalysis(expectedText: string): Promise<SpeechAnalysisResult> {
     const audioBlob = await this.recorder.stopRecording();
     const duration = Date.now() - this.startTime;
-
     const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === "true";
+
     if (isDevMode) {
       return {
         transcript: expectedText,

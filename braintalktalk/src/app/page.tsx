@@ -1,4 +1,3 @@
-// src/app/page.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -6,108 +5,107 @@ import { useRouter } from "next/navigation";
 import { savePatientProfile, loadPatientProfile } from "@/lib/patientStorage";
 
 type Gender = "M" | "F" | "U";
+type Hemiplegia = "Y" | "N";
+type Hemianopsia = "NONE" | "RIGHT" | "LEFT";
 
 interface FormState {
   name: string;
+  birthDate: string;
   age: string;
+  educationYears: string;
   gender: Gender;
-  phone: string;
+  onsetDate: string;
+  hemiplegia: Hemiplegia;
+  hemianopsia: Hemianopsia;
 }
 
 export default function HomePage() {
   const router = useRouter();
   const [err, setErr] = useState("");
   const [isRequesting, setIsRequesting] = useState(false);
-  const [isDenied, setIsDenied] = useState(false); // ✅ 권한 거부 상태 관리
+  const [isDenied, setIsDenied] = useState(false);
 
   const [form, setForm] = useState<FormState>(() => {
     const prev = loadPatientProfile();
     return {
       name: prev?.name ?? "",
+      birthDate: prev?.birthDate ?? "",
       age: prev?.age ? String(prev.age) : "",
+      educationYears: prev?.educationYears ? String(prev.educationYears) : "",
       gender: (prev?.gender as Gender) ?? "U",
-      phone: prev?.phone ?? "",
+      onsetDate: prev?.onsetDate ?? "",
+      hemiplegia: (prev?.hemiplegia as Hemiplegia) ?? "N",
+      hemianopsia: (prev?.hemianopsia as Hemianopsia) ?? "NONE",
     };
   });
 
-  const formatPhone = (val: string): string => {
-    const nums = val.replace(/[^\d]/g, "");
-    if (nums.length <= 3) return nums;
-    if (nums.length <= 7) return `${nums.slice(0, 3)}-${nums.slice(3)}`;
-    return `${nums.slice(0, 3)}-${nums.slice(3, 7)}-${nums.slice(7, 11)}`;
+  const calcDaysSinceOnset = (onsetDate: string): number | null => {
+    if (!onsetDate) return null;
+    const onset = new Date(`${onsetDate}T00:00:00`);
+    if (Number.isNaN(onset.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffMs = today.getTime() - onset.getTime();
+    return diffMs < 0 ? 0 : Math.floor(diffMs / (1000 * 60 * 60 * 24));
   };
 
-  const handleNameChange = (v: string) => setForm((p) => ({ ...p, name: v }));
-  const handleAgeChange = (v: string) =>
-    setForm((p) => ({ ...p, age: v.replace(/[^\d]/g, "") }));
-  const handleGenderChange = (v: Gender) =>
-    setForm((p) => ({ ...p, gender: v }));
-  const handlePhoneChange = (v: string) =>
-    setForm((p) => ({ ...p, phone: formatPhone(v) }));
+  const getTodayLocalDate = () => {
+    const now = new Date();
+    const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+    return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+  };
 
-  // ✅ 카메라 및 마이크 권한 요청 함수 (버튼 클릭 시 재시도 가능)
+  const todayLocalDate = getTodayLocalDate();
+  const daysSinceOnset = calcDaysSinceOnset(form.onsetDate);
+
+  const updateForm = (key: keyof FormState, val: string) => {
+    setForm((p) => ({ ...p, [key]: val }));
+  };
+
   const requestPermissions = async () => {
     setIsRequesting(true);
     setErr("");
-
     try {
-      // 1. 먼저 브라우저 권한 API로 상태 확인 (선택 사항)
-      if (navigator.permissions && navigator.permissions.query) {
-        const camStatus = await navigator.permissions.query({
-          name: "camera" as PermissionName,
-        });
-        if (camStatus.state === "denied") {
-          setErr("브라우저 설정에서 카메라 차단을 직접 풀어주셔야 합니다.");
-          setIsDenied(true);
-          setIsRequesting(false);
-          return false;
-        }
-      }
-
-      // 2. 실제 스트림 요청
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
-
       stream.getTracks().forEach((track) => track.stop());
       setIsDenied(false);
       setIsRequesting(false);
       return true;
     } catch (error: any) {
-      console.error("Permission error:", error);
       setIsDenied(true);
       setIsRequesting(false);
-
-      // 에러 종류에 따른 메시지 세분화
-      if (error.name === "NotAllowedError") {
-        setErr("권한이 거부되었습니다. 주소창의 자물쇠 아이콘을 확인하세요.");
-      } else if (error.name === "NotFoundError") {
-        setErr("카메라 또는 마이크 하드웨어를 찾을 수 없습니다.");
-      } else if (error.name === "NotReadableError") {
-        setErr("카메라가 다른 프로그램(줌, 카톡 등)에서 사용 중입니다.");
-      } else {
-        setErr("장치 접근 중 오류가 발생했습니다.");
-      }
+      setErr("카메라 및 마이크 접근 권한이 필요합니다.");
       return false;
     }
   };
 
   const start = async () => {
-    setErr("");
-    if (!form.name.trim()) return setErr("성명을 입력해 주세요.");
-    if (!form.age) return setErr("나이를 입력해 주세요.");
-    if (form.gender === "U") return setErr("성별을 선택해 주세요.");
-
+    if (
+      !form.name.trim() ||
+      !form.birthDate ||
+      !form.age ||
+      form.gender === "U" ||
+      !form.educationYears ||
+      !form.onsetDate
+    ) {
+      return setErr("모든 필수 항목(*)을 입력해 주세요.");
+    }
+    if (form.onsetDate > todayLocalDate) {
+      return setErr("발병일은 오늘 이후 날짜를 선택할 수 없습니다.");
+    }
+    if (form.birthDate > todayLocalDate) {
+      return setErr("생년월일은 오늘 이후 날짜를 선택할 수 없습니다.");
+    }
     const hasPermission = await requestPermissions();
-
     if (hasPermission) {
       savePatientProfile({
-        name: form.name.trim(),
+        ...form,
         age: Number(form.age),
-        gender: form.gender,
-        educationYears: 0,
-        phone: form.phone || undefined,
+        educationYears: Number(form.educationYears),
+        daysSinceOnset: daysSinceOnset ?? undefined,
         hand: "U",
         language: "한국어",
       });
@@ -116,48 +114,52 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F8F8F8] flex items-center justify-center p-6 text-black">
-      <div className="w-full max-w-5xl bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col md:flex-row border-2 border-[#DAA520]/10">
-        {/* 왼쪽 섹션: 입력 폼 */}
-        <section className="flex-[1.8] p-12">
-          <header className="mb-10">
-            <h1 className="text-4xl font-black text-[#8B4513]">브레인톡톡</h1>
-            <p className="text-[#DAA520] font-bold mt-2 uppercase tracking-widest text-sm">
-              Patient Registration & Setup
+    <main className="min-h-screen bg-[#F0F2F5] flex items-center justify-center p-4 text-black font-sans">
+      <div className="w-full max-w-5xl bg-white rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col md:flex-row border border-white/20">
+        {/* Left Section: Registration Form */}
+        <section className="flex-[1.6] p-8 md:p-12 overflow-y-auto max-h-[90vh]">
+          <header className="mb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="w-8 h-8 bg-[#8B4513] rounded-lg flex items-center justify-center text-white font-bold">
+                B
+              </span>
+              <h1 className="text-3xl font-extrabold text-[#2D3436] tracking-tight">
+                브레인톡톡
+              </h1>
+            </div>
+            <p className="text-[#DAA520] font-bold uppercase tracking-[0.2em] text-[10px]">
+              Patient Clinical Data Setup
             </p>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+            {/* 1행: 성명 & 성별 */}
             <Field label="학습자 성명 *">
               <input
                 value={form.name}
-                onChange={(e) => handleNameChange(e.target.value)}
+                onChange={(e) => updateForm("name", e.target.value)}
                 className="input-style"
-                placeholder="홍길동"
+                placeholder="성명을 입력하세요"
               />
             </Field>
 
-            <Field label="학습자 나이 *">
+            <Field label="생년월일 *">
               <input
-                value={form.age}
-                onChange={(e) => handleAgeChange(e.target.value)}
+                type="date"
+                value={form.birthDate}
+                onChange={(e) => updateForm("birthDate", e.target.value)}
                 className="input-style"
-                placeholder="숫자만"
-                inputMode="numeric"
+                max={todayLocalDate}
               />
             </Field>
 
             <Field label="성별 *">
-              <div className="flex gap-2">
+              <div className="flex p-1 bg-gray-100 rounded-xl h-[48px]">
                 {(["M", "F"] as const).map((g) => (
                   <button
                     key={g}
-                    onClick={() => handleGenderChange(g)}
-                    className={`flex-1 py-4 rounded-2xl font-black transition-all ${
-                      form.gender === g
-                        ? "bg-[#DAA520] text-white shadow-lg"
-                        : "bg-gray-100 text-gray-400"
-                    }`}
+                    onClick={() => updateForm("gender", g)}
+                    className={`flex-1 rounded-lg text-sm font-bold transition-all ${form.gender === g ? "bg-white text-[#8B4513] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
                   >
                     {g === "M" ? "남성" : "여성"}
                   </button>
@@ -165,131 +167,198 @@ export default function HomePage() {
               </div>
             </Field>
 
-            <Field label="연락처 (자동 하이픈)">
-              <input
-                value={form.phone}
-                onChange={(e) => handlePhoneChange(e.target.value)}
-                className="input-style"
-                placeholder="010-0000-0000"
-                maxLength={13}
-              />
+            {/* 2행: 나이 & 교육년수 (가로 배치) */}
+            <Field label="나이 / 교육년수 *">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <input
+                    value={form.age}
+                    onChange={(e) =>
+                      updateForm("age", e.target.value.replace(/\D/g, ""))
+                    }
+                    className="input-style w-full pr-8"
+                    placeholder="나이"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 font-bold">
+                    세
+                  </span>
+                </div>
+                <div className="relative flex-1">
+                  <input
+                    value={form.educationYears}
+                    onChange={(e) =>
+                      updateForm(
+                        "educationYears",
+                        e.target.value.replace(/\D/g, ""),
+                      )
+                    }
+                    className="input-style w-full pr-8"
+                    placeholder="교육년수"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 font-bold">
+                    년
+                  </span>
+                </div>
+              </div>
+            </Field>
+
+            {/* 3행: 발병일 및 경과일 (가로 배치) */}
+            <Field label="발병일 및 경과일 *">
+              <div className="flex gap-3">
+                <input
+                  type="date"
+                  value={form.onsetDate}
+                  onChange={(e) => updateForm("onsetDate", e.target.value)}
+                  className="input-style flex-[1.4] w-full"
+                  max={todayLocalDate}
+                />
+                <div
+                  className={`flex-1 flex items-center justify-center rounded-xl font-black text-xs transition-all ${
+                    daysSinceOnset !== null
+                      ? "bg-[#8B4513] text-white"
+                      : "bg-gray-50 text-gray-300 border-2 border-dashed border-gray-100"
+                  }`}
+                >
+                  {daysSinceOnset !== null ? `D+${daysSinceOnset}` : "경과일"}
+                </div>
+              </div>
+            </Field>
+
+            {/* 4행: 편마비 & 반맹증 */}
+            <Field label="편마비 유무 *">
+              <div className="flex gap-2 h-[48px]">
+                {[
+                  { k: "Y", l: "있음" },
+                  { k: "N", l: "없음" },
+                ].map((item) => (
+                  <button
+                    key={item.k}
+                    onClick={() =>
+                      updateForm("hemiplegia", item.k as Hemiplegia)
+                    }
+                    className={`flex-1 rounded-xl text-sm font-bold border-2 transition-all ${form.hemiplegia === item.k ? "border-[#DAA520] bg-[#FFFBEB] text-[#8B4513]" : "border-gray-50 bg-gray-50 text-gray-400"}`}
+                  >
+                    {item.l}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            <Field label="반맹증(시야 결손) *">
+              <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl h-[48px]">
+                {[
+                  { k: "NONE", l: "없음" },
+                  { k: "LEFT", l: "좌측" },
+                  { k: "RIGHT", l: "우측" },
+                ].map((item) => (
+                  <button
+                    key={item.k}
+                    onClick={() =>
+                      updateForm("hemianopsia", item.k as Hemianopsia)
+                    }
+                    className={`flex-1 rounded-lg text-[11px] font-bold transition-all ${form.hemianopsia === item.k ? "bg-white text-[#8B4513] shadow-sm" : "text-gray-400"}`}
+                  >
+                    {item.l}
+                  </button>
+                ))}
+              </div>
             </Field>
           </div>
-
-          {/* 권한 안내 박스 */}
           <div
-            className={`mt-8 p-5 rounded-2xl border flex items-start gap-4 transition-colors ${isDenied ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"}`}
+            className={`mt-8 p-4 rounded-2xl border flex items-center gap-4 transition-all ${isDenied ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-100"}`}
           >
-            <span className="text-2xl">{isDenied ? "🛑" : "🛡️"}</span>
-            <div className="space-y-1">
+            <div
+              className={`w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-sm ${isDenied ? "bg-white text-red-500" : "bg-white text-blue-500"}`}
+            >
+              {isDenied ? "!" : "i"}
+            </div>
+            <div className="flex-1">
               <p
-                className={`text-xs font-bold ${isDenied ? "text-red-600" : "text-gray-600"}`}
+                className={`text-xs font-bold ${isDenied ? "text-red-700" : "text-blue-700"}`}
               >
-                {isDenied
-                  ? "권한 허용이 필요합니다"
-                  : "카메라 및 마이크 권한 안내"}
+                {isDenied ? "권한 재설정 필요" : "시스템 하드웨어 체크"}
               </p>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                {isDenied
-                  ? "차단된 권한을 직접 해제해야 합니다. 주소창 왼쪽 자물쇠 아이콘을 클릭하여 카메라와 마이크를 '허용'으로 변경해주세요."
-                  : "정확한 분석을 위해 학습 시작 시 브라우저 상단의 허용 버튼을 반드시 눌러주세요."}
+              <p className="text-[10px] text-gray-500 opacity-80 leading-tight">
+                발화 분석을 위해 주소창 왼쪽 자물쇠 버튼을 눌러 카메라/마이크를
+                허용해 주세요.
               </p>
             </div>
           </div>
 
           {err && (
-            <p className="mt-4 text-red-500 font-bold text-sm">⚠️ {err}</p>
+            <p className="mt-4 text-center text-red-500 font-bold text-xs animate-bounce">
+              ⚠️ {err}
+            </p>
           )}
 
-          {/* ✅ 버튼 섹션: 권한 거부 시 '재시도 버튼'으로 교체 */}
-          <div className="mt-8">
-            {isDenied ? (
-              <div className="space-y-3">
-                <button
-                  onClick={requestPermissions}
-                  className="w-full bg-red-500 text-white py-6 rounded-3xl text-xl font-black shadow-xl hover:bg-red-600 active:scale-95 transition-all"
-                >
-                  권한 다시 요청하기
-                </button>
-                <p className="text-center text-[10px] text-gray-400 italic">
-                  * 다시 요청해도 반응이 없다면 브라우저 설정에서 권한을
-                  수동으로 풀어야 합니다.
-                </p>
-              </div>
-            ) : (
-              <button
-                onClick={start}
-                disabled={isRequesting}
-                className={`w-full bg-[#8B4513] text-white py-6 rounded-3xl text-2xl font-black shadow-xl hover:bg-[#6D3610] active:scale-95 transition-all ${
-                  isRequesting ? "opacity-70 cursor-not-allowed" : ""
-                }`}
-              >
-                {isRequesting ? "권한 확인 중..." : "학습 시작하기"}
-              </button>
-            )}
-          </div>
+          <button
+            onClick={start}
+            disabled={isRequesting}
+            className={`mt-6 w-full py-5 rounded-2xl text-xl font-black shadow-[0_10px_20px_rgba(139,69,19,0.2)] transition-all active:scale-95 ${isRequesting ? "bg-gray-400 cursor-not-allowed" : "bg-[#8B4513] hover:bg-[#6D3610] text-white"}`}
+          >
+            {isRequesting ? "연결 확인 중..." : "학습 대시보드 진입"}
+          </button>
         </section>
 
-        {/* 오른쪽 사이드바: 분석 정보 */}
-        <aside className="flex-1 bg-[#1A1A1A] p-12 text-white flex flex-col justify-between">
-          <div className="space-y-8">
-            <h2 className="text-2xl font-bold leading-tight">
-              SaMD 데이터 기반
+        {/* Right Section: Information Aside */}
+        <aside className="flex-[0.8] bg-[#2D3436] p-10 text-white flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#DAA520] opacity-10 rounded-full -mr-16 -mt-16" />
+          <div className="relative z-10 space-y-8">
+            <h2 className="text-2xl font-bold leading-snug">
+              실시간
               <br />
-              언어 지수 분석
+              <span className="text-[#DAA520]">언어 재활</span> 분석 시스템
             </h2>
-            <div className="bg-white/5 p-6 rounded-3xl space-y-4">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-500 font-bold">연령 기준</span>
-                <span className="text-[#DAA520] font-black">
-                  {form.age && Number(form.age) >= 65
-                    ? "65세 이상 군"
-                    : "65세 미만 군"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center border-t border-white/5 pt-4 text-sm">
-                <span className="text-gray-500 font-bold">
-                  K-WAB 규준(평균)
-                </span>
-                <span className="text-white font-mono">
-                  {form.age && Number(form.age) >= 65 ? "88.09" : "90.73"}
-                </span>
-              </div>
-            </div>
 
-            {/* 자물쇠 가이드 이미지 (필요시 삽입) */}
-            {isDenied && (
-              <div className="mt-4 p-4 border border-white/10 rounded-2xl bg-white/5 animate-pulse text-center">
-                <p className="text-[10px] text-[#DAA520] font-bold mb-1">
-                  💡 해결 가이드
+            <div className="space-y-4">
+              <div className="bg-white/10 p-5 rounded-2xl backdrop-blur-sm border border-white/5">
+                <p className="text-[10px] text-gray-400 font-bold uppercase mb-2">
+                  K-WAB Normal Range
                 </p>
-                <p className="text-[9px] text-gray-400">
-                  주소창 옆 [자물쇠] → [권한 재설정] 클릭
-                </p>
+                <div className="flex justify-between items-end">
+                  <span className="text-2xl font-mono font-bold">
+                    {form.age && Number(form.age) >= 65 ? "88.09" : "90.73"}
+                  </span>
+                  <span className="text-[10px] text-[#DAA520] mb-1">
+                    정상군 평균 지수
+                  </span>
+                </div>
               </div>
-            )}
+
+              <ul className="text-[11px] text-gray-400 space-y-2 ml-1">
+                <li className="flex gap-2">
+                  <span>•</span> 교육년수 기반 맞춤 문항 제공
+                </li>
+                <li className="flex gap-2">
+                  <span>•</span> 시야 결손 방향 대응 UI 적용
+                </li>
+                <li className="flex gap-2">
+                  <span>•</span> 발병 경과일별 회복 곡선 추적
+                </li>
+              </ul>
+            </div>
           </div>
-          <p className="text-[10px] text-gray-600 leading-relaxed italic border-t border-white/5 pt-6">
-            * 본 시스템은 한국판 웨스턴 실어증 검사(K-WAB)의 정상군 데이터를
-            기준으로 분석을 수행합니다.
+          <p className="text-[10px] text-gray-500 italic border-t border-white/10 pt-6">
+            Designed for Clinical Speech Rehabilitation
           </p>
         </aside>
       </div>
 
       <style jsx>{`
         .input-style {
-          width: 100%;
-          padding: 1.2rem 1.5rem;
-          font-size: 1.1rem;
           background: #f9fafb;
-          border: 2px solid #e5e7eb;
-          border-radius: 1.25rem;
-          outline: none;
-          color: black;
+          border: 2px solid #f1f2f6;
+          border-radius: 14px;
+          padding: 10px 14px;
+          font-size: 14px;
+          font-weight: 500;
+          transition: all 0.2s;
         }
         .input-style:focus {
           border-color: #daa520;
           background: white;
+          box-shadow: 0 4px 12px rgba(218, 165, 32, 0.1);
+          outline: none;
         }
       `}</style>
     </main>
@@ -304,8 +373,10 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2 text-left">
-      <label className="text-sm font-black text-[#8B4513] ml-1">{label}</label>
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[11px] font-extrabold text-[#8B4513] tracking-tight uppercase opacity-80">
+        {label}
+      </label>
       {children}
     </div>
   );

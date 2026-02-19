@@ -29,6 +29,7 @@ function Step1Content() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAnswered, setIsAnswered] = useState(false);
   const [canAnswer, setCanAnswer] = useState(false);
+  const [replayCount, setReplayCount] = useState(0);
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
   const [questionResults, setQuestionResults] = useState<any[]>([]);
 
@@ -196,6 +197,7 @@ function Step1Content() {
           );
           setCurrentIndex((prev) => prev + 1);
           setIsAnswered(false);
+          setReplayCount(0);
         } else {
           const finalScore = isCorrect ? score + 1 : score;
 
@@ -234,9 +236,19 @@ function Step1Content() {
     if (!isMounted || !currentItem || GLOBAL_SPEECH_LOCK[currentIndex]) return;
     GLOBAL_SPEECH_LOCK[currentIndex] = true;
     console.log(`🎬 ${currentIndex + 1}번 문제 시작`);
+    setReplayCount(0);
     const timer = setTimeout(() => speakWord(currentItem.question), 800);
     return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, speakWord]);
+
+  const handleReplay = () => {
+    if (replayCount < 1 && !isSpeaking && !isAnswered && canAnswer) {
+      speakWord(currentItem.question);
+      setReplayCount((prev) => prev + 1);
+    }
+  };
+
+  const replayEnabled = replayCount < 1 && !isSpeaking && !isAnswered && canAnswer;
 
   useEffect(() => {
     if (!isMounted || timeLeft === null || isSpeaking) return;
@@ -302,8 +314,8 @@ function Step1Content() {
             </div>
 
             <button
-              onClick={() => speakWord(currentItem.question)}
-              disabled={isSpeaking || isAnswered}
+              onClick={handleReplay}
+              disabled={!replayEnabled}
               className="group flex items-center gap-2 mx-auto px-5 py-2.5 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-orange-200 hover:bg-orange-50/30 transition-all disabled:opacity-30 active:scale-95"
             >
               <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center group-hover:bg-orange-500 transition-colors">

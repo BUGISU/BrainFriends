@@ -412,7 +412,7 @@ function Step3Content() {
               openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
               audioLevel: isSpeaking ? 25 : 0,
             }}
-            showTracking={true}
+            showTracking={false}
             scoreLabel="진행도"
             scoreValue={`${currentIndex + (isAnswered ? 1 : 0)} / ${protocol.length}`}
           />
