@@ -1,7 +1,4 @@
 import { PlaceType } from "./trainingData";
-// 🔹 자동 채점 로직 설계 (정확도 가중치 모델)
-// 🔹 STT 오인식 대응 사전 (예: “카드” → “가드”)
-// 🔹 3카테고리 통합 점수화 설계 (cafe + hospital + mart)
 export type FluencyType = "naming" | "fill-in-the-blank" | "subjective";
 
 export interface FluencyScenario {
