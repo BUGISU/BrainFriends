@@ -292,8 +292,8 @@ function Step5Content() {
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans">
-      <header className="h-16 lg:h-20 px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+    <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
+      <header className="h-16 lg:h-20 px-4 sm:px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
         <div className="flex items-center gap-4">
           <div className="w-8 h-8 lg:w-10 lg:h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-xs">
             05
@@ -312,9 +312,9 @@ function Step5Content() {
         </div>
       </header>
 
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-0 relative p-4 lg:p-10 order-1 overflow-y-auto">
-          <div className="w-full max-w-2xl mx-auto flex flex-col h-full gap-4 lg:gap-8 justify-center">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 lg:p-10 pb-8 lg:pb-10 order-1 overflow-y-auto">
+          <div className="w-full max-w-2xl mx-auto flex flex-col h-full gap-4 lg:gap-8 justify-start lg:justify-center">
             <div
               className={`bg-white border rounded-[32px] p-8 lg:p-12 shadow-sm transition-all duration-500 ${phase === "reading" ? "border-orange-500 shadow-orange-50 scale-[1.02]" : "border-slate-100"}`}
             >
@@ -357,57 +357,52 @@ function Step5Content() {
               )}
 
               {phase === "review" && currentResult && (
-                <div className="w-full max-w-sm bg-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-slate-50 animate-in zoom-in">
-                  <div className="grid grid-cols-3 gap-3 mb-6">
-                    <div className="bg-slate-50 p-3 rounded-2xl text-center">
-                      <p className="text-[9px] font-black text-slate-400 uppercase">
-                        Time
-                      </p>
-                      <p className="text-lg font-black text-slate-800">
-                        {currentResult.totalTime}s
-                      </p>
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded-2xl text-center">
-                      <p className="text-[9px] font-black text-slate-400 uppercase">
-                        WPM
-                      </p>
-                      <p className="text-lg font-black text-slate-800">
-                        {currentResult.wordsPerMinute}
-                      </p>
-                    </div>
-                    <div className="bg-orange-50 p-3 rounded-2xl text-center border border-orange-100">
-                      <p className="text-[9px] font-black text-orange-400 uppercase">
-                        Score
-                      </p>
-                      <p className="text-lg font-black text-orange-600">
-                        {currentResult.readingScore}%
-                      </p>
-                    </div>
-                  </div>
+                <div className="w-full max-w-xl animate-in zoom-in">
+                  <div className="w-full bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-6 shadow-xl border border-orange-100/70 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(251,146,60,0.12),transparent_45%)] pointer-events-none" />
 
-                  <div className="flex flex-col gap-3">
-                    <button
-                      onClick={playRecordedAudio}
-                      className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${isPlayingAudio ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}
-                    >
-                      {isPlayingAudio
-                        ? "🔊 목소리 재생 중..."
-                        : "▶ 내 목소리 듣기"}
-                    </button>
-                    {isPlayingAudio && (
+                    <div className="flex items-center gap-6 relative z-[1]">
+                      <div className="border-r border-orange-100 pr-6 text-center shrink-0">
+                        <span className="text-[9px] font-black text-orange-300 uppercase block mb-1">
+                          Reading
+                        </span>
+                        <span className="text-3xl lg:text-4xl font-black text-orange-500 tracking-tight">
+                          {currentResult.readingScore}%
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-wider">
+                          Metrics
+                        </p>
+                        <p className="text-sm lg:text-base font-bold text-slate-700 break-words">
+                          읽기 시간 {currentResult.totalTime}s / 속도{" "}
+                          {currentResult.wordsPerMinute} WPM
+                        </p>
+                        <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/90 border border-orange-100">
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                          <span className="text-[10px] font-black uppercase tracking-wide text-orange-500">
+                            {isPlayingAudio ? "Playback Active" : "Ready"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-3 relative z-[1]">
                       <button
-                        onClick={handleSkipAudio}
-                        className="text-[11px] font-bold text-slate-400 underline"
+                        onClick={playRecordedAudio}
+                        className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${isPlayingAudio ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"}`}
                       >
-                        스킵하기
+                        {isPlayingAudio
+                          ? "🔊 목소리 재생 중..."
+                          : "▶ 내 목소리 듣기"}
                       </button>
-                    )}
-                    <button
-                      onClick={handleNext}
-                      className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl active:scale-[0.98]"
-                    >
-                      다음 문항으로
-                    </button>
+                      <button
+                        onClick={handleNext}
+                        className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl active:scale-[0.98]"
+                      >
+                        다음 문항으로
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -415,8 +410,8 @@ function Step5Content() {
           </div>
         </main>
 
-        <aside className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white p-4 shrink-0 overflow-hidden order-2">
-          <div className="h-[280px] lg:h-full">
+        <aside className="w-full lg:w-[380px] h-auto min-h-[340px] lg:h-full mt-auto lg:mt-0 border-t lg:border-t-0 lg:border-l border-slate-50 bg-white p-3 lg:p-4 shrink-0 overflow-visible lg:overflow-hidden order-2">
+          <div className="h-full">
             <AnalysisSidebar
               videoRef={videoRef}
               canvasRef={canvasRef}

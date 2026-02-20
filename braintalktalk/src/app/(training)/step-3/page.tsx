@@ -277,8 +277,8 @@ function Step3Content() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-0 bg-[#FBFBFC]">
+      <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 bg-[#FBFBFC] pb-8 lg:pb-0">
           <div className="w-full max-w-5xl mx-auto px-6 py-4 flex flex-col h-full min-h-0 gap-4">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 border-b border-slate-100 pb-3 shrink-0">
               <div className="space-y-1">
@@ -333,8 +333,8 @@ function Step3Content() {
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 flex items-center justify-center pb-6">
-              <div className="grid grid-cols-3 gap-4 w-full h-full max-h-[60vh]">
+            <div className="flex-1 min-h-0 flex items-start justify-start lg:items-center lg:justify-center pb-6">
+              <div className="grid grid-cols-3 gap-3 lg:gap-4 w-full lg:h-full lg:max-h-[60vh]">
                 {currentItem.options.map((option: VisualOption) => {
                   const imageCandidates = buildImageCandidates(place, option);
                   return (
@@ -342,7 +342,7 @@ function Step3Content() {
                       key={option.id}
                       onClick={() => handleOptionClick(option.id)}
                       disabled={isSpeaking || isAnswered || !canAnswer}
-                      className={`relative z-20 w-full h-full rounded-[24px] flex items-center justify-center transition-all border shadow-sm bg-white overflow-hidden pointer-events-auto
+                      className={`relative z-20 w-full aspect-[4/5] sm:aspect-square lg:h-full rounded-[24px] flex items-center justify-center transition-all border shadow-sm bg-white overflow-hidden pointer-events-auto
                     ${selectedId === option.id ? (showResult ? "border-emerald-500 ring-4 ring-emerald-50 scale-105" : "border-slate-800 opacity-60 scale-95") : "border-slate-100 hover:border-orange-100 hover:shadow-md"}`}
                     >
                       <div className="w-full h-full p-4 flex items-center justify-center pointer-events-none">
@@ -352,7 +352,7 @@ function Step3Content() {
                               src={imageCandidates[0]}
                               data-candidate-index="0"
                               alt={option.label}
-                              className="w-16 h-16 lg:w-20 lg:h-20 object-contain"
+                              className="w-24 h-24 lg:w-32 lg:h-32 object-contain"
                               loading="lazy"
                               decoding="async"
                               onError={(e) => {
@@ -402,7 +402,7 @@ function Step3Content() {
           </div>
         </main>
 
-        <aside className="w-[380px] border-l border-slate-50 bg-white p-4 hidden lg:flex flex-col overflow-hidden">
+        <aside className="w-full lg:w-[380px] h-auto min-h-[340px] lg:h-full mt-auto lg:mt-0 border-t lg:border-t-0 lg:border-l border-slate-50 bg-white p-3 lg:p-4 flex flex-col overflow-visible lg:overflow-hidden">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}

@@ -44,6 +44,8 @@ function Step2Content() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [resultScore, setResultScore] = useState<number | null>(null);
   const [transcript, setTranscript] = useState("");
+  const [isSttExpanded, setIsSttExpanded] = useState(false);
+  const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [showTracking, setShowTracking] = useState(false);
 
@@ -110,8 +112,11 @@ function Step2Content() {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
+      if (reviewAudioUrl) {
+        URL.revokeObjectURL(reviewAudioUrl);
+      }
     };
-  }, []);
+  }, [reviewAudioUrl]);
 
   useEffect(() => {
     if (!isMounted || !currentItem) return;
@@ -170,6 +175,9 @@ function Step2Content() {
       setCurrentIndex((prev) => prev + 1);
       setResultScore(null);
       setTranscript("");
+      setIsSttExpanded(false);
+      if (reviewAudioUrl) URL.revokeObjectURL(reviewAudioUrl);
+      setReviewAudioUrl(null);
       setCanRecord(false);
       setReplayCount(0);
     } else {
@@ -222,6 +230,7 @@ function Step2Content() {
     router,
     place,
     searchParams,
+    reviewAudioUrl,
   ]);
 
   const handleSkipPlayback = useCallback(() => {
@@ -232,8 +241,24 @@ function Step2Content() {
       audioPlayerRef.current.onended = null;
     }
     setIsPlayingAudio(false);
-    handleNext();
-  }, [isPlayingAudio, handleNext]);
+  }, [isPlayingAudio]);
+
+  const playRecordedAudio = () => {
+    if (!reviewAudioUrl || isPlayingAudio) return;
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      audioPlayerRef.current.onended = null;
+    }
+    const audio = new Audio(reviewAudioUrl);
+    audioPlayerRef.current = audio;
+    setIsPlayingAudio(true);
+    audio.onended = () => setIsPlayingAudio(false);
+    audio.play().catch((e) => {
+      console.error("재생 에러:", e);
+      setIsPlayingAudio(false);
+    });
+  };
 
   const handleToggleRecording = async () => {
     if (!canRecord || isPromptPlaying) return;
@@ -241,6 +266,9 @@ function Step2Content() {
     if (!isRecording) {
       setResultScore(null);
       setTranscript("");
+      setIsSttExpanded(false);
+      if (reviewAudioUrl) URL.revokeObjectURL(reviewAudioUrl);
+      setReviewAudioUrl(null);
       try {
         if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
         await analyzerRef.current.startAnalysis((level) =>
@@ -320,15 +348,8 @@ function Step2Content() {
               console.log("✅ Step 2 데이터 저장 완료:", newEntry);
               console.log("📊 현재 누적 데이터:", updatedAudios);
 
-              // ✅ 오디오 재생
-              const audio = new Audio(URL.createObjectURL(audioBlob));
-              audioPlayerRef.current = audio;
-              setIsPlayingAudio(true);
-              audio.onended = () => {
-                setIsPlayingAudio(false);
-                handleNext();
-              };
-              audio.play().catch((e) => console.error("재생 에러:", e));
+              // 리뷰에서 수동 재생할 수 있도록 URL만 저장
+              setReviewAudioUrl(URL.createObjectURL(audioBlob));
             } catch (err) {
               console.error("❌ Step 2 저장 실패:", err);
             } finally {
@@ -345,7 +366,6 @@ function Step2Content() {
         } else {
           console.warn("⚠️ audioBlob이 없습니다");
           setIsSaving(false);
-          handleNext();
         }
       } catch (err) {
         console.error("❌ 분석 실패:", err);
@@ -372,8 +392,8 @@ function Step2Content() {
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className="flex flex-col h-full bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans relative">
-      <header className="h-16 px-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+    <div className="flex flex-col h-full bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans relative">
+      <header className="h-16 px-4 sm:px-6 lg:px-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
         <div className="flex items-center gap-4">
           <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg shadow-orange-200">
             02
@@ -392,9 +412,9 @@ function Step2Content() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-0 relative p-6 lg:p-10 order-1">
-          <div className="w-full max-w-2xl mx-auto flex flex-col h-full justify-center gap-5">
+      <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 sm:p-6 lg:p-10 pb-8 lg:pb-10 order-1">
+          <div className="w-full max-w-2xl mx-auto flex flex-col h-full justify-start lg:justify-center gap-4 lg:gap-5">
             <div
               className={`w-full bg-white rounded-[40px] p-8 lg:p-12 shadow-[0_10px_40px_rgba(0,0,0,0.02)] text-center transition-all ${
                 isRecording
@@ -421,10 +441,10 @@ function Step2Content() {
             </div>
 
             <div
-              className={`${resultScore !== null ? "h-36 lg:h-44" : "h-12"} flex items-center justify-center relative transition-all duration-500 ease-out`}
+              className={`${resultScore !== null ? "h-auto" : "h-12"} flex items-center justify-center relative transition-all duration-500 ease-out`}
             >
               <div
-                className={`w-full bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-6 shadow-xl border border-orange-100/70 flex items-center gap-6 relative overflow-hidden transition-all duration-500 ease-out ${
+                className={`w-full max-w-2xl mx-auto bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-5 md:p-6 shadow-xl border border-orange-100/70 relative overflow-hidden transition-all duration-500 ease-out ${
                   resultScore !== null
                     ? "opacity-100 translate-y-0 scale-100"
                     : "opacity-0 translate-y-2 scale-[0.985] pointer-events-none"
@@ -433,105 +453,150 @@ function Step2Content() {
                 {resultScore !== null && (
                   <>
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(251,146,60,0.12),transparent_45%)] pointer-events-none" />
-                    <div className="border-r border-orange-100 pr-6 text-center shrink-0 relative z-[1]">
-                      <span className="text-[9px] font-black text-orange-300 uppercase block mb-1">
-                        Accuracy
-                      </span>
-                      <span className="text-3xl lg:text-4xl font-black text-orange-500 tracking-tight">
-                        {resultScore}%
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0 relative z-[1]">
-                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-wider">
-                        STT Result
-                      </p>
-                      <p className="text-sm lg:text-base font-bold text-slate-700 pr-32 break-words">
-                        "{transcript.trim() ? transcript.trim() : "..."}"
-                      </p>
-                      <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/90 border border-orange-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                        <span className="text-[10px] font-black uppercase tracking-wide text-orange-500">
-                          {isPlayingAudio
-                            ? "Playback Active"
-                            : "Analysis Ready"}
+                    <div className="relative z-[1] flex items-center gap-3 md:gap-6">
+                      <div className="border-r border-orange-100 pr-3 md:pr-6 text-left md:text-center shrink-0">
+                        <span className="text-[9px] font-black text-orange-300 uppercase block mb-1">
+                          Accuracy
                         </span>
+                        <span className="text-3xl lg:text-4xl font-black text-orange-500 tracking-tight">
+                          {resultScore}%
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-wider">
+                          STT Result
+                        </p>
+                        <p
+                          className={`text-sm lg:text-base font-bold text-slate-700 leading-snug ${
+                            isSttExpanded
+                              ? "break-words whitespace-normal"
+                              : "whitespace-nowrap overflow-hidden text-ellipsis"
+                          }`}
+                        >
+                          "{transcript.trim() ? transcript.trim() : "..."}"
+                        </p>
+                        {(transcript.trim().length > 24 || isSttExpanded) && (
+                          <button
+                            type="button"
+                            onClick={() => setIsSttExpanded((v) => !v)}
+                            className="mt-1 md:hidden text-[10px] font-black text-orange-500 underline underline-offset-2"
+                          >
+                            {isSttExpanded ? "접기" : "전체보기"}
+                          </button>
+                        )}
+                        <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-full bg-white/90 border border-orange-100">
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                          <span className="text-[10px] font-black uppercase tracking-wide text-orange-500">
+                            {isPlayingAudio
+                              ? "Playback Active"
+                              : "Analysis Ready"}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     {isPlayingAudio && (
                       <button
                         onClick={handleSkipPlayback}
-                        className="absolute top-4 right-4 px-3 py-1.5 rounded-full text-[10px] font-black text-white bg-orange-500 hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 z-[2]"
+                        className="absolute top-2 right-2 md:top-4 md:right-4 px-3 py-1.5 rounded-full text-[10px] font-black text-white bg-orange-500 hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 z-[2]"
                       >
                         스킵하기
                       </button>
                     )}
+
+                    <div className="mt-4 w-full relative z-[1] space-y-2.5">
+                      <button
+                        onClick={playRecordedAudio}
+                        disabled={!reviewAudioUrl}
+                        className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${
+                          reviewAudioUrl
+                            ? isPlayingAudio
+                              ? "bg-orange-500 text-white"
+                              : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"
+                            : "bg-slate-100 text-slate-300"
+                        }`}
+                      >
+                        {isPlayingAudio
+                          ? "🔊 목소리 재생 중..."
+                          : "▶ 내 목소리 듣기"}
+                      </button>
+                      <button
+                        onClick={handleNext}
+                        className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl active:scale-[0.98]"
+                      >
+                        다음 문항으로
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
             </div>
 
             <div className="flex flex-col items-center gap-4 shrink-0">
-              <button
-                type="button"
-                onClick={handleReplayPrompt}
-                disabled={!replayEnabled}
-                className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${
-                  replayEnabled
-                    ? "bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100"
-                    : "bg-slate-50 border-slate-100 text-slate-300"
-                }`}
-              >
-                문제 다시 듣기
-              </button>
-              <button
-                onClick={handleToggleRecording}
-                disabled={
-                  isAnalyzing ||
-                  isPlayingAudio ||
-                  isSaving ||
-                  isPromptPlaying ||
-                  !canRecord
-                }
-                className={`w-20 h-20 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-90 ${
-                  isRecording
-                    ? "bg-slate-900 shadow-orange-500/20"
-                    : "bg-white border-4 border-slate-50 hover:border-orange-200"
-                }`}
-              >
-                {isRecording ? (
-                  <div className="w-6 h-6 bg-white rounded-sm animate-pulse" />
-                ) : isAnalyzing || isSaving ? (
-                  <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <span className="text-3xl">🎙️</span>
-                )}
-              </button>
-              <p
-                className={`font-black text-[10px] uppercase tracking-widest ${
-                  isRecording
-                    ? "text-orange-600 animate-pulse"
-                    : isSaving
-                      ? "text-orange-400"
-                      : "text-slate-300"
-                }`}
-              >
-                {isRecording
-                  ? "Recording..."
-                  : isPromptPlaying
-                    ? "Listening..."
-                  : isAnalyzing
-                    ? "Analyzing..."
-                    : isSaving
-                      ? "Saving..."
-                      : isPlayingAudio
-                        ? "Reviewing..."
-                        : "Tap to Speak"}
-              </p>
+              {resultScore === null && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleReplayPrompt}
+                    disabled={!replayEnabled}
+                    className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${
+                      replayEnabled
+                        ? "bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100"
+                        : "bg-slate-50 border-slate-100 text-slate-300"
+                    }`}
+                  >
+                    문제 다시 듣기
+                  </button>
+                  <button
+                    onClick={handleToggleRecording}
+                    disabled={
+                      isAnalyzing ||
+                      isPlayingAudio ||
+                      isSaving ||
+                      isPromptPlaying ||
+                      !canRecord
+                    }
+                    className={`w-20 h-20 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-90 ${
+                      isRecording
+                        ? "bg-slate-900 shadow-orange-500/20"
+                        : "bg-white border-4 border-slate-50 hover:border-orange-200"
+                    }`}
+                  >
+                    {isRecording ? (
+                      <div className="w-6 h-6 bg-white rounded-sm animate-pulse" />
+                    ) : isAnalyzing || isSaving ? (
+                      <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <span className="text-3xl">🎙️</span>
+                    )}
+                  </button>
+                  <p
+                    className={`font-black text-[10px] uppercase tracking-widest ${
+                      isRecording
+                        ? "text-orange-600 animate-pulse"
+                        : isSaving
+                          ? "text-orange-400"
+                          : "text-slate-300"
+                    }`}
+                  >
+                    {isRecording
+                      ? "Recording..."
+                      : isPromptPlaying
+                        ? "Listening..."
+                      : isAnalyzing
+                        ? "Analyzing..."
+                        : isSaving
+                          ? "Saving..."
+                          : isPlayingAudio
+                            ? "Reviewing..."
+                            : "Tap to Speak"}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </main>
 
-        <aside className="w-[380px] h-full border-l border-slate-50 bg-white shrink-0 relative flex flex-col overflow-hidden order-2">
+        <aside className="w-full lg:w-[380px] h-auto min-h-[340px] lg:h-full mt-auto lg:mt-0 border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 relative flex flex-col overflow-visible lg:overflow-hidden order-2 p-3 lg:p-4">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}

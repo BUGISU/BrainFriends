@@ -10,65 +10,176 @@ import React, {
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
-import { FLUENCY_SCENARIOS, FluencyMetrics } from "@/constants/fluencyData";
+import { FLUENCY_SCENARIOS } from "@/constants/fluencyData";
 import { useTraining } from "../TrainingContext";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
-import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
 
 export const dynamic = "force-dynamic";
+const STEP4_IMAGE_BASE_URL = (
+  process.env.NEXT_PUBLIC_STEP4_IMAGE_BASE_URL ||
+  "https://cdn.jsdelivr.net/gh/BUGISU/braintalktalk-assets@main/step4"
+).replace(/\/$/, "");
+const STEP4_IMAGE_RAW_BASE_URL = (
+  process.env.NEXT_PUBLIC_STEP4_IMAGE_RAW_BASE_URL ||
+  "https://raw.githubusercontent.com/BUGISU/braintalktalk-assets/main/step4"
+).replace(/\/$/, "");
+
+type Phase = "ready" | "recording" | "analyzing" | "review";
+
+type Step4EvalResult = {
+  situation: string;
+  prompt: string;
+  transcript: string;
+  matchedKeywords: string[];
+  relevantSentenceCount: number;
+  totalSentenceCount: number;
+  relevanceScore: number;
+  speechDuration: number;
+  silenceRatio: number;
+  averageAmplitude: number;
+  peakCount: number;
+  kwabScore: number;
+  rawScore: number;
+  audioUrl: string;
+};
+
+function normalizeText(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[\s.,!?~"'`·\-_/()\[\]{}:;\\|]/g, "");
+}
+
+function splitSentences(text: string) {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return [];
+
+  const byPunctuation = trimmed
+    .split(/[.!?。！？\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (byPunctuation.length > 0) return byPunctuation;
+
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  const chunkSize = 6;
+  const chunks: string[] = [];
+  for (let i = 0; i < words.length; i += chunkSize) {
+    chunks.push(words.slice(i, i + chunkSize).join(" "));
+  }
+  return chunks;
+}
+
+function buildNameVariants(baseName: string) {
+  const variants = new Set<string>();
+  variants.add(baseName);
+  variants.add(baseName.replace(/\s+/g, ""));
+  variants.add(baseName.replace(/\s+/g, "-"));
+  variants.add(baseName.replace(/\s+/g, "_"));
+  return Array.from(variants).filter(Boolean);
+}
+
+function buildStep4ImageCandidates(
+  place: PlaceType,
+  scenarioId: number,
+  situation: string,
+) {
+  const candidates: string[] = [];
+  const baseNames = [String(scenarioId), situation];
+
+  for (const baseName of baseNames) {
+    for (const nameVariant of buildNameVariants(baseName)) {
+      candidates.push(
+        `${STEP4_IMAGE_BASE_URL}/${place}/${nameVariant}.png`,
+        `${STEP4_IMAGE_BASE_URL}/${place}/${nameVariant}.jpg`,
+        `${STEP4_IMAGE_BASE_URL}/${place}/${nameVariant}.jpeg`,
+        `${STEP4_IMAGE_BASE_URL}/${place}/${nameVariant}.webp`,
+        `${STEP4_IMAGE_BASE_URL}/${nameVariant}.png`,
+        `${STEP4_IMAGE_BASE_URL}/${nameVariant}.jpg`,
+        `${STEP4_IMAGE_BASE_URL}/${nameVariant}.jpeg`,
+        `${STEP4_IMAGE_BASE_URL}/${nameVariant}.webp`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${place}/${nameVariant}.png`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${place}/${nameVariant}.jpg`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${place}/${nameVariant}.jpeg`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${place}/${nameVariant}.webp`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${nameVariant}.png`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${nameVariant}.jpg`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${nameVariant}.jpeg`,
+        `${STEP4_IMAGE_RAW_BASE_URL}/${nameVariant}.webp`,
+      );
+    }
+  }
+
+  candidates.push(
+    `/images/training/${place}/${scenarioId}.png`,
+    `/images/training/${place}/${scenarioId}.jpg`,
+  );
+
+  return Array.from(new Set(candidates));
+}
+
+function toDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string) || "");
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 function Step4Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const { sidebarMetrics, updateClinical } = useTraining();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step3Score = searchParams.get("step3") || "0";
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const analyzerRef = useRef<SpeechAnalyzer | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [phase, setPhase] = useState<"ready" | "recording" | "review">("ready");
+  const [phase, setPhase] = useState<Phase>("ready");
   const [recordingTime, setRecordingTime] = useState(0);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [currentFluency, setCurrentFluency] = useState<FluencyMetrics | null>(
+  const [isPromptPlaying, setIsPromptPlaying] = useState(false);
+  const [canRecord, setCanRecord] = useState(false);
+  const [replayCount, setReplayCount] = useState(0);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isSttExpanded, setIsSttExpanded] = useState(false);
+  const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
+  const [isImageLoadFailed, setIsImageLoadFailed] = useState(false);
+
+  const [currentResult, setCurrentResult] = useState<Step4EvalResult | null>(
     null,
   );
-  const [fluencyResults, setFluencyResults] = useState<FluencyMetrics[]>([]);
+  const [allResults, setAllResults] = useState<Step4EvalResult[]>([]);
 
   const scenarios = useMemo(
     () => FLUENCY_SCENARIOS[place] || FLUENCY_SCENARIOS.home,
     [place],
   );
   const currentScenario = scenarios[currentIndex];
+  const imageCandidates = useMemo(() => {
+    if (!currentScenario) return [];
+    return buildStep4ImageCandidates(
+      place,
+      currentScenario.id,
+      currentScenario.situation,
+    );
+  }, [place, currentScenario]);
+
+  useEffect(() => {
+    setImageCandidateIndex(0);
+    setIsImageLoadFailed(false);
+  }, [place, currentIndex]);
 
   useEffect(() => {
     setIsMounted(true);
     localStorage.removeItem("step4_recorded_audios");
-
-    async function setupCamera() {
-      try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-          });
-          if (videoRef.current) videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        console.error("Camera access failed in Step 4:", err);
-      }
-    }
-    setupCamera();
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -76,42 +187,139 @@ function Step4Content() {
         audioPlayerRef.current.pause();
         audioPlayerRef.current = null;
       }
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 
+  const playPrompt = useCallback(
+    (countReplay: boolean = false) => {
+      if (!currentScenario || typeof window === "undefined") return;
+      if (!window.speechSynthesis) {
+        setCanRecord(true);
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      setIsPromptPlaying(true);
+      setCanRecord(false);
+
+      const utterance = new SpeechSynthesisUtterance(currentScenario.prompt);
+      utterance.lang = "ko-KR";
+      utterance.rate = 0.9;
+      utterance.onend = () => {
+        setIsPromptPlaying(false);
+        setCanRecord(true);
+      };
+      utterance.onerror = () => {
+        setIsPromptPlaying(false);
+        setCanRecord(true);
+      };
+
+      window.speechSynthesis.speak(utterance);
+
+      if (countReplay) {
+        setReplayCount((prev) => prev + 1);
+      }
+    },
+    [currentScenario],
+  );
+
+  useEffect(() => {
+    if (!isMounted || !currentScenario) return;
+    setReplayCount(0);
+    setPhase("ready");
+    setCanRecord(false);
+    setCurrentResult(null);
+    setIsSttExpanded(false);
+    playPrompt(false);
+  }, [isMounted, currentIndex, currentScenario, playPrompt]);
+
   useEffect(() => {
     if (!isMounted) return;
-    const currentAcc = currentFluency ? currentFluency.fluencyScore * 10 : 94.5;
+
+    const avgScore =
+      allResults.length > 0
+        ? allResults.reduce((sum, r) => sum + r.kwabScore, 0) / allResults.length
+        : 0;
 
     updateClinical({
-      analysisAccuracy: currentAcc,
-      systemLatency: 45 + Math.floor(Math.random() * 5),
-      reliability: 0.8 + (sidebarMetrics.facialSymmetry || 0) * 0.2,
-      correlation: 0.87 + (currentFluency?.fluencyScore || 5) * 0.012,
-      stability: currentFluency ? 4.5 : 8.2,
+      analysisAccuracy: Math.min(100, avgScore * 10),
+      systemLatency: 42 + Math.floor(Math.random() * 6),
+      reliability: 0.82 + (sidebarMetrics.facialSymmetry || 0) * 0.15,
+      correlation: 0.86 + Math.min(0.12, avgScore / 100),
+      stability: allResults.length > 0 ? 4.2 : 7.0,
     });
-  }, [
-    sidebarMetrics,
-    currentFluency,
-    currentIndex,
-    scenarios.length,
-    updateClinical,
-    isMounted,
-    place,
-  ]);
+  }, [allResults, sidebarMetrics.facialSymmetry, updateClinical, isMounted]);
 
-  const handleSkipAudio = useCallback(() => {
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
-      setIsPlayingAudio(false);
+  const calculateRelevanceScore = useCallback((transcript: string) => {
+    if (!currentScenario) {
+      return {
+        score: 0,
+        matchedKeywords: [] as string[],
+        relevantSentenceCount: 0,
+        totalSentenceCount: 0,
+      };
     }
-  }, []);
+
+    const normalizedTranscript = normalizeText(transcript);
+    const sentences = splitSentences(transcript);
+    const totalSentenceCount = Math.max(1, sentences.length);
+    if (!normalizedTranscript) {
+      return {
+        score: 0,
+        matchedKeywords: [] as string[],
+        relevantSentenceCount: 0,
+        totalSentenceCount,
+      };
+    }
+
+    const matchedKeywords = currentScenario.answerKeywords.filter((keyword) =>
+      normalizedTranscript.includes(normalizeText(keyword)),
+    );
+    const uniqueMatched = Array.from(new Set(matchedKeywords));
+    const sentenceMatches = sentences.filter((sentence) => {
+      const normalizedSentence = normalizeText(sentence);
+      return uniqueMatched.some((keyword) =>
+        normalizedSentence.includes(normalizeText(keyword)),
+      );
+    });
+
+    const relevantSentenceCount = sentenceMatches.length;
+
+    const keywordCoverage = Math.min(1, uniqueMatched.length / 5);
+    const sentenceCoverage = Math.min(
+      1,
+      relevantSentenceCount / totalSentenceCount,
+    );
+    const score = Math.round((keywordCoverage * 0.7 + sentenceCoverage * 0.3) * 10);
+
+    return {
+      score,
+      matchedKeywords: uniqueMatched,
+      relevantSentenceCount,
+      totalSentenceCount,
+    };
+  }, [currentScenario]);
+
+  const handleReplayPrompt = useCallback(() => {
+    if (phase !== "ready" || isPromptPlaying || replayCount >= 1) return;
+    playPrompt(true);
+  }, [phase, isPromptPlaying, replayCount, playPrompt]);
 
   const startRecording = async () => {
+    if (!canRecord || isPromptPlaying || phase !== "ready") return;
+
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsPromptPlaying(false);
+    }
+
     try {
       if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
       await analyzerRef.current.startAnalysis((level) => setAudioLevel(level));
+
       setPhase("recording");
       setRecordingTime(0);
       timerRef.current = setInterval(
@@ -119,157 +327,185 @@ function Step4Content() {
         1000,
       );
     } catch (err) {
-      console.error("녹음 실패:", err);
+      console.error("녹음 시작 실패:", err);
     }
   };
 
   const stopRecording = async () => {
+    if (!currentScenario || !analyzerRef.current || phase !== "recording") return;
+
     if (timerRef.current) clearInterval(timerRef.current);
-    setPhase("review");
-    setIsSaving(true);
+    setPhase("analyzing");
 
     try {
-      const result = await analyzerRef.current!.stopAnalysis(
-        currentScenario.prompt,
+      const sttExpectedText = currentScenario.answerKeywords.join(" ");
+      const analysis = await analyzerRef.current.stopAnalysis(sttExpectedText);
+      const transcript = (analysis.transcript || "").trim();
+
+      const {
+        score,
+        matchedKeywords,
+        relevantSentenceCount,
+        totalSentenceCount,
+      } = calculateRelevanceScore(transcript);
+
+      const speechDuration = Math.max(0, recordingTime - 1);
+      const silenceRatio = Number(
+        ((Math.max(0, recordingTime - speechDuration) / Math.max(1, recordingTime)) *
+          100).toFixed(1),
       );
 
-      const fluencyData: FluencyMetrics = {
-        totalDuration: recordingTime,
-        speechDuration: Math.max(0, recordingTime - 1),
-        silenceRatio: Number(
-          ((1 / Math.max(1, recordingTime)) * 100).toFixed(1),
-        ),
+      const audioBlob = analysis.audioBlob;
+      const dataUrl = audioBlob ? await toDataUrl(audioBlob) : "";
+
+      const evalResult: Step4EvalResult = {
+        situation: currentScenario.situation,
+        prompt: currentScenario.prompt,
+        transcript,
+        matchedKeywords,
+        relevantSentenceCount,
+        totalSentenceCount,
+        relevanceScore: score,
+        speechDuration,
+        silenceRatio,
         averageAmplitude: audioLevel,
         peakCount: Math.floor(recordingTime / 2),
-        fluencyScore: Math.min(10, Math.floor(result.pronunciationScore / 10)),
-        rawScore: result.pronunciationScore,
+        kwabScore: score,
+        rawScore: analysis.pronunciationScore,
+        audioUrl: dataUrl,
       };
 
-      setCurrentFluency(fluencyData);
+      setCurrentResult(evalResult);
+      setAllResults((prev) => [...prev, evalResult]);
 
-      // ✅ 음성 파일 저장 (Base64 변환)
-      const audioBlob = result.audioBlob;
-      if (audioBlob) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          try {
-            const base64Audio = reader.result as string;
-            const rawData = localStorage.getItem("step4_recorded_audios");
-            const existingData = JSON.parse(rawData || "[]");
+      if (dataUrl) {
+        const existing = JSON.parse(
+          localStorage.getItem("step4_recorded_audios") || "[]",
+        );
 
-            // ✅ Result 페이지 규격에 맞춘 데이터 구조
-            const newEntry = {
-              text: currentScenario.situation, // 상황 설명
-              audioUrl: base64Audio,
-              isCorrect: fluencyData.fluencyScore >= 5, // 5점 이상 정답
-              ...fluencyData,
-              timestamp: new Date().toLocaleTimeString(),
-            };
-
-            localStorage.setItem(
-              "step4_recorded_audios",
-              JSON.stringify([...existingData, newEntry]),
-            );
-
-            setFluencyResults((prev) => [...prev, fluencyData]);
-
-            console.log("✅ Step 4 데이터 저장 완료:", newEntry);
-
-            // ✅ 오디오 재생
-            const audio = new Audio(URL.createObjectURL(audioBlob));
-            audioPlayerRef.current = audio;
-            setIsPlayingAudio(true);
-            audio.onended = () => setIsPlayingAudio(false);
-            audio.play().catch((e) => console.error("재생 에러:", e));
-          } catch (error) {
-            console.error("❌ Step 4 저장 실패:", error);
-          }
+        const savedEntry = {
+          text: currentScenario.situation,
+          prompt: currentScenario.prompt,
+          transcript: transcript || "...",
+          audioUrl: dataUrl,
+          isCorrect: score >= 5,
+          fluencyScore: score,
+          rawScore: analysis.pronunciationScore,
+          speechDuration,
+          silenceRatio,
+          timestamp: new Date().toLocaleTimeString(),
         };
-        reader.readAsDataURL(audioBlob);
+
+        localStorage.setItem(
+          "step4_recorded_audios",
+          JSON.stringify([...existing, savedEntry]),
+        );
       }
+
+      setPhase("review");
     } catch (err) {
       console.error("분석 실패:", err);
-    } finally {
-      setIsSaving(false);
+      setPhase("ready");
     }
   };
 
+  const handleSkipPlayback = useCallback(() => {
+    if (!isPlayingAudio) return;
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      audioPlayerRef.current.onended = null;
+    }
+    setIsPlayingAudio(false);
+  }, [isPlayingAudio]);
+
+  const playRecordedAudio = () => {
+    if (!currentResult?.audioUrl || isPlayingAudio) return;
+
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      audioPlayerRef.current.onended = null;
+    }
+
+    const audio = new Audio(currentResult.audioUrl);
+    audioPlayerRef.current = audio;
+    setIsPlayingAudio(true);
+    audio.onended = () => setIsPlayingAudio(false);
+    audio.play().catch((e) => {
+      console.error("재생 에러:", e);
+      setIsPlayingAudio(false);
+    });
+  };
+
   const handleNext = () => {
-    handleSkipAudio();
+    handleSkipPlayback();
 
     if (currentIndex < scenarios.length - 1) {
       setCurrentIndex((prev) => prev + 1);
-      setPhase("ready");
-      setCurrentFluency(null);
-      setRecordingTime(0);
-      setAudioLevel(0);
-    } else {
-      // ✅ SessionManager 통합 저장
-      try {
-        const patient = loadPatientProfile();
-        const sm = new SessionManager(
-          (patient || { age: 70, educationYears: 12 }) as any,
-          place,
-        );
+      return;
+    }
 
-        const avgKwabScore =
-          fluencyResults.length > 0
-            ? fluencyResults.reduce((acc, curr) => acc + curr.fluencyScore, 0) /
-              fluencyResults.length
-            : 0;
+    try {
+      const patient = loadPatientProfile();
+      const sm = new SessionManager(
+        (patient || { age: 70, educationYears: 12 }) as any,
+        place,
+      );
 
-        sm.saveStep4Result({
-          items: fluencyResults.map((f, i) => ({
-            situation: scenarios[i].situation,
-            prompt: scenarios[i].prompt,
-            speechDuration: f.speechDuration,
-            silenceRatio: f.silenceRatio,
-            averageAmplitude: f.averageAmplitude,
-            peakCount: f.peakCount,
-            kwabScore: f.fluencyScore,
-            rawScore: f.rawScore,
-          })),
-          averageKwabScore: Number(avgKwabScore.toFixed(1)),
-          totalScenarios: fluencyResults.length,
-          score: Math.round(avgKwabScore),
-          correctCount: fluencyResults.filter((f) => f.fluencyScore >= 5)
-            .length,
-          totalCount: fluencyResults.length,
-          timestamp: Date.now(),
-        });
-
-        console.log("✅ Step 4 SessionManager 저장 완료");
-      } catch (error) {
-        console.error("❌ SessionManager 저장 실패:", error);
-      }
-
-      const avgScore =
-        fluencyResults.length > 0
-          ? fluencyResults.reduce((acc, curr) => acc + curr.fluencyScore, 0) /
-            fluencyResults.length
+      const averageKwabScore =
+        allResults.length > 0
+          ? allResults.reduce((sum, r) => sum + r.kwabScore, 0) / allResults.length
           : 0;
 
-      router.push(
-        `/step-5?place=${place}&step3=${step3Score}&step4=${Math.round(avgScore)}`,
-      );
+      sm.saveStep4Result({
+        items: allResults.map((r) => ({
+          situation: r.situation,
+          prompt: r.prompt,
+          speechDuration: r.speechDuration,
+          silenceRatio: r.silenceRatio,
+          averageAmplitude: r.averageAmplitude,
+          peakCount: r.peakCount,
+          kwabScore: r.kwabScore,
+          rawScore: r.rawScore,
+        })),
+        averageKwabScore: Number(averageKwabScore.toFixed(1)),
+        totalScenarios: allResults.length,
+        score: Math.round(averageKwabScore),
+        correctCount: allResults.filter((r) => r.kwabScore >= 5).length,
+        totalCount: allResults.length,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      console.error("❌ SessionManager 저장 실패:", error);
     }
+
+    const avgScore =
+      allResults.length > 0
+        ? Math.round(
+            allResults.reduce((sum, r) => sum + r.kwabScore, 0) /
+              allResults.length,
+          )
+        : 0;
+
+    router.push(`/step-5?place=${place}&step3=${step3Score}&step4=${avgScore}`);
   };
 
   if (!isMounted || !currentScenario) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans">
-      <header className="h-16 lg:h-20 px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+    <div className="flex flex-col h-full bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
+      <header className="h-16 lg:h-20 px-4 sm:px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
         <div className="flex items-center gap-4">
           <div className="w-8 h-8 lg:w-10 lg:h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-xs">
             04
           </div>
           <div className="flex flex-col">
             <h2 className="text-sm lg:text-base font-black text-slate-800 leading-none">
-              실시간 유창성 훈련
+              직관적 발화 유도 훈련
             </h2>
             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter italic">
-              Spontaneous Speech Fluency
+              Image Prompted Spontaneous Speech
             </p>
           </div>
         </div>
@@ -278,96 +514,208 @@ function Step4Content() {
         </div>
       </header>
 
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-0 relative p-4 lg:p-10 order-1 overflow-y-auto">
-          <div className="w-full max-w-2xl mx-auto flex flex-col h-full gap-4 lg:gap-6 justify-center">
-            <div className="bg-white border border-slate-100 rounded-[32px] p-6 lg:p-10 shadow-sm shrink-0">
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="px-3 py-1 bg-orange-50 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                  SITUATION: {currentScenario.situation}
-                </div>
-                <h1 className="text-xl lg:text-3xl font-black text-slate-800 break-keep leading-tight">
-                  {currentScenario.prompt}
-                </h1>
-                <div className="px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 text-slate-400 font-bold italic text-xs lg:text-sm">
-                  &quot; {currentScenario.hint} &quot;
-                </div>
+      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+        <main className="flex-1 min-h-0 h-full relative p-3 sm:p-4 lg:p-6 pb-4 lg:pb-4 order-1 overflow-y-auto lg:overflow-hidden">
+          <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-3 lg:gap-5 items-start">
+            <div className="bg-white border border-slate-100 rounded-[28px] lg:rounded-[36px] p-3 lg:p-4 shadow-sm">
+              <div className="w-full max-w-[280px] sm:max-w-[340px] lg:max-w-[460px] mx-auto aspect-square bg-slate-100 relative flex items-center justify-center rounded-[20px] overflow-hidden">
+                {!isImageLoadFailed && imageCandidates.length > 0 ? (
+                  <img
+                    src={imageCandidates[imageCandidateIndex]}
+                    alt={`${currentScenario.situation} 이미지`}
+                    className="w-full h-full object-contain"
+                    onError={() => {
+                      const nextIndex = imageCandidateIndex + 1;
+                      if (nextIndex < imageCandidates.length) {
+                        setImageCandidateIndex(nextIndex);
+                      } else {
+                        setIsImageLoadFailed(true);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-center px-6">
+                    <div className="text-5xl mb-3">🖼️</div>
+                    <p className="text-sm font-black text-slate-500 break-keep">
+                      상황 이미지를 불러오지 못했습니다.
+                    </p>
+                  </div>
+                )}
+
+                {isPromptPlaying && (
+                  <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px] flex items-center justify-center">
+                    <div className="bg-white/95 px-5 py-2.5 rounded-full flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                      <span className="text-[12px] font-black text-orange-600">
+                        문제 음성 재생 중...
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex-1 min-h-[250px] lg:min-h-0 flex items-center justify-center bg-white/40 rounded-[32px] lg:rounded-[40px] border-2 border-dashed border-slate-100 relative">
-              {phase === "ready" && (
-                <button
-                  onClick={startRecording}
-                  className="group w-24 h-24 lg:w-32 lg:h-32 rounded-full bg-white shadow-2xl flex items-center justify-center hover:scale-105 transition-all border-4 lg:border-8 border-slate-50"
-                >
-                  <div className="w-14 h-14 lg:w-20 lg:h-20 bg-orange-100 rounded-full flex items-center justify-center group-hover:bg-orange-500 transition-colors">
-                    <div className="w-5 h-5 lg:w-7 lg:h-7 bg-orange-500 rounded-full shadow-lg" />
+            <div className="flex flex-col gap-4 lg:gap-5">
+              <div className="bg-white border border-slate-100 rounded-[28px] lg:rounded-[36px] p-4 lg:p-5 shadow-sm shrink-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black text-orange-500 uppercase tracking-wider">
+                      Situation
+                    </p>
+                    <p className="text-sm lg:text-base font-black text-slate-800 break-keep">
+                      {currentScenario.situation}
+                    </p>
                   </div>
-                </button>
-              )}
-
-              {phase === "recording" && (
-                <div className="flex flex-col items-center gap-6">
                   <button
-                    onClick={stopRecording}
-                    className="w-24 h-24 lg:w-32 lg:h-32 rounded-full bg-slate-900 shadow-2xl animate-pulse flex items-center justify-center transition-all"
+                    onClick={handleReplayPrompt}
+                    disabled={phase !== "ready" || isPromptPlaying || replayCount >= 1}
+                    className={`w-[112px] px-3 py-2 rounded-lg text-[11px] font-black border transition-colors shrink-0 text-center ${
+                      phase === "ready" && !isPromptPlaying && replayCount < 1
+                        ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                        : "bg-slate-50 text-slate-400 border-slate-200"
+                    }`}
                   >
-                    <div className="w-6 h-6 lg:w-8 lg:h-8 bg-white rounded-md" />
+                    문제 다시듣기
                   </button>
-                  <div className="px-6 py-2 bg-orange-500 text-white rounded-full font-black text-lg lg:text-xl font-mono shadow-lg shadow-orange-200">
-                    {recordingTime}s
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold text-slate-400 flex-1">
+                    {isPromptPlaying
+                      ? "문제 음성을 듣는 중입니다. 재생이 끝나면 녹음 버튼이 활성화됩니다."
+                      : "이미지를 보고 떠오르는 문장을 자유롭게 말해 주세요."}
+                  </p>
+                  {phase === "ready" && (
+                    <button
+                      onClick={startRecording}
+                      disabled={!canRecord || isPromptPlaying}
+                      className={`lg:hidden w-[112px] px-3 py-2 rounded-lg text-[11px] font-black border transition-colors shrink-0 text-center ${
+                        canRecord && !isPromptPlaying
+                          ? "bg-orange-500 text-white border-orange-500"
+                          : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                      }`}
+                    >
+                      녹음 시작
+                    </button>
+                  )}
+                  {phase === "recording" && (
+                    <button
+                      onClick={stopRecording}
+                      className="lg:hidden w-[112px] px-3 py-2 rounded-lg text-[11px] font-black border border-slate-900 bg-slate-900 text-white shrink-0 text-center"
+                    >
+                      녹음 종료
+                    </button>
+                  )}
+                  {phase === "analyzing" && (
+                    <div className="lg:hidden w-[112px] px-3 py-2 rounded-lg text-[11px] font-black border border-orange-100 bg-orange-50 text-orange-600 text-center uppercase shrink-0">
+                      Analyzing...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {phase === "review" && currentResult && (
+                <div className="w-full max-w-xl animate-in zoom-in">
+                  <div className="w-full bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-6 shadow-xl border border-orange-100/70 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(251,146,60,0.12),transparent_45%)] pointer-events-none" />
+
+                    <div className="flex items-center justify-between gap-3 relative z-[1]">
+                      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/90 border border-orange-100">
+                        <span className="text-[10px] font-black text-orange-400 uppercase">
+                          Fluency
+                        </span>
+                      </div>
+                      <span className="text-2xl lg:text-3xl font-black text-orange-500 tracking-tight">
+                        {currentResult.kwabScore}/10
+                      </span>
+                    </div>
+
+                    <div className="mt-2 relative z-[1] rounded-2xl border border-orange-100/70 bg-white/85 p-3 min-h-[96px]">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1">
+                        STT RESULT
+                      </p>
+                      <p className={`text-sm lg:text-base font-bold text-slate-700 ${isSttExpanded ? "break-words" : "whitespace-nowrap overflow-hidden text-ellipsis"}`}>
+                        {currentResult.transcript || "..."}
+                      </p>
+                      {(currentResult.transcript || "").length > 26 && (
+                        <button
+                          onClick={() => setIsSttExpanded((prev) => !prev)}
+                          className="mt-1 text-[11px] font-black text-orange-500 hover:text-orange-600"
+                        >
+                          {isSttExpanded ? "접기" : "전체보기"}
+                        </button>
+                      )}
+                    </div>
+
+                    {isPlayingAudio && (
+                      <button
+                        onClick={handleSkipPlayback}
+                        className="absolute top-4 right-4 px-3 py-1.5 rounded-full text-[10px] font-black text-white bg-orange-500 hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 z-[2]"
+                      >
+                        재생 건너뛰기
+                      </button>
+                    )}
+
+                    <div className="mt-5 flex flex-col gap-3 relative z-[1]">
+                      <button
+                        onClick={playRecordedAudio}
+                        className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${
+                          isPlayingAudio
+                            ? "bg-orange-500 text-white"
+                            : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"
+                        }`}
+                      >
+                        {isPlayingAudio ? "🔊 재생 중..." : "▶ 내 목소리 듣기"}
+                      </button>
+                      <button
+                        onClick={handleNext}
+                        className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl active:scale-[0.98]"
+                      >
+                        {currentIndex < scenarios.length - 1 ? "다음 상황으로" : "다음 단계로"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {phase === "review" && (
-                <div className="w-full max-w-sm bg-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-slate-50 animate-in zoom-in mx-4">
-                  {isSaving ? (
-                    <div className="flex flex-col items-center py-8 gap-4">
-                      <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                      <p className="text-[10px] font-black text-slate-300 uppercase animate-pulse">
-                        Analyzing Speech...
-                      </p>
+              {phase !== "review" && (
+                <div className="hidden lg:flex justify-center pt-2">
+                  {phase === "ready" && (
+                    <button
+                      onClick={startRecording}
+                      disabled={!canRecord || isPromptPlaying}
+                      className={`group w-28 h-28 rounded-full shadow-2xl flex items-center justify-center transition-all border-8 ${
+                        canRecord && !isPromptPlaying
+                          ? "bg-white border-slate-50 hover:scale-105"
+                          : "bg-slate-100 border-slate-100 opacity-70 cursor-not-allowed"
+                      }`}
+                    >
+                      <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center group-hover:bg-orange-500 transition-colors">
+                        <div className="w-6 h-6 bg-orange-500 rounded-full shadow-lg" />
+                      </div>
+                    </button>
+                  )}
+
+                  {phase === "recording" && (
+                    <div className="mx-auto flex flex-col items-center gap-4">
+                      <button
+                        onClick={stopRecording}
+                        className="w-28 h-28 rounded-full bg-slate-900 shadow-2xl animate-pulse flex items-center justify-center"
+                      >
+                        <div className="w-7 h-7 bg-white rounded-md" />
+                      </button>
+                      <div className="px-6 py-2 bg-orange-500 text-white rounded-full font-black text-lg font-mono shadow-lg shadow-orange-200">
+                        REC {recordingTime}s
+                      </div>
                     </div>
-                  ) : (
-                    <div className="space-y-5 lg:space-y-6">
-                      <div className="grid grid-cols-2 gap-3 lg:gap-4">
-                        <div className="bg-emerald-50 p-4 lg:p-5 rounded-2xl text-center border border-emerald-100">
-                          <p className="text-[9px] font-black text-emerald-600 uppercase mb-1">
-                            발화 시간
-                          </p>
-                          <p className="text-xl lg:text-2xl font-black text-slate-800">
-                            {currentFluency?.speechDuration}s
-                          </p>
-                        </div>
-                        <div className="bg-slate-50 p-4 lg:p-5 rounded-2xl text-center border border-slate-100">
-                          <p className="text-[9px] font-black text-slate-400 uppercase mb-1">
-                            침묵 비율
-                          </p>
-                          <p className="text-xl lg:text-2xl font-black text-slate-800">
-                            {currentFluency?.silenceRatio}%
-                          </p>
-                        </div>
-                      </div>
+                  )}
 
-                      <div className="flex flex-col gap-3">
-                        {isPlayingAudio && (
-                          <button
-                            onClick={handleSkipAudio}
-                            className="w-full py-3 bg-orange-50 text-orange-600 rounded-xl font-black text-sm border border-orange-100 hover:bg-orange-100 transition-all"
-                          >
-                            사운드 건너뛰기 ⏩
-                          </button>
-                        )}
-
-                        <button
-                          onClick={handleNext}
-                          className="w-full py-4 lg:py-5 rounded-2xl font-black text-base lg:text-lg transition-all shadow-xl active:scale-[0.98] bg-slate-900 text-white hover:bg-black"
-                        >
-                          다음 단계로
-                        </button>
-                      </div>
+                  {phase === "analyzing" && (
+                    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-orange-100 bg-orange-50">
+                      <span className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-[11px] font-black text-orange-600 uppercase">
+                        Analyzing...
+                      </span>
                     </div>
                   )}
                 </div>
@@ -375,26 +723,6 @@ function Step4Content() {
             </div>
           </div>
         </main>
-
-        <aside className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white p-4 shrink-0 overflow-hidden order-2">
-          <div className="h-[280px] lg:h-full">
-            <AnalysisSidebar
-              videoRef={videoRef}
-              canvasRef={canvasRef}
-              isFaceReady={sidebarMetrics.faceDetected}
-              metrics={{
-                symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
-                openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
-                audioLevel: audioLevel,
-              }}
-              showTracking={false}
-              scoreLabel="K-WAB 유창성"
-              scoreValue={
-                currentFluency ? `${currentFluency.fluencyScore}/10` : undefined
-              }
-            />
-          </div>
-        </aside>
       </div>
     </div>
   );

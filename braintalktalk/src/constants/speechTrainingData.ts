@@ -1,14 +1,13 @@
-// src/constants/speechTrainingData.ts
 import { PlaceType } from "./trainingData";
 
 export const SPEECH_REPETITION_PROTOCOLS: Record<PlaceType, any> = {
   home: [
     { id: 1, text: "방", points: 2, duration: 10 },
-    { id: 2, text: "열쇠", points: 2, duration: 10 },
+    { id: 2, text: "창문", points: 2, duration: 10 },
     { id: 3, text: "냉장고", points: 2, duration: 10 },
     { id: 4, text: "텔레비전", points: 2, duration: 10 },
     { id: 5, text: "따뜻한 안방", points: 4, duration: 10 },
-    { id: 6, text: "불을 끄고 잤다", points: 6, duration: 10 },
+    { id: 6, text: "깨끗한 주방", points: 4, duration: 10 },
     { id: 7, text: "창문 너머로 햇살이 비쳤다", points: 8, duration: 12 },
     { id: 8, text: "보글보글 끓는 된장 찌개", points: 8, duration: 12 },
     { id: 9, text: "가족들이 거실에 모두 모였다", points: 10, duration: 15 },
@@ -113,7 +112,7 @@ export const SPEECH_REPETITION_PROTOCOLS: Record<PlaceType, any> = {
     { id: 8, text: "거스름돈 천 원을 더 받았다", points: 10, duration: 12 },
     {
       id: 9,
-      text: "계란 한 판이 깨지지 않게 담으세요",
+      text: "계란 한 판을 깨지지 않게 담으세요",
       points: 12,
       duration: 15,
     },

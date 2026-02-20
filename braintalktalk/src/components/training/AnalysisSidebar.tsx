@@ -106,7 +106,7 @@ export const AnalysisSidebar = ({
   }, [sidebarMetrics.landmarks, showTracking, canvasRef]);
 
   return (
-    <div className="w-full h-full flex flex-col gap-3 overflow-hidden">
+    <div className="w-full flex flex-col gap-3 lg:h-full overflow-visible lg:overflow-hidden">
       {/* 카메라 프리뷰 섹션 */}
       <div className="relative aspect-[4/3] bg-gray-900 rounded-[24px] overflow-hidden shrink-0 shadow-inner">
         <video
@@ -172,7 +172,42 @@ export const AnalysisSidebar = ({
         </div>
       </div>
 
-      <div className="flex-1 bg-[#FBFBFC] rounded-[24px] p-5 space-y-4 border border-gray-50 shadow-sm overflow-y-auto min-h-0">
+      <div className="lg:hidden rounded-[14px] border border-gray-100 bg-[#FBFBFC] px-3 py-2">
+        <div className="flex items-center justify-between text-[11px] font-black text-slate-500 whitespace-nowrap overflow-x-auto gap-4">
+          <span>
+            안면대칭성{" "}
+            <b className="text-emerald-600">
+              {Number(metrics.symmetryScore || 0).toFixed(1)}%
+            </b>
+          </span>
+          <span>
+            구강개구도{" "}
+            <b className="text-orange-500">
+              {Number(metrics.openingRatio || 0).toFixed(1)}%
+            </b>
+          </span>
+          <span>
+            자음{" "}
+            <b className="text-emerald-600">
+              {Number(metrics.consonantAcc || 0).toFixed(1)}%
+            </b>
+          </span>
+          <span>
+            모음{" "}
+            <b className="text-orange-500">
+              {Number(metrics.vowelAcc || 0).toFixed(1)}%
+            </b>
+          </span>
+          <span>
+            음성{" "}
+            <b className="text-orange-500">
+              {Math.round(Number(metrics.audioLevel || 0))}dB
+            </b>
+          </span>
+        </div>
+      </div>
+
+      <div className="hidden lg:block flex-1 bg-[#FBFBFC] rounded-[24px] p-5 space-y-4 border border-gray-50 shadow-sm overflow-y-auto min-h-0">
         <MetricBar
           label="안면 대칭성"
           value={metrics.symmetryScore}

@@ -10,7 +10,12 @@ export const HOME_REHAB_PROTOCOL = {
       duration: 10,
     },
     { id: 3, question: "집에서 잠을 잘 수 있다.", answer: true, duration: 10 },
-    { id: 4, question: "냉장고는 음식을 넣는다.", answer: true, duration: 10 },
+    {
+      id: 4,
+      question: "냉장고에는 음식을 넣는다.",
+      answer: true,
+      duration: 10,
+    },
     {
       id: 5,
       question: "화장실은 요리하는 곳이다.",
@@ -19,6 +24,8 @@ export const HOME_REHAB_PROTOCOL = {
     },
     { id: 6, question: "소파는 앉는 가구다.", answer: true, duration: 10 },
     { id: 7, question: "집에 불을 켜면 밝아진다.", answer: true, duration: 10 },
+  ],
+  intermediate: [
     {
       id: 8,
       question: "밥을 먹기 전에 손을 씻는다.",
@@ -37,8 +44,6 @@ export const HOME_REHAB_PROTOCOL = {
       answer: true,
       duration: 10,
     },
-  ],
-  intermediate: [
     {
       id: 11,
       question: "집에서 전화가 울리면 받을 수 있다.",
@@ -68,7 +73,7 @@ export const HOME_REHAB_PROTOCOL = {
     },
     {
       id: 16,
-      question: "바닥에 물이 있으면 미끄러질 수 있다.",
+      question: "화장실 바닥에 물이 있으면 미끄러질 수 있다.",
       answer: true,
       duration: 10,
     },
@@ -80,19 +85,19 @@ export const HOME_REHAB_PROTOCOL = {
     },
     {
       id: 18,
-      question: "밤늦게 TV를 크게 틀면 가족이 잠을 못 잘 수 있다.",
+      question: "밤늦게 TV를 크게 틀면 시끄러울 수 있다.",
       answer: true,
       duration: 10,
     },
     {
       id: 19,
-      question: "집에 혼자 있어도 항상 안전하다.",
-      answer: false,
+      question: "집에 혼자 있을 때 문을 잘 잠궈야 한다.",
+      answer: true,
       duration: 10,
     },
     {
       id: 20,
-      question: "불을 끄면 전기 요금을 줄일 수 있다.",
+      question: "보일러를 끄면 전기 요금을 줄일 수 있다.",
       answer: true,
       duration: 10,
     },
@@ -116,16 +121,16 @@ export const HOSPITAL_REHAB_PROTOCOL = {
     },
     {
       id: 4,
-      question: "병원에서 소리를 크게 질러야 한다.",
+      question: "병원에서는 처방전을 받을 수 없다.",
       answer: false,
       duration: 10,
     },
-    { id: 5, question: "약국은 약을 사는 곳이다.", answer: true, duration: 10 },
   ],
   intermediate: [
+    { id: 5, question: "약국은 약을 사는 곳이다.", answer: true, duration: 10 },
     {
       id: 6,
-      question: "주사를 맞을 때는 소매를 걷는다.",
+      question: "팔에 주사를 맞을 때는 소매를 걷는다.",
       answer: true,
       duration: 10,
     },
@@ -141,14 +146,9 @@ export const HOSPITAL_REHAB_PROTOCOL = {
       answer: false,
       duration: 10,
     },
-    {
-      id: 9,
-      question: "처방전이 있어야 약국에서 조제약을 받는다.",
-      answer: true,
-      duration: 10,
-    },
   ],
   advanced: [
+    { id: 9, question: "약사는 약을 팔 수 없다.", answer: false, duration: 10 },
     {
       id: 10,
       question: "진료실에 들어가기 전 대기 명단에서 이름을 확인한다.",
@@ -200,7 +200,7 @@ export const CAFE_REHAB_PROTOCOL = {
   intermediate: [
     {
       id: 5,
-      question: "아이스 아메리카노에는 얼음이 들어간다.",
+      question: "차가운 음료에는 얼음이 들어간다.",
       answer: true,
       duration: 10,
     },
@@ -216,23 +216,23 @@ export const CAFE_REHAB_PROTOCOL = {
       answer: true,
       duration: 10,
     },
+  ],
+  advanced: [
     {
       id: 8,
       question: "다 마신 컵은 테이블에 그냥 두고 나간다.",
       answer: false,
       duration: 10,
     },
-  ],
-  advanced: [
     {
       id: 9,
-      question: "테이크아웃은 카페 밖으로 가져 나가는 것을 말한다.",
+      question: "설탕을 많이 넣으면 음료가 달아진다.",
       answer: true,
       duration: 10,
     },
     {
       id: 10,
-      question: "디카페인 커피는 카페인이 적게 든 커피를 말한다.",
+      question: "토마토 주스에는 토마토가 들어간다",
       answer: true,
       duration: 10,
     },
@@ -255,19 +255,19 @@ export const BANK_REHAB_PROTOCOL = {
     },
     {
       id: 2,
-      question: "통장을 만들려면 은행에 가야 한다.",
+      question: "인터넷으로 통장을 개설할 수 있다",
       answer: true,
       duration: 10,
     },
     {
       id: 3,
-      question: "은행에서 물건을 빌려주고 돈을 받는다.",
+      question: "은행은 물건을 빌려주고 돈을 받는다.",
       answer: false,
       duration: 10,
     },
     {
       id: 4,
-      question: "현금인출기(ATM)에서 돈을 찾을 수 있다.",
+      question: "현금인출기(ATM)에서 돈을 뽑을 수 있다.",
       answer: true,
       duration: 10,
     },
@@ -287,7 +287,7 @@ export const BANK_REHAB_PROTOCOL = {
     },
     {
       id: 7,
-      question: "통장에 돈을 넣으면 잔액이 늘어난다.",
+      question: "적금에 돈을 넣으면 이자를 받을 수 있다.",
       answer: true,
       duration: 10,
     },
@@ -301,19 +301,19 @@ export const BANK_REHAB_PROTOCOL = {
   advanced: [
     {
       id: 9,
-      question: "대출은 은행에서 돈을 빌리는 것을 의미한다.",
+      question: "대출은 은행에서 돈을 빌리는 것이다.",
       answer: true,
       duration: 10,
     },
     {
       id: 10,
-      question: "비밀번호를 3번 이상 틀리면 계좌가 잠길 수 있다.",
+      question: "비밀번호를 3번 이상 틀리면 계좌가 잠긴다.",
       answer: true,
       duration: 10,
     },
     {
       id: 11,
-      question: "은행 업무 시간은 보통 오후 4시에 마감된다.",
+      question: "은행 업무 시간은 오후 4시에 마감된다.",
       answer: true,
       duration: 10,
     },
@@ -336,7 +336,7 @@ export const PARK_REHAB_PROTOCOL = {
     },
     {
       id: 3,
-      question: "공원 벤치는 앉아서 쉬는 곳이다.",
+      question: "공원 벤치는 앉어서 쉬는 곳이다.",
       answer: true,
       duration: 10,
     },
@@ -346,18 +346,18 @@ export const PARK_REHAB_PROTOCOL = {
       answer: false,
       duration: 10,
     },
+  ],
+  intermediate: [
     {
       id: 5,
       question: "낮의 공원은 밝고 밤의 공원은 어둡다.",
       answer: true,
       duration: 10,
     },
-  ],
-  intermediate: [
     {
       id: 6,
-      question: "나뭇잎은 보통 초록색이다.",
-      answer: true,
+      question: "은행나무 잎은 빨간색이다.",
+      answer: false,
       duration: 10,
     },
     {
@@ -372,17 +372,12 @@ export const PARK_REHAB_PROTOCOL = {
       answer: false,
       duration: 10,
     },
-    {
-      id: 9,
-      question: "꽃이 피는 계절은 주로 봄이다.",
-      answer: true,
-      duration: 10,
-    },
   ],
   advanced: [
+    { id: 9, question: "추운 봄에는 벚꽃핀다.", answer: false, duration: 10 },
     {
       id: 10,
-      question: "운동기구를 사용하기 전에는 준비운동을 하는 것이 좋다.",
+      question: "운동기구를 사용하기 전에는 준비운동을 해야한다.",
       answer: true,
       duration: 10,
     },
@@ -417,7 +412,7 @@ export const MART_REHAB_PROTOCOL = {
     },
     {
       id: 3,
-      question: "마트에서 물건을 그냥 들고 집으로 간다.",
+      question: "계산을 하지 않고 물건을 들고 집으로 간다.",
       answer: false,
       duration: 10,
     },
@@ -427,14 +422,14 @@ export const MART_REHAB_PROTOCOL = {
       answer: true,
       duration: 10,
     },
+  ],
+  intermediate: [
     {
       id: 5,
       question: "우유는 냉장고 안에 보관되어 있다.",
       answer: true,
       duration: 10,
     },
-  ],
-  intermediate: [
     {
       id: 6,
       question: "물건을 고른 후에는 계산대에서 돈을 낸다.",
@@ -453,17 +448,17 @@ export const MART_REHAB_PROTOCOL = {
       answer: false,
       duration: 10,
     },
-    {
-      id: 9,
-      question: "유통기한이 지난 음식은 먹지 않는 것이 좋다.",
-      answer: true,
-      duration: 10,
-    },
   ],
   advanced: [
     {
+      id: 9,
+      question: "유통기한이 지난 음식을 먹으면 탈이 난다.",
+      answer: true,
+      duration: 10,
+    },
+    {
       id: 10,
-      question: "영수증을 확인하면 내가 산 물건의 가격을 알 수 있다.",
+      question: "영수증을 확인하면 물건의 가격을 알 수 있다.",
       answer: true,
       duration: 10,
     },
@@ -475,8 +470,8 @@ export const MART_REHAB_PROTOCOL = {
     },
     {
       id: 12,
-      question: "포인트 카드를 사용하면 구매 금액의 일부를 적립할 수 있다.",
-      answer: true,
+      question: "냉동식품은 냉장칸에서 찾을 수 있다",
+      answer: false,
       duration: 10,
     },
   ],
