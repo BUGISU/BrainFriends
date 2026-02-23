@@ -30,11 +30,10 @@ type VisualOption = {
 };
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
-const STEP3_IMAGE_BASE_URL =
-  (
-    process.env.NEXT_PUBLIC_STEP3_IMAGE_BASE_URL ||
-    "https://cdn.jsdelivr.net/gh/BUGISU/braintalktalk-assets@main/step3"
-  ).replace(/\/$/, "");
+const STEP3_IMAGE_BASE_URL = (
+  process.env.NEXT_PUBLIC_STEP3_IMAGE_BASE_URL ||
+  "https://cdn.jsdelivr.net/gh/BUGISU/braintalktalk-assets@main/step3"
+).replace(/\/$/, "");
 
 const toTwemojiSvgUrl = (emoji: string) => {
   const codePoints = Array.from(emoji).map((char) =>
@@ -60,7 +59,8 @@ const buildImageCandidates = (
 
   if (option.img) candidates.push(option.img);
 
-  const mappedBaseName = VISUAL_MATCHING_IMAGE_FILENAME_MAP[place]?.[option.label];
+  const mappedBaseName =
+    VISUAL_MATCHING_IMAGE_FILENAME_MAP[place]?.[option.label];
   if (mappedBaseName) {
     for (const nameVariant of buildNameVariants(mappedBaseName)) {
       candidates.push(
@@ -103,10 +103,15 @@ function Step3Content() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAnswered, setIsAnswered] = useState(false);
   const [canAnswer, setCanAnswer] = useState(false);
+  const [isPreloadingImages, setIsPreloadingImages] = useState(false);
+  const [resolvedImageMap, setResolvedImageMap] = useState<
+    Record<string, string>
+  >({});
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageCacheRef = useRef<Record<string, string>>({});
 
   const protocol = useMemo(() => {
     const allQuestions = (
@@ -172,23 +177,68 @@ function Step3Content() {
     return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, speakWord]);
 
+  const findFirstLoadableImage = useCallback(async (candidates: string[]) => {
+    for (const url of candidates) {
+      const loaded = await new Promise<boolean>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
+      });
+      if (loaded) return url;
+    }
+    return "";
+  }, []);
+
+  useEffect(() => {
+    if (!currentItem) return;
+    let active = true;
+    setIsPreloadingImages(true);
+    setResolvedImageMap({});
+
+    (async () => {
+      const entries = await Promise.all(
+        currentItem.options.map(async (option: VisualOption) => {
+          const cacheKey = `${place}:${option.label}`;
+          const cached = imageCacheRef.current[cacheKey];
+          if (cached) return [option.id, cached] as const;
+
+          const resolved = await findFirstLoadableImage(
+            buildImageCandidates(place, option),
+          );
+          if (resolved) imageCacheRef.current[cacheKey] = resolved;
+          return [option.id, resolved] as const;
+        }),
+      );
+
+      if (!active) return;
+      setResolvedImageMap(Object.fromEntries(entries));
+      setIsPreloadingImages(false);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [currentItem, findFirstLoadableImage, place]);
+
   const handleReplay = () => {
     if (
       playCount < 1 &&
       !selectedId &&
       !isSpeaking &&
       !isAnswered &&
-      canAnswer
+      canAnswer &&
+      !isPreloadingImages
     ) {
       speakWord(currentItem.targetWord);
       setPlayCount((prev) => prev + 1);
     }
   };
   const replayEnabled =
-    playCount < 1 && !isSpeaking && !isAnswered && canAnswer;
+    playCount < 1 && !isSpeaking && !isAnswered && canAnswer && !isPreloadingImages;
 
   const handleOptionClick = (id: string) => {
-    if (!canAnswer || selectedId || isAnswered) return;
+    if (!canAnswer || isPreloadingImages || selectedId || isAnswered) return;
     const isCorrect = id === currentItem.answerId;
     setSelectedId(id);
     setShowResult(isCorrect);
@@ -336,48 +386,26 @@ function Step3Content() {
             <div className="flex-1 min-h-0 flex items-start justify-start lg:items-center lg:justify-center pb-6">
               <div className="grid grid-cols-3 gap-3 lg:gap-4 w-full lg:h-full lg:max-h-[60vh]">
                 {currentItem.options.map((option: VisualOption) => {
-                  const imageCandidates = buildImageCandidates(place, option);
                   return (
                     <button
                       key={option.id}
                       onClick={() => handleOptionClick(option.id)}
-                      disabled={isSpeaking || isAnswered || !canAnswer}
+                      disabled={isSpeaking || isAnswered || !canAnswer || isPreloadingImages}
                       className={`relative z-20 w-full aspect-[4/5] sm:aspect-square lg:h-full rounded-[24px] flex items-center justify-center transition-all border shadow-sm bg-white overflow-hidden pointer-events-auto
                     ${selectedId === option.id ? (showResult ? "border-emerald-500 ring-4 ring-emerald-50 scale-105" : "border-slate-800 opacity-60 scale-95") : "border-slate-100 hover:border-orange-100 hover:shadow-md"}`}
                     >
                       <div className="w-full h-full p-4 flex items-center justify-center pointer-events-none">
-                        {option.img || option.emoji ? (
+                        {isPreloadingImages ? (
+                          <div className="w-20 h-20 lg:w-28 lg:h-28 rounded-2xl bg-slate-100 animate-pulse" />
+                        ) : resolvedImageMap[option.id] ? (
                           <>
                             <img
-                              src={imageCandidates[0]}
-                              data-candidate-index="0"
+                              src={resolvedImageMap[option.id]}
                               alt={option.label}
                               className="w-24 h-24 lg:w-32 lg:h-32 object-contain"
-                              loading="lazy"
+                              loading="eager"
                               decoding="async"
-                              onError={(e) => {
-                                const currentIndex = Number(
-                                  e.currentTarget.dataset.candidateIndex || "0",
-                                );
-                                const nextIndex = currentIndex + 1;
-                                const nextSrc = imageCandidates[nextIndex];
-
-                                if (nextSrc) {
-                                  e.currentTarget.dataset.candidateIndex =
-                                    String(nextIndex);
-                                  e.currentTarget.src = nextSrc;
-                                } else {
-                                  e.currentTarget.style.display = "none";
-                                  const fallback =
-                                    e.currentTarget
-                                      .nextElementSibling as HTMLSpanElement | null;
-                                  if (fallback) fallback.style.display = "inline";
-                                }
-                              }}
                             />
-                            <span className="text-4xl lg:text-5xl hidden">
-                              {option.emoji || "🖼️"}
-                            </span>
                           </>
                         ) : (
                           <span className="text-4xl lg:text-5xl">

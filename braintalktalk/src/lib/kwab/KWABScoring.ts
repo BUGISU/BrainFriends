@@ -72,7 +72,7 @@ const NORMAL_STANDARDS = {
   "15-65_1-6": { mean: 94.47, sd: 4.11 },
   "15-65_7+": { mean: 97.21, sd: 2.25 },
   "65+_0": { mean: 88.09, sd: 5.87 },
-  "65+_1-6": { mean: 94.39, sd: 9.82 },
+  "65+_1-6": { mean: 94.39, sd: 3.82 },
   "65+_7+": { mean: 94.91, sd: 5.0 },
 };
 
@@ -109,12 +109,9 @@ function calculateAQ(
     naming.sentenceCompletionScore +
     naming.sentenceResponseScore; // 0-100
 
-  // AQ 공식 적용
+  // WAB AQ 공식(0~100): (자발화20 + 알아듣기200 + 따라말하기100 + 이름대기100) / 4.2
   const aq =
-    (spontaneousTotal / 20) * 10 +
-    (auditoryTotal / 200) * 10 +
-    (repetitionTotal / 100) * 10 +
-    (namingTotal / 100) * 10;
+    (spontaneousTotal + auditoryTotal + repetitionTotal + namingTotal) / 4.2;
 
   return Math.round(aq * 100) / 100; // 소수점 2자리
 }
@@ -196,8 +193,26 @@ function classifyAphasiaType(scores: {
   if (fluency < 5 && comprehension < 5 && repetition < 5) {
     return "전실어증";
   }
+  // 경계 영역은 가장 가까운 고전 유형으로 추정해 사용자에게 분류 결과를 제공합니다.
+  const archetypes = [
+    { type: "브로카 실어증", f: 3, c: 8, r: 3, n: 5 },
+    { type: "베르니케 실어증", f: 8, c: 3, r: 3, n: 4 },
+    { type: "전도 실어증", f: 8, c: 8, r: 3, n: 5 },
+    { type: "전실어증", f: 2, c: 2, r: 2, n: 2 },
+  ] as const;
 
-  return "미분류 실어증";
+  const closest = archetypes
+    .map((t) => ({
+      type: t.type,
+      distance:
+        (fluency - t.f) ** 2 +
+        (comprehension - t.c) ** 2 +
+        (repetition - t.r) ** 2 +
+        (naming - t.n) ** 2,
+    }))
+    .sort((a, b) => a.distance - b.distance)[0];
+
+  return `${closest.type} (추정)`;
 }
 
 // ============================================================================
@@ -302,6 +317,7 @@ export function scoreContentDelivery(params: {
 }): number {
   const { correctAnswers, pictureDescriptionItems } = params;
 
+  if (correctAnswers >= 6 && pictureDescriptionItems >= 10) return 10;
   if (correctAnswers === 0) return 0;
   if (correctAnswers === 1) return 2;
   if (correctAnswers === 2) return 3;
@@ -320,14 +336,6 @@ export function scoreContentDelivery(params: {
   if (correctAnswers === 6) {
     if (pictureDescriptionItems >= 10) return 9;
     return 8;
-  }
-
-  // 완벽한 경우
-  if (
-    correctAnswers === 6 &&
-    pictureDescriptionItems >= 10
-  ) {
-    return 10;
   }
 
   return 4; // 기본값

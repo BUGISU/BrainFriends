@@ -42,6 +42,7 @@ function Step5Content() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const readingStartAtRef = useRef<number | null>(null);
   const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
@@ -157,17 +158,26 @@ function Step5Content() {
           type: recordedMimeType,
         });
 
+        const elapsedByClock =
+          readingStartAtRef.current != null
+            ? Math.max(
+                1,
+                Math.round((Date.now() - readingStartAtRef.current) / 1000),
+              )
+            : 0;
+        const finalReadingTime = Math.max(1, readingTime, elapsedByClock);
+
         const wpm = Math.round(
-          (currentItem.wordCount / Math.max(1, readingTime)) * 60,
+          (currentItem.wordCount / finalReadingTime) * 60,
         );
 
         const res: ReadingMetrics = {
           place,
           text: currentItem.text,
           audioUrl: URL.createObjectURL(audioBlob),
-          totalTime: readingTime,
+          totalTime: finalReadingTime,
           wordsPerMinute: wpm,
-          pauseCount: Math.floor(readingTime / 5),
+          pauseCount: Math.floor(finalReadingTime / 5),
           readingScore: Math.round(
             Math.max(60, 100 - Math.abs(100 - wpm) * 0.5),
           ),
@@ -209,6 +219,7 @@ function Step5Content() {
 
       setPhase("reading");
       setReadingTime(0);
+      readingStartAtRef.current = Date.now();
       setHighlightIndex(0);
       mediaRecorder.start();
 
@@ -234,6 +245,7 @@ function Step5Content() {
     if (mediaRecorderRef.current?.state !== "inactive")
       mediaRecorderRef.current?.stop();
     setPhase("review");
+    readingStartAtRef.current = null;
   };
 
   const playRecordedAudio = () => {

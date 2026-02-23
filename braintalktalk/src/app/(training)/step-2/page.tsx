@@ -92,7 +92,7 @@ function Step2Content() {
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem("step2_recorded_audios"); // ✅ 초기화
+    localStorage.removeItem("step2_recorded_audios"); // ✅ 최초 진입 시 1회 초기화
 
     async function setupCamera() {
       try {
@@ -112,6 +112,11 @@ function Step2Content() {
       if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
       if (reviewAudioUrl) {
         URL.revokeObjectURL(reviewAudioUrl);
       }

@@ -55,11 +55,34 @@ export default function HomePage() {
     return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
   };
 
+  const calcFullAge = (birthDate: string): string => {
+    if (!birthDate) return "";
+    const birth = new Date(`${birthDate}T00:00:00`);
+    if (Number.isNaN(birth.getTime())) return "";
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let age = today.getFullYear() - birth.getFullYear();
+    const hasNotHadBirthdayThisYear =
+      today.getMonth() < birth.getMonth() ||
+      (today.getMonth() === birth.getMonth() &&
+        today.getDate() < birth.getDate());
+    if (hasNotHadBirthdayThisYear) age -= 1;
+
+    return age >= 0 ? String(age) : "";
+  };
+
   const todayLocalDate = getTodayLocalDate();
   const daysSinceOnset = calcDaysSinceOnset(form.onsetDate);
 
   const updateForm = (key: keyof FormState, val: string) => {
-    setForm((p) => ({ ...p, [key]: val }));
+    setForm((p) => {
+      if (key === "birthDate") {
+        return { ...p, birthDate: val, age: calcFullAge(val) };
+      }
+      return { ...p, [key]: val };
+    });
   };
 
   const requestPermissions = async () => {
@@ -171,17 +194,23 @@ export default function HomePage() {
             <Field label="나이 / 교육년수 *">
               <div className="flex items-center gap-3">
                 <div className="relative flex-1">
+                  {form.age && (
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 font-bold">
+                      만
+                    </span>
+                  )}
                   <input
                     value={form.age}
-                    onChange={(e) =>
-                      updateForm("age", e.target.value.replace(/\D/g, ""))
-                    }
-                    className="input-style w-full pr-8"
-                    placeholder="나이"
+                    readOnly
+                    className="input-style w-full"
+                    style={form.age ? { paddingLeft: "34px", paddingRight: "28px" } : undefined}
+                    placeholder="만 나이 자동 계산"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 font-bold">
-                    세
-                  </span>
+                  {form.age && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 font-bold">
+                      세
+                    </span>
+                  )}
                 </div>
                 <div className="relative flex-1">
                   <input

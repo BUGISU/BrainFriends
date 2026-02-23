@@ -139,6 +139,7 @@ function Step4Content() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const analyzerRef = useRef<SpeechAnalyzer | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const imageCacheRef = useRef<Record<string, string>>({});
 
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -150,7 +151,8 @@ function Step4Content() {
   const [replayCount, setReplayCount] = useState(0);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isSttExpanded, setIsSttExpanded] = useState(false);
-  const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
+  const [resolvedImageSrc, setResolvedImageSrc] = useState("");
+  const [isImageResolving, setIsImageResolving] = useState(false);
   const [isImageLoadFailed, setIsImageLoadFailed] = useState(false);
 
   const [currentResult, setCurrentResult] = useState<Step4EvalResult | null>(
@@ -172,10 +174,55 @@ function Step4Content() {
     );
   }, [place, currentScenario]);
 
+  const findFirstLoadableImage = useCallback(async (candidates: string[]) => {
+    for (const url of candidates) {
+      const loaded = await new Promise<boolean>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
+      });
+      if (loaded) return url;
+    }
+    return "";
+  }, []);
+
   useEffect(() => {
-    setImageCandidateIndex(0);
+    if (!currentScenario) return;
+    let active = true;
+
+    const cacheKey = `${place}:${currentScenario.id}`;
+    const cached = imageCacheRef.current[cacheKey];
+    if (cached) {
+      setResolvedImageSrc(cached);
+      setIsImageLoadFailed(false);
+      setIsImageResolving(false);
+      return;
+    }
+
+    setResolvedImageSrc("");
     setIsImageLoadFailed(false);
-  }, [place, currentIndex]);
+    setIsImageResolving(true);
+
+    (async () => {
+      const resolved = await findFirstLoadableImage(imageCandidates);
+      if (!active) return;
+
+      if (resolved) {
+        imageCacheRef.current[cacheKey] = resolved;
+        setResolvedImageSrc(resolved);
+        setIsImageLoadFailed(false);
+      } else {
+        setResolvedImageSrc("");
+        setIsImageLoadFailed(true);
+      }
+      setIsImageResolving(false);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [currentScenario, findFirstLoadableImage, imageCandidates, place]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -519,19 +566,13 @@ function Step4Content() {
           <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-3 lg:gap-5 items-start">
             <div className="bg-white border border-slate-100 rounded-[28px] lg:rounded-[36px] p-3 lg:p-4 shadow-sm">
               <div className="w-full max-w-[280px] sm:max-w-[340px] lg:max-w-[460px] mx-auto aspect-square bg-slate-100 relative flex items-center justify-center rounded-[20px] overflow-hidden">
-                {!isImageLoadFailed && imageCandidates.length > 0 ? (
+                {isImageResolving ? (
+                  <div className="w-36 h-36 rounded-3xl bg-slate-200/80 animate-pulse" />
+                ) : !isImageLoadFailed && resolvedImageSrc ? (
                   <img
-                    src={imageCandidates[imageCandidateIndex]}
+                    src={resolvedImageSrc}
                     alt={`${currentScenario.situation} 이미지`}
                     className="w-full h-full object-contain"
-                    onError={() => {
-                      const nextIndex = imageCandidateIndex + 1;
-                      if (nextIndex < imageCandidates.length) {
-                        setImageCandidateIndex(nextIndex);
-                      } else {
-                        setIsImageLoadFailed(true);
-                      }
-                    }}
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-center px-6">
@@ -568,9 +609,17 @@ function Step4Content() {
                   </div>
                   <button
                     onClick={handleReplayPrompt}
-                    disabled={phase !== "ready" || isPromptPlaying || replayCount >= 1}
+                    disabled={
+                      phase !== "ready" ||
+                      isPromptPlaying ||
+                      replayCount >= 1 ||
+                      isImageResolving
+                    }
                     className={`w-[112px] px-3 py-2 rounded-lg text-[11px] font-black border transition-colors shrink-0 text-center ${
-                      phase === "ready" && !isPromptPlaying && replayCount < 1
+                      phase === "ready" &&
+                      !isPromptPlaying &&
+                      replayCount < 1 &&
+                      !isImageResolving
                         ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
                         : "bg-slate-50 text-slate-400 border-slate-200"
                     }`}
@@ -581,16 +630,18 @@ function Step4Content() {
 
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <p className="text-[11px] font-bold text-slate-400 flex-1">
-                    {isPromptPlaying
+                    {isImageResolving
+                      ? "상황 이미지를 불러오는 중입니다."
+                      : isPromptPlaying
                       ? "문제 음성을 듣는 중입니다. 재생이 끝나면 녹음 버튼이 활성화됩니다."
                       : "이미지를 보고 떠오르는 문장을 자유롭게 말해 주세요."}
                   </p>
                   {phase === "ready" && (
                     <button
                       onClick={startRecording}
-                      disabled={!canRecord || isPromptPlaying}
+                      disabled={!canRecord || isPromptPlaying || isImageResolving}
                       className={`lg:hidden w-[112px] px-3 py-2 rounded-lg text-[11px] font-black border transition-colors shrink-0 text-center ${
-                        canRecord && !isPromptPlaying
+                        canRecord && !isPromptPlaying && !isImageResolving
                           ? "bg-orange-500 text-white border-orange-500"
                           : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                       }`}
@@ -647,15 +698,6 @@ function Step4Content() {
                       )}
                     </div>
 
-                    {isPlayingAudio && (
-                      <button
-                        onClick={handleSkipPlayback}
-                        className="absolute top-4 right-4 px-3 py-1.5 rounded-full text-[10px] font-black text-white bg-orange-500 hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 z-[2]"
-                      >
-                        재생 건너뛰기
-                      </button>
-                    )}
-
                     <div className="mt-5 flex flex-col gap-3 relative z-[1]">
                       <button
                         onClick={playRecordedAudio}
@@ -683,9 +725,9 @@ function Step4Content() {
                   {phase === "ready" && (
                     <button
                       onClick={startRecording}
-                      disabled={!canRecord || isPromptPlaying}
+                      disabled={!canRecord || isPromptPlaying || isImageResolving}
                       className={`group w-28 h-28 rounded-full shadow-2xl flex items-center justify-center transition-all border-8 ${
-                        canRecord && !isPromptPlaying
+                        canRecord && !isPromptPlaying && !isImageResolving
                           ? "bg-white border-slate-50 hover:scale-105"
                           : "bg-slate-100 border-slate-100 opacity-70 cursor-not-allowed"
                       }`}
