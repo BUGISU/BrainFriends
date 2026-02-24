@@ -150,28 +150,92 @@ export default function FaceTracker({
     // clear
     ctx.clearRect(0, 0, w, h);
 
-    // 간단 “페이스 마스크” 느낌: 랜드마크 점 + 외곽선 약하게
-    // (색/두께는 필요하면 여기만 조절)
-    ctx.save();
-    ctx.globalAlpha = 0.9;
+    const toPoint = (idx: number) => ({
+      x: landmarks[idx].x * w,
+      y: landmarks[idx].y * h,
+    });
+    // 안면 비대칭 가이드: 세로 실선 1개 + 가로 점선 3개 (얼굴 각도 추종)
+    const leftCheek = landmarks[234];
+    const rightCheek = landmarks[454];
+    const leftBrow = landmarks[105];
+    const rightBrow = landmarks[334];
+    const noseTip = landmarks[1];
+    const leftMouth = landmarks[61];
+    const rightMouth = landmarks[291];
+    const chin = landmarks[152];
+    const leftJaw = landmarks[136] || landmarks[172];
+    const rightJaw = landmarks[365] || landmarks[397];
 
-    // points
-    ctx.fillStyle = "rgba(218,165,32,0.85)"; // 골드 느낌
-    for (const p of landmarks) {
-      const x = p.x * w;
-      const y = p.y * h;
+    if (
+      leftCheek &&
+      rightCheek &&
+      leftBrow &&
+      rightBrow &&
+      noseTip &&
+      leftMouth &&
+      rightMouth &&
+      chin &&
+      leftJaw &&
+      rightJaw
+    ) {
+      const lCheek = toPoint(234);
+      const rCheek = toPoint(454);
+      const lEye = toPoint(105);
+      const rEye = toPoint(334);
+      const n = toPoint(1);
+      const lM = toPoint(61);
+      const rM = toPoint(291);
+      const c = toPoint(152);
+      let lJ = { x: leftJaw.x * w, y: leftJaw.y * h };
+      let rJ = { x: rightJaw.x * w, y: rightJaw.y * h };
+
+      const eyeCenter = { x: (lEye.x + rEye.x) / 2, y: (lEye.y + rEye.y) / 2 };
+      const mouthCenter = { x: (lM.x + rM.x) / 2, y: (lM.y + rM.y) / 2 };
+      const midX = (lCheek.x + rCheek.x) / 2;
+      const eyeY = eyeCenter.y;
+      const noseY = n.y;
+      const mouthY = mouthCenter.y;
+      const jawMinY = mouthY + (c.y - mouthY) * 0.72;
+
+      // 턱선이 입선에 붙지 않도록 하부 높이 보정
+      if (lJ.y < jawMinY) lJ = { ...lJ, y: jawMinY };
+      if (rJ.y < jawMinY) rJ = { ...rJ, y: jawMinY };
+
+      const pad = 6;
+      const startX = lCheek.x + pad;
+      const endX = rCheek.x - pad;
+
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 0.65;
+
+      // 세로 점선(정중선)
+      ctx.setLineDash([2, 2]);
       ctx.beginPath();
-      ctx.arc(x, y, 1.2, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(midX, eyeY - 14);
+      ctx.lineTo(midX, c.y + 8);
+      ctx.stroke();
+
+      // 가로 점선 3개
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      // 눈선
+      ctx.moveTo(startX, eyeY);
+      ctx.lineTo(endX, eyeY);
+      // 코선
+      ctx.moveTo(startX, noseY);
+      ctx.lineTo(endX, noseY);
+      // 입선
+      ctx.moveTo(startX, mouthY);
+      ctx.lineTo(endX, mouthY);
+      ctx.stroke();
+
+      // 턱 기준선(하악선)
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(lJ.x, lJ.y);
+      ctx.lineTo(rJ.x, rJ.y);
+      ctx.stroke();
     }
-
-    // mouth region만 살짝 강조(입 주변 랜드마크 일부)
-    // mediapipe face landmarker index는 많아서 “대략적” 마스크만 제공
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(w * 0.25, h * 0.55, w * 0.5, h * 0.25);
-
-    ctx.restore();
   };
 
   const tick = () => {

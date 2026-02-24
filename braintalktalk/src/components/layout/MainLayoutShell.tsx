@@ -28,10 +28,10 @@ export default function MainLayoutShell({
         {headerInfo && (
           <header className="px-10 py-6 border-b border-gray-50 flex justify-between items-center bg-white shrink-0">
             <div className="text-left">
-              <span className="text-[#DAA520] font-black text-[11px] tracking-[0.2em] uppercase">
+              <span className="text-orange-500 font-black text-[11px] tracking-[0.2em] uppercase">
                 Step {headerInfo.step} • {headerInfo.place}
               </span>
-              <h2 className="text-2xl font-black text-[#8B4513] tracking-tighter">
+              <h2 className="text-2xl font-black text-[#0B1A3A] tracking-tighter">
                 {headerInfo.title}
               </h2>
             </div>

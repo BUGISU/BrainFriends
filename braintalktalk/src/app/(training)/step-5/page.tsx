@@ -32,7 +32,7 @@ function Step5Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { sidebarMetrics, updateClinical } = useTraining();
+  const { sidebarMetrics } = useTraining();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step4Score = searchParams.get("step4") || "0";
@@ -94,25 +94,6 @@ function Step5Content() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (!isMounted) return;
-    updateClinical({
-      analysisAccuracy: currentResult ? currentResult.readingScore : 92.8,
-      systemLatency: 40 + Math.floor(Math.random() * 5),
-      reliability: 0.85 + (sidebarMetrics.facialSymmetry || 0) * 0.1,
-      correlation: 0.89 + (currentResult?.readingScore || 85) / 1000,
-      stability: currentResult ? 3.8 : 7.1,
-    });
-  }, [
-    sidebarMetrics,
-    currentResult,
-    currentIndex,
-    texts.length,
-    place,
-    updateClinical,
-    isMounted,
-  ]);
 
   const handleSkipAudio = useCallback(() => {
     if (audioPlayerRef.current) {
@@ -305,21 +286,21 @@ function Step5Content() {
 
   return (
     <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
-      <header className="h-16 lg:h-20 px-4 sm:px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+      <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-xs">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
             05
           </div>
-          <div className="flex flex-col">
-            <h2 className="text-sm lg:text-base font-black text-slate-800 leading-none">
+          <div>
+            <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
+              Step 05 • Reading Fluency Training
+            </span>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
               텍스트 읽기 학습
             </h2>
-            <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter italic">
-              Reading Fluency Training
-            </p>
           </div>
         </div>
-        <div className="bg-orange-50 px-3 py-1.5 rounded-full font-black text-[11px] text-orange-600 border border-orange-100">
+        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
           {currentIndex + 1} / {texts.length}
         </div>
       </header>

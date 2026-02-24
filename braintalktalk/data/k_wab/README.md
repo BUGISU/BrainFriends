@@ -1,4 +1,4 @@
-# K-WAB 데이터 정리본
+# 언어평가 데이터 정리본
 
 - `aq_norm_sd.csv`: 정상군 AQ 평균/표준편차 기준표(연령/교육년수별).
 - `spontaneous_speech_anchors.csv`: 스스로말하기(내용전달/유창성) 점수 앵커.

@@ -11,7 +11,6 @@ import React, {
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 import { FLUENCY_SCENARIOS } from "@/constants/fluencyData";
-import { useTraining } from "../TrainingContext";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
@@ -131,8 +130,6 @@ function toDataUrl(blob: Blob): Promise<string> {
 function Step4Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { sidebarMetrics, updateClinical } = useTraining();
-
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step3Score = searchParams.get("step3") || "0";
 
@@ -282,23 +279,6 @@ function Step4Content() {
     setIsSttExpanded(false);
     playPrompt(false);
   }, [isMounted, currentIndex, currentScenario, playPrompt]);
-
-  useEffect(() => {
-    if (!isMounted) return;
-
-    const avgScore =
-      allResults.length > 0
-        ? allResults.reduce((sum, r) => sum + r.kwabScore, 0) / allResults.length
-        : 0;
-
-    updateClinical({
-      analysisAccuracy: Math.min(100, avgScore * 10),
-      systemLatency: 42 + Math.floor(Math.random() * 6),
-      reliability: 0.82 + (sidebarMetrics.facialSymmetry || 0) * 0.15,
-      correlation: 0.86 + Math.min(0.12, avgScore / 100),
-      stability: allResults.length > 0 ? 4.2 : 7.0,
-    });
-  }, [allResults, sidebarMetrics.facialSymmetry, updateClinical, isMounted]);
 
   const calculateRelevanceScore = useCallback((transcript: string) => {
     if (!currentScenario) {
@@ -542,21 +522,21 @@ function Step4Content() {
 
   return (
     <div className="flex flex-col h-full bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
-      <header className="h-16 lg:h-20 px-4 sm:px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+      <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-xs">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
             04
           </div>
-          <div className="flex flex-col">
-            <h2 className="text-sm lg:text-base font-black text-slate-800 leading-none">
+          <div>
+            <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
+              Step 04 • Image Prompted Spontaneous Speech
+            </span>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
               직관적 발화 유도 훈련
             </h2>
-            <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter italic">
-              Image Prompted Spontaneous Speech
-            </p>
           </div>
         </div>
-        <div className="bg-orange-50 px-3 py-1.5 rounded-full font-black text-[11px] text-orange-600">
+        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
           {currentIndex + 1} / {scenarios.length}
         </div>
       </header>

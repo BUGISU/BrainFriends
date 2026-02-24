@@ -137,25 +137,49 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F0F2F5] flex items-center justify-center p-4 text-black font-sans">
-      <div className="w-full max-w-5xl bg-white rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col md:flex-row border border-white/20">
+    <main className="h-screen overflow-hidden bg-[#F0F2F5] p-2 md:p-3 text-black font-sans flex items-center justify-center">
+      <div className="w-full max-w-5xl mx-auto flex flex-col">
+        <header className="mb-2 rounded-2xl border border-slate-800 bg-slate-900 px-4 md:px-6 py-3 relative overflow-hidden">
+          <div className="absolute -top-8 -right-8 w-20 h-20 rounded-full bg-orange-500/20" />
+          <div className="relative z-10 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div className="md:max-w-[44%]">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">
+                System Brief
+              </p>
+              <h1 className="mt-1 text-lg md:text-xl font-black text-white leading-tight">
+                시스템 핵심 요약
+              </h1>
+              <p className="mt-1 text-xs text-slate-300">
+                AI 기반 언어 재활 분석 시스템
+              </p>
+            </div>
+            <div className="rounded-xl bg-white/10 border border-white/10 px-4 py-2.5 md:w-[52%]">
+              <p className="text-[11px] font-black text-orange-300 mb-1">핵심 기능</p>
+              <p className="text-xs text-slate-200">교육년수·발병경과 기반 맞춤형 언어 과제 자동 구성</p>
+              <p className="text-xs text-slate-200">카메라·음성 기반 실시간 수행 분석 및 안면 비대칭 가이드</p>
+              <p className="text-xs text-slate-200">단계별 수행 기록 저장과 임상 리포트(PDF) 생성</p>
+            </div>
+          </div>
+        </header>
+
+        <div className="w-full bg-white rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden border border-white/20">
         {/* Left Section: Registration Form */}
-        <section className="flex-[1.6] p-8 md:p-12 overflow-y-auto max-h-[90vh]">
-          <header className="mb-8">
+        <section className="p-5 md:p-6">
+          <header className="mb-4">
             <div className="flex items-center gap-3 mb-2">
-              <span className="w-8 h-8 bg-[#8B4513] rounded-lg flex items-center justify-center text-white font-bold">
+              <span className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white font-bold">
                 B
               </span>
-              <h1 className="text-3xl font-extrabold text-[#2D3436] tracking-tight">
+              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
                 브레인톡톡
               </h1>
             </div>
-            <p className="text-[#DAA520] font-bold uppercase tracking-[0.2em] text-[10px]">
+            <p className="text-orange-500 font-bold uppercase tracking-[0.2em] text-[10px]">
               Patient Clinical Data Setup
             </p>
           </header>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
             {/* 1행: 성명 & 성별 */}
             <Field label="학습자 성명 *">
               <input
@@ -182,7 +206,7 @@ export default function HomePage() {
                   <button
                     key={g}
                     onClick={() => updateForm("gender", g)}
-                    className={`flex-1 rounded-lg text-sm font-bold transition-all ${form.gender === g ? "bg-white text-[#8B4513] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                    className={`flex-1 rounded-lg text-sm font-bold transition-all ${form.gender === g ? "bg-white text-slate-900 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
                   >
                     {g === "M" ? "남성" : "여성"}
                   </button>
@@ -244,7 +268,7 @@ export default function HomePage() {
                 <div
                   className={`flex-1 flex items-center justify-center rounded-xl font-black text-xs transition-all ${
                     daysSinceOnset !== null
-                      ? "bg-[#8B4513] text-white"
+                      ? "bg-orange-500 text-white"
                       : "bg-gray-50 text-gray-300 border-2 border-dashed border-gray-100"
                   }`}
                 >
@@ -265,7 +289,7 @@ export default function HomePage() {
                     onClick={() =>
                       updateForm("hemiplegia", item.k as Hemiplegia)
                     }
-                    className={`flex-1 rounded-xl text-sm font-bold border-2 transition-all ${form.hemiplegia === item.k ? "border-[#DAA520] bg-[#FFFBEB] text-[#8B4513]" : "border-gray-50 bg-gray-50 text-gray-400"}`}
+                    className={`flex-1 rounded-xl text-sm font-bold border-2 transition-all ${form.hemiplegia === item.k ? "border-orange-400 bg-orange-50 text-slate-900" : "border-gray-50 bg-gray-50 text-gray-400"}`}
                   >
                     {item.l}
                   </button>
@@ -285,7 +309,7 @@ export default function HomePage() {
                     onClick={() =>
                       updateForm("hemianopsia", item.k as Hemianopsia)
                     }
-                    className={`flex-1 rounded-lg text-[11px] font-bold transition-all ${form.hemianopsia === item.k ? "bg-white text-[#8B4513] shadow-sm" : "text-gray-400"}`}
+                    className={`flex-1 rounded-lg text-[11px] font-bold transition-all ${form.hemianopsia === item.k ? "bg-white text-slate-900 shadow-sm" : "text-gray-400"}`}
                   >
                     {item.l}
                   </button>
@@ -294,10 +318,10 @@ export default function HomePage() {
             </Field>
           </div>
           <div
-            className={`mt-8 p-4 rounded-2xl border flex items-center gap-4 transition-all ${isDenied ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-100"}`}
+            className={`mt-4 p-3 rounded-2xl border flex items-center gap-3 transition-all ${isDenied ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-100"}`}
           >
             <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-sm ${isDenied ? "bg-white text-red-500" : "bg-white text-blue-500"}`}
+              className={`w-9 h-9 rounded-full flex items-center justify-center text-lg shadow-sm ${isDenied ? "bg-white text-red-500" : "bg-white text-blue-500"}`}
             >
               {isDenied ? "!" : "i"}
             </div>
@@ -307,7 +331,7 @@ export default function HomePage() {
               >
                 {isDenied ? "권한 재설정 필요" : "시스템 하드웨어 체크"}
               </p>
-              <p className="text-[10px] text-gray-500 opacity-80 leading-tight">
+              <p className="text-[10px] text-gray-500 opacity-80 leading-snug">
                 발화 분석을 위해 주소창 왼쪽 자물쇠 버튼을 눌러 카메라/마이크를
                 허용해 주세요.
               </p>
@@ -315,7 +339,7 @@ export default function HomePage() {
           </div>
 
           {err && (
-            <p className="mt-4 text-center text-red-500 font-bold text-xs animate-bounce">
+            <p className="mt-3 text-center text-red-500 font-bold text-xs">
               ⚠️ {err}
             </p>
           )}
@@ -323,54 +347,13 @@ export default function HomePage() {
           <button
             onClick={start}
             disabled={isRequesting}
-            className={`mt-6 w-full py-5 rounded-2xl text-xl font-black shadow-[0_10px_20px_rgba(139,69,19,0.2)] transition-all active:scale-95 ${isRequesting ? "bg-gray-400 cursor-not-allowed" : "bg-[#8B4513] hover:bg-[#6D3610] text-white"}`}
+            className={`mt-4 w-full sm:w-auto sm:min-w-[320px] sm:px-10 sm:block sm:mx-auto py-3.5 rounded-2xl text-lg font-black shadow-[0_10px_20px_rgba(249,115,22,0.2)] transition-all active:scale-95 ${isRequesting ? "bg-gray-400 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600 text-white"}`}
           >
             {isRequesting ? "연결 확인 중..." : "학습 대시보드 진입"}
           </button>
         </section>
 
-        {/* Right Section: Information Aside */}
-        <aside className="flex-[0.8] bg-[#2D3436] p-10 text-white flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-[#DAA520] opacity-10 rounded-full -mr-16 -mt-16" />
-          <div className="relative z-10 space-y-8">
-            <h2 className="text-2xl font-bold leading-snug">
-              실시간
-              <br />
-              <span className="text-[#DAA520]">언어 재활</span> 분석 시스템
-            </h2>
-
-            <div className="space-y-4">
-              <div className="bg-white/10 p-5 rounded-2xl backdrop-blur-sm border border-white/5">
-                <p className="text-[10px] text-gray-400 font-bold uppercase mb-2">
-                  K-WAB Normal Range
-                </p>
-                <div className="flex justify-between items-end">
-                  <span className="text-2xl font-mono font-bold">
-                    {form.age && Number(form.age) >= 65 ? "88.09" : "90.73"}
-                  </span>
-                  <span className="text-[10px] text-[#DAA520] mb-1">
-                    정상군 평균 지수
-                  </span>
-                </div>
-              </div>
-
-              <ul className="text-[11px] text-gray-400 space-y-2 ml-1">
-                <li className="flex gap-2">
-                  <span>•</span> 교육년수 기반 맞춤 문항 제공
-                </li>
-                <li className="flex gap-2">
-                  <span>•</span> 시야 결손 방향 대응 UI 적용
-                </li>
-                <li className="flex gap-2">
-                  <span>•</span> 발병 경과일별 회복 곡선 추적
-                </li>
-              </ul>
-            </div>
-          </div>
-          <p className="text-[10px] text-gray-500 italic border-t border-white/10 pt-6">
-            Designed for Clinical Speech Rehabilitation
-          </p>
-        </aside>
+      </div>
       </div>
 
       <style jsx>{`
@@ -384,9 +367,9 @@ export default function HomePage() {
           transition: all 0.2s;
         }
         .input-style:focus {
-          border-color: #daa520;
+          border-color: #fb923c;
           background: white;
-          box-shadow: 0 4px 12px rgba(218, 165, 32, 0.1);
+          box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
           outline: none;
         }
       `}</style>
@@ -403,7 +386,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-extrabold text-[#8B4513] tracking-tight uppercase opacity-80">
+      <label className="text-[11px] font-extrabold text-slate-700 tracking-tight uppercase opacity-80">
         {label}
       </label>
       {children}

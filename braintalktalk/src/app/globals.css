@@ -3,11 +3,21 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --brand-orange: #f97316;
+  --brand-orange-strong: #ea580c;
+  --brand-navy: #0b1a3a;
+  --brand-border: #fed7aa;
+  --brand-soft: #fff7ed;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-orange-strong: var(--brand-orange-strong);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-border: var(--brand-border);
+  --color-brand-soft: var(--brand-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

@@ -92,7 +92,7 @@ function Step3Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { updateClinical, sidebarMetrics } = useTraining();
+  const { sidebarMetrics } = useTraining();
   const place = (searchParams?.get("place") as PlaceType) || "home";
 
   const [isMounted, setIsMounted] = useState(false);
@@ -132,28 +132,6 @@ function Step3Content() {
         window.speechSynthesis.cancel();
     };
   }, []);
-
-  useEffect(() => {
-    if (!updateClinical) return;
-
-    const correctCount = analysisResults.filter((r) => r.isCorrect).length;
-    const totalAttempted = analysisResults.length;
-    const currentAcc =
-      totalAttempted > 0 ? (correctCount / totalAttempted) * 100 : 95.2;
-
-    updateClinical({
-      analysisAccuracy: currentAcc,
-      reliability: 0.8 + (sidebarMetrics.facialSymmetry || 0) * 0.2,
-      stability: isAnswered ? 4.1 : 5.8 + Math.random(),
-      systemLatency: 38 + Math.floor(Math.random() * 7),
-      correlation: 0.88 + (correctCount / totalAttempted) * 0.1,
-    });
-  }, [
-    analysisResults,
-    sidebarMetrics.facialSymmetry,
-    isAnswered,
-    updateClinical,
-  ]);
 
   const speakWord = useCallback((text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -308,21 +286,21 @@ function Step3Content() {
 
   return (
     <div className="flex flex-col h-full bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans">
-      <header className="h-16 lg:h-20 px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+      <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-xs">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
             03
           </div>
-          <div className="flex flex-col">
-            <h2 className="text-sm lg:text-base font-black text-slate-800 leading-none">
+          <div>
+            <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
+              Step 03 • Visual-Auditory Association
+            </span>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
               단어-그림 매칭
             </h2>
-            <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter italic">
-              Visual-Auditory Association
-            </p>
           </div>
         </div>
-        <div className="bg-orange-50 px-3 py-1.5 rounded-full font-black text-[11px] text-orange-600">
+        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
           {currentIndex + 1} / {protocol.length}
         </div>
       </header>

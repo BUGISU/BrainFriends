@@ -11,7 +11,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 
 import { REHAB_PROTOCOLS } from "@/constants/auditoryTrainingData";
 import { PlaceType } from "@/constants/trainingData";
-import { useTraining } from "../TrainingContext";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
 
@@ -33,8 +32,6 @@ function Step1Content() {
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
   const [questionResults, setQuestionResults] = useState<any[]>([]);
 
-  const { updateClinical, sidebarMetrics } = useTraining();
-
   useEffect(() => {
     setIsMounted(true);
     GLOBAL_SPEECH_LOCK = {};
@@ -49,19 +46,6 @@ function Step1Content() {
       if (typeof window !== "undefined") window.speechSynthesis.cancel();
     };
   }, [placeParam]);
-
-  useEffect(() => {
-    if (!updateClinical) return;
-
-    const totalAttempted = currentIndex + (isAnswered ? 1 : 0);
-    const accuracy = totalAttempted > 0 ? (score / totalAttempted) * 100 : 95.2;
-
-    updateClinical({
-      analysisAccuracy: accuracy,
-      correlation: 0.85 + accuracy / 1000, // 정답률에 비례한 상관계수
-      stability: Math.max(2, 10 - accuracy / 10), // 정답률 높을수록 안정성 높음
-    });
-  }, [score, currentIndex, isAnswered, updateClinical]);
 
   const trainingData = useMemo(() => {
     const protocol = REHAB_PROTOCOLS[placeParam] || REHAB_PROTOCOLS.home;
@@ -268,20 +252,18 @@ function Step1Content() {
 
   return (
     <div className="flex flex-col h-full bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans">
-      <header className="h-16 lg:h-20 px-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+      <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
             01
           </div>
-          <div className="flex flex-col">
-            <h2 className="text-sm lg:text-base font-black text-slate-800 leading-none">
+          <div>
+            <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
+              Step 01 • Auditory Comprehension
+            </span>
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
               청각 이해 판단 훈련
             </h2>
-            <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter italic">
-              {sidebarMetrics.faceDetected
-                ? "Face Tracking Active"
-                : "Waiting for Camera..."}
-            </p>
           </div>
         </div>
 
@@ -289,15 +271,15 @@ function Step1Content() {
           <div
             className={`px-3 py-1.5 rounded-full font-black text-[11px] transition-all border ${
               isSpeaking
-                ? "bg-slate-50 border-slate-100 text-slate-300"
-                : "bg-white border-orange-100 text-orange-500"
+                ? "bg-slate-50 border-slate-200 text-slate-400"
+                : "bg-orange-50 border-orange-200 text-orange-700"
             }`}
           >
             {isSpeaking
               ? "LISTENING..."
               : `${timeLeft ?? currentItem.duration}s`}
           </div>
-          <div className="bg-orange-50 px-3 py-1.5 rounded-full font-black text-[11px] text-orange-600">
+          <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
             {currentIndex + 1} / 10
           </div>
         </div>

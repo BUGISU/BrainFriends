@@ -11,7 +11,6 @@ import React, {
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 import { WRITING_WORDS } from "@/constants/writingData";
-import { useTraining } from "../TrainingContext";
 import { loadPatientProfile } from "@/lib/patientStorage";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 
@@ -36,8 +35,6 @@ const RESULT_PRAISES = [
 function Step6Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  const { sidebarMetrics, updateClinical } = useTraining();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
 
@@ -79,29 +76,6 @@ function Step6Content() {
     setIsMounted(true);
     localStorage.removeItem("step6_recorded_data"); // ✅ 초기화
   }, []);
-
-  useEffect(() => {
-    if (!isMounted) return;
-
-    updateClinical({
-      systemLatency: 24,
-      trackingPrecision: sidebarMetrics.faceDetected ? 0.08 : 0.0,
-      analysisAccuracy: Math.round((correctCount / (currentIndex || 1)) * 100),
-      correlation: 0.91 + (isDrawing ? 0.02 : 0),
-      reliability: 0.96,
-      stability: (sidebarMetrics.facialSymmetry || 0) * 10,
-    });
-  }, [
-    sidebarMetrics,
-    userStrokeCount,
-    currentIndex,
-    correctCount,
-    questions.length,
-    place,
-    updateClinical,
-    isMounted,
-    isDrawing,
-  ]);
 
   const initCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -254,21 +228,21 @@ function Step6Content() {
 
   return (
     <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
-      <header className="h-16 px-4 sm:px-6 lg:px-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+      <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-amber-100">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
             06
           </div>
           <div>
-            <span className="text-amber-500 font-black text-[10px] uppercase tracking-widest leading-none block">
+            <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
               Step 06 • Writing
             </span>
-            <h2 className="text-lg font-black text-slate-800 tracking-tighter">
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
               단어 쓰기 학습
             </h2>
           </div>
         </div>
-        <div className="bg-amber-50 px-4 py-1.5 rounded-full font-black text-xs text-amber-600 border border-amber-100">
+        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
           {currentIndex + 1} / {questions.length}
         </div>
       </header>

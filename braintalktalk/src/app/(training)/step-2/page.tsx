@@ -23,7 +23,7 @@ function Step2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { sidebarMetrics, updateClinical } = useTraining();
+  const { sidebarMetrics } = useTraining();
   const place = (searchParams?.get("place") as PlaceType) || "home";
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -128,46 +128,6 @@ function Step2Content() {
     setReplayCount(0);
     playPrompt(false);
   }, [isMounted, currentItem, currentIndex, playPrompt]);
-
-  useEffect(() => {
-    if (!isMounted) return;
-
-    const currentAcc =
-      analysisResults.length > 0
-        ? analysisResults.reduce((a, b) => a + b.finalScore, 0) /
-          analysisResults.length
-        : 95.2;
-    const symmetry = sidebarMetrics.facialSymmetry || 0;
-    const opening = sidebarMetrics.mouthOpening || 0;
-    const progress = analysisResults.length / Math.max(1, protocol.length);
-
-    updateClinical({
-      systemLatency: 30 + Math.floor(Math.random() * 6),
-      trackingPrecision: 0.12 + (1 - symmetry) * 0.12 + Math.random() * 0.03,
-      analysisAccuracy: currentAcc,
-      correlation: Math.min(
-        0.99,
-        0.84 + symmetry * 0.1 + progress * 0.04 + opening * 0.02,
-      ),
-      reliability: Math.min(0.99, 0.78 + symmetry * 0.14 + progress * 0.05),
-      stability: Math.max(
-        1.8,
-        Number(
-          (7.5 - currentAcc * 0.04 - symmetry * 2.0 - opening * 1.2).toFixed(1),
-        ),
-      ),
-    });
-  }, [
-    sidebarMetrics.faceDetected,
-    sidebarMetrics.facialSymmetry,
-    sidebarMetrics.mouthOpening,
-    analysisResults,
-    currentIndex,
-    protocol.length,
-    place,
-    updateClinical,
-    isMounted,
-  ]);
 
   const handleNext = useCallback(() => {
     if (audioPlayerRef.current) {
@@ -398,21 +358,21 @@ function Step2Content() {
 
   return (
     <div className="flex flex-col h-full bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans relative">
-      <header className="h-16 px-4 sm:px-6 lg:px-8 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+      <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg shadow-orange-200">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
             02
           </div>
           <div>
             <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
               Step 02 • Repetition
             </span>
-            <h2 className="text-lg font-black text-slate-800 tracking-tighter">
+            <h2 className="text-lg font-black text-slate-900 tracking-tight">
               문장 복창 훈련
             </h2>
           </div>
         </div>
-        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-600 border border-orange-100">
+        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
           {currentIndex + 1} / {protocol.length}
         </div>
       </header>

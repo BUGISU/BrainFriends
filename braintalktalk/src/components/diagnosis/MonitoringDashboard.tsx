@@ -14,17 +14,17 @@ const KPICard = ({ label, value, target, status = "OK" }: any) => (
       <span
         className={`text-white text-[9px] px-1.5 py-0.5 rounded font-black italic ${
           status === "OK"
-            ? "bg-[#DAA520]"
+            ? "bg-orange-500"
             : status === "WARN"
-              ? "bg-orange-500"
-              : "bg-red-500"
+              ? "bg-orange-600"
+              : "bg-slate-700"
         }`}
       >
         {status}
       </span>
     </div>
     <div className="mt-2">
-      <div className="text-xl font-black text-[#8B4513] tracking-tight leading-none">
+      <div className="text-xl font-black text-[#0B1A3A] tracking-tight leading-none">
         {value}
       </div>
       <div className="text-[9px] text-gray-400 mt-1 font-medium italic">
@@ -46,7 +46,7 @@ export default function MonitoringDashboard({
     <div className="space-y-6">
       {/* SECTION 1: 환자 안면 재활 데이터 */}
       <div>
-        <h3 className="text-[11px] font-black text-[#8B4513] mb-3 ml-1 uppercase italic tracking-widest">
+        <h3 className="text-[11px] font-black text-orange-500 mb-3 ml-1 uppercase italic tracking-widest">
           Patient Rehab Status
         </h3>
         <div className="grid grid-cols-2 gap-3">

@@ -2,7 +2,7 @@
 /**
  * 학습 세션 관리 시스템
  * - 각 Step의 결과를 누적
- * - 실시간 K-WAB 점수 계산
+ * - 실시간 언어 점수 계산
  * - localStorage 기반 영속성
  */
 
@@ -60,7 +60,7 @@ export interface Step3Result {
 }
 
 export interface Step4Result {
-  // 유창성 학습 (K-WAB 기반 자발화 유창성 평가)
+  // 유창성 학습 (자발화 유창성 평가)
   items: Array<{
     situation: string;
     prompt: string;
@@ -68,7 +68,7 @@ export interface Step4Result {
     silenceRatio: number;
     averageAmplitude: number;
     peakCount: number;
-    kwabScore: number; // K-WAB 0~10점
+    kwabScore: number; // 0~10점
     rawScore: number; // 원점수 0~100
   }>;
   averageKwabScore: number;
@@ -125,7 +125,7 @@ export interface TrainingSession {
   step5?: Step5Result;
   step6?: Step6Result;
 
-  // K-WAB 점수 (실시간 계산)
+  // 언어 점수 (실시간 계산)
   kwabScores?: KWABScores;
 }
 
@@ -134,6 +134,36 @@ export interface TrainingSession {
 // ============================================================================
 
 const SESSION_STORAGE_PREFIX = "kwab_training_session";
+const HISTORY_STORAGE_PREFIX = "kwab_training_history";
+
+export interface TrainingHistoryEntry {
+  historyId: string;
+  sessionId: string;
+  patientKey: string;
+  patientName: string;
+  birthDate?: string;
+  age: number;
+  educationYears: number;
+  place: string;
+  completedAt: number;
+  aq: number;
+  stepScores: {
+    step1: number; // 0~100
+    step2: number; // 0~100
+    step3: number; // 0~100
+    step4: number; // 0~100
+    step5: number; // 0~100
+    step6: number; // 0~100
+  };
+  stepDetails: {
+    step1: any[];
+    step2: any[];
+    step3: any[];
+    step4: any[];
+    step5: any[];
+    step6: any[];
+  };
+}
 
 export class SessionManager {
   private session: TrainingSession;
@@ -197,14 +227,15 @@ export class SessionManager {
     this.session.completedAt = Date.now();
     this.updateKWABScores();
     this.saveSession();
+    this.saveHistoryEntry();
   }
 
   // ========================================================================
-  // K-WAB 점수 계산
+  // 언어 점수 계산
   // ========================================================================
 
   private updateKWABScores() {
-    // Step별 결과를 K-WAB 형식으로 변환
+    // Step별 결과를 내부 점수 형식으로 변환
     const spontaneousSpeech = this.convertToSpontaneousSpeech();
     const auditoryComprehension = this.convertToAuditoryComprehension();
     const repetition = this.convertToRepetition();
@@ -212,7 +243,7 @@ export class SessionManager {
     const reading = this.convertToReading();
     const writing = this.convertToWriting();
 
-    // K-WAB 점수 계산
+    // 점수 계산
     this.session.kwabScores = calculateKWABScores(this.session.patient, {
       spontaneousSpeech,
       auditoryComprehension,
@@ -224,17 +255,17 @@ export class SessionManager {
   }
 
   // ========================================================================
-  // Step 결과 → K-WAB 형식 변환
+  // Step 결과 → 내부 점수 형식 변환
   // ========================================================================
 
   private convertToSpontaneousSpeech(): SpontaneousSpeechResult {
-    // Step 4의 K-WAB 유창성 데이터를 활용
+    // Step 4의 유창성 데이터를 활용
     const step4 = this.session.step4;
     if (!step4) {
       return { contentScore: 0, fluencyScore: 0 };
     }
 
-    // 유창성 점수: K-WAB 0~10점을 직접 사용
+    // 유창성 점수: 0~10점을 직접 사용
     const fluencyScore = step4.averageKwabScore;
 
     // 내용 점수: 5점 이상을 통과로 간주 (총 10점 만점)
@@ -254,7 +285,7 @@ export class SessionManager {
       ? Math.min((step1.correctAnswers / step1.totalQuestions) * 60, 60)
       : 0;
 
-    // Step 3 데이터를 K-WAB 청각적 낱말인지 점수(60점 만점)로 변환
+    // Step 3 데이터를 청각적 낱말인지 점수(60점 만점)로 변환
     const wordRecognitionScore = step3
       ? Math.min((step3.correctCount / step3.totalCount) * 60, 60)
       : 0;
@@ -369,13 +400,217 @@ export class SessionManager {
     const p = patient as any;
     return [
       normalize(p.name),
-      normalize(p.gender),
+      normalize(p.birthDate),
       normalize(patient.age),
       normalize(patient.educationYears),
-      normalize(p.onsetDate),
-      normalize(p.hemiplegia),
-      normalize(p.hemianopsia),
     ].join("|");
+  }
+
+  private getHistoryStorageKey(): string {
+    return `${HISTORY_STORAGE_PREFIX}:${this.session.patientKey}`;
+  }
+
+  private getStepScoresForHistory() {
+    const step1 = this.session.step1
+      ? Math.round(
+          (this.session.step1.correctAnswers / this.session.step1.totalQuestions) *
+            100,
+        )
+      : 0;
+    const step2 = this.session.step2
+      ? Math.round(this.session.step2.averagePronunciation)
+      : 0;
+    const step3 = this.session.step3 ? Math.round(this.session.step3.score) : 0;
+    const step4 = this.session.step4
+      ? Math.round(this.session.step4.score * 10)
+      : 0;
+    const step5 = this.session.step5
+      ? Math.round(
+          (this.session.step5.correctAnswers / this.session.step5.totalQuestions) *
+            100,
+        )
+      : 0;
+    const step6 = this.session.step6 ? Math.round(this.session.step6.accuracy) : 0;
+    return { step1, step2, step3, step4, step5, step6 };
+  }
+
+  private saveHistoryEntry() {
+    if (typeof window === "undefined") return;
+    const aq = this.session.kwabScores?.aq;
+    if (aq === undefined || aq === null) return;
+
+    const historyKey = this.getHistoryStorageKey();
+    let existing: TrainingHistoryEntry[] = [];
+    try {
+      const raw = localStoreAdapter.getItem(historyKey);
+      existing = raw ? (JSON.parse(raw) as TrainingHistoryEntry[]) : [];
+      if (!Array.isArray(existing)) existing = [];
+    } catch {
+      existing = [];
+    }
+
+    const readArray = (key: string) => {
+      try {
+        const raw = localStoreAdapter.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const p = this.session.patient as any;
+    const entry: TrainingHistoryEntry = {
+      historyId: `history_${Date.now()}`,
+      sessionId: this.session.sessionId,
+      patientKey: this.session.patientKey,
+      patientName: String(p.name ?? ""),
+      birthDate: p.birthDate ? String(p.birthDate) : undefined,
+      age: Number(this.session.patient.age ?? 0),
+      educationYears: Number(this.session.patient.educationYears ?? 0),
+      place: this.session.place,
+      completedAt: this.session.completedAt ?? Date.now(),
+      aq: Number(aq),
+      stepScores: this.getStepScoresForHistory(),
+      stepDetails: {
+        step1: readArray("step1_data"),
+        step2: readArray("step2_recorded_audios"),
+        step3: readArray("step3_data"),
+        step4: readArray("step4_recorded_audios"),
+        step5: readArray("step5_recorded_data"),
+        step6: readArray("step6_recorded_data"),
+      },
+    };
+
+    const withoutSameSession = existing.filter((e) => e.sessionId !== entry.sessionId);
+    const next = [...withoutSameSession, entry]
+      .sort((a, b) => a.completedAt - b.completedAt)
+      .slice(-50);
+    localStoreAdapter.setItem(historyKey, JSON.stringify(next));
+  }
+
+  static getHistoryFor(patient: PatientProfile): TrainingHistoryEntry[] {
+    if (typeof window === "undefined") return [];
+    const patientKey = SessionManager.getPatientKey(patient);
+    const key = `${HISTORY_STORAGE_PREFIX}:${patientKey}`;
+    try {
+      const raw = localStoreAdapter.getItem(key);
+      const rows = raw ? (JSON.parse(raw) as TrainingHistoryEntry[]) : [];
+      if (!Array.isArray(rows)) return [];
+      return rows.sort((a, b) => a.completedAt - b.completedAt);
+    } catch {
+      return [];
+    }
+  }
+
+  static getAQTrendFor(patient: PatientProfile, place?: string) {
+    const rows = SessionManager.getHistoryFor(patient).filter(
+      (r) => !place || r.place === place,
+    );
+    const latest = rows.length ? rows[rows.length - 1] : null;
+    const previous = rows.length > 1 ? rows[rows.length - 2] : null;
+    const delta = latest && previous ? Number((latest.aq - previous.aq).toFixed(1)) : null;
+    return { latest, previous, delta, count: rows.length };
+  }
+
+  static seedMockHistoryFor(
+    patient: PatientProfile,
+    place: string,
+    count: number = 5,
+  ): number {
+    if (typeof window === "undefined" || count <= 0) return 0;
+    const patientKey = SessionManager.getPatientKey(patient);
+    const key = `${HISTORY_STORAGE_PREFIX}:${patientKey}`;
+
+    let existing: TrainingHistoryEntry[] = [];
+    try {
+      const raw = localStoreAdapter.getItem(key);
+      existing = raw ? (JSON.parse(raw) as TrainingHistoryEntry[]) : [];
+      if (!Array.isArray(existing)) existing = [];
+    } catch {
+      existing = [];
+    }
+
+    const now = Date.now();
+    const baseAQ = 58;
+    const mockRows: TrainingHistoryEntry[] = Array.from({ length: count }).map(
+      (_, idx) => {
+        const aq = Number((baseAQ + idx * 2.3).toFixed(1));
+        const dt = now - (count - idx) * 1000 * 60 * 60 * 24 * 7;
+        const mk = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
+        return {
+          historyId: `mock_${dt}_${idx}`,
+          sessionId: `mock_session_${dt}_${idx}`,
+          patientKey,
+          patientName: String((patient as any).name ?? ""),
+          birthDate: (patient as any).birthDate || undefined,
+          age: Number(patient.age ?? 0),
+          educationYears: Number(patient.educationYears ?? 0),
+          place,
+          completedAt: dt,
+          aq,
+          stepScores: {
+            step1: mk(50 + idx * 4),
+            step2: mk(54 + idx * 4),
+            step3: mk(58 + idx * 4),
+            step4: mk(52 + idx * 3),
+            step5: mk(60 + idx * 4),
+            step6: mk(56 + idx * 5),
+          },
+          stepDetails: {
+            step1: [
+              {
+                text: "예시 청각 이해 문항",
+                isCorrect: true,
+              },
+            ],
+            step2: [
+              {
+                text: "예시 따라말하기 문장",
+                isCorrect: true,
+              },
+            ],
+            step3: [
+              {
+                text: "예시 그림 매칭 정답",
+                isCorrect: true,
+              },
+            ],
+            step4: [
+              {
+                text: "예시 유창성 발화",
+                isCorrect: idx % 2 === 0,
+              },
+            ],
+            step5: [
+              {
+                text: "예시 읽기 문장",
+                isCorrect: true,
+              },
+            ],
+            step6: [
+              {
+                text: "예시 쓰기 단어",
+                isCorrect: true,
+              },
+            ],
+          },
+        };
+      },
+    );
+
+    const deduped = [...existing, ...mockRows]
+      .filter(
+        (row, i, arr) =>
+          arr.findIndex(
+            (x) => x.sessionId === row.sessionId || x.historyId === row.historyId,
+          ) === i,
+      )
+      .sort((a, b) => a.completedAt - b.completedAt)
+      .slice(-50);
+
+    localStoreAdapter.setItem(key, JSON.stringify(deduped));
+    return mockRows.length;
   }
 
   private static getStorageKey(patient: PatientProfile, place: string): string {

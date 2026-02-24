@@ -16,8 +16,7 @@ export default function MonitoringDock({
       {/* ✅ 항상 보이는 작은 도킹 바 (우하단) */}
       <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
         <button
-          className="rounded-2xl px-4 py-3 text-sm font-semibold text-white shadow-lg"
-          style={{ backgroundColor: "#8B4513" }}
+          className="rounded-2xl px-4 py-3 text-sm font-semibold text-white shadow-lg bg-[#0B1A3A] hover:bg-[#09152f] transition-colors"
           onClick={() => setOpen(true)}
         >
           모니터링 보기
@@ -43,8 +42,7 @@ export default function MonitoringDock({
                 </p>
               </div>
               <button
-                className="rounded-xl px-3 py-2 text-sm font-semibold"
-                style={{ backgroundColor: "#F8F8F8" }}
+                className="rounded-xl px-3 py-2 text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
                 onClick={() => setOpen(false)}
               >
                 닫기
@@ -52,10 +50,10 @@ export default function MonitoringDock({
             </div>
 
             <div className="grid gap-4 p-4 md:grid-cols-2">
-              <div className="rounded-2xl border bg-[#F8F8F8] p-3">
+              <div className="rounded-2xl border border-orange-100 bg-orange-50/40 p-3">
                 {camera}
               </div>
-              <div className="rounded-2xl border bg-[#F8F8F8] p-3">
+              <div className="rounded-2xl border border-orange-100 bg-orange-50/40 p-3">
                 {dashboard}
               </div>
             </div>

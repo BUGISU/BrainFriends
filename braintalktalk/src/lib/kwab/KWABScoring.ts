@@ -1,7 +1,7 @@
 // src/lib/kwab/KWABScoring.ts
 /**
- * K-WAB (한국판 웨스턴 실어증 검사) 채점 시스템
- * - 문서 기준: K-WAB.pdf, K-WAB내용전달기준표.pdf, K-WAB유창성기준표.pdf
+ * 언어 검사 채점 시스템
+ * - 문서 기준: 검사표 PDF
  */
 
 // ============================================================================
@@ -85,6 +85,19 @@ function getNormalStandard(age: number, eduYears: number) {
 
   const key = `${ageKey}_${eduKey}` as keyof typeof NORMAL_STANDARDS;
   return NORMAL_STANDARDS[key];
+}
+
+export function getAQNormalComparison(aq: number, age: number, eduYears: number) {
+  const standard = getNormalStandard(age, eduYears);
+  const diff = aq - standard.mean;
+  const zScore = diff / standard.sd;
+
+  return {
+    mean: standard.mean,
+    sd: standard.sd,
+    diff: Math.round(diff * 10) / 10,
+    zScore: Math.round(zScore * 100) / 100,
+  };
 }
 
 // ============================================================================
@@ -309,7 +322,7 @@ export function calculateKWABScores(
 
 /**
  * 스스로 말하기 - 내용전달 채점
- * 기준: K-WAB내용전달기준표.pdf
+ * 기준: 내용전달 기준표
  */
 export function scoreContentDelivery(params: {
   correctAnswers: number; // 첫 6개 항목 중 정답 개수
@@ -343,7 +356,7 @@ export function scoreContentDelivery(params: {
 
 /**
  * 스스로 말하기 - 유창성 채점
- * 기준: K-WAB유창성기준표.pdf
+ * 기준: 유창성 기준표
  */
 export function scoreFluency(params: {
   syllablesPerUtterance: number; // 발화당 음절 수
