@@ -21,6 +21,7 @@ import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
 
 export const dynamic = "force-dynamic";
+const STEP3_TOTAL_QUESTIONS = 10;
 
 type VisualOption = {
   id: string;
@@ -88,6 +89,15 @@ const buildImageCandidates = (
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 
+const shuffleArray = <T,>(arr: T[]): T[] => {
+  const next = [...arr];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+};
+
 function Step3Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -117,7 +127,23 @@ function Step3Content() {
     const allQuestions = (
       VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
     ).slice(0, VISUAL_MATCHING_RECOMMENDED_COUNT);
-    return [...allQuestions].sort(() => Math.random() - 0.5);
+    const sampledQuestions = shuffleArray(allQuestions).slice(
+      0,
+      STEP3_TOTAL_QUESTIONS,
+    );
+
+    // 문항 순서 랜덤 + 문항 내부 보기 순서 랜덤(정답 위치 고정 방지)
+    return sampledQuestions.map((q) => {
+      const shuffledOptions = shuffleArray(q.options);
+      const shuffledAnswer = shuffledOptions.find(
+        (opt) => opt.label === q.targetWord,
+      );
+      return {
+        ...q,
+        options: shuffledOptions,
+        answerId: shuffledAnswer?.id ?? q.answerId,
+      };
+    });
   }, [place]);
 
   const currentItem = protocol[currentIndex];
@@ -134,18 +160,28 @@ function Step3Content() {
   }, []);
 
   const speakWord = useCallback((text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+    if (typeof window === "undefined") return;
     setIsSpeaking(true);
     setCanAnswer(false);
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    synth.resume();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "ko-KR";
     utterance.rate = 0.85;
+    const koVoice = synth
+      .getVoices()
+      .find((v) => v.lang?.toLowerCase().startsWith("ko"));
+    if (koVoice) utterance.voice = koVoice;
     utterance.onend = () => {
       setIsSpeaking(false);
       setCanAnswer(true);
     };
-    window.speechSynthesis.speak(utterance);
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setCanAnswer(true);
+    };
+    synth.speak(utterance);
   }, []);
 
   useEffect(() => {
@@ -231,13 +267,17 @@ function Step3Content() {
       timestamp: new Date().toLocaleTimeString(),
     };
 
-    // ✅ 누적 결과 업데이트
-    const updatedResults = [...analysisResults, currentResult];
+    // ✅ 누적 결과 업데이트 (Step3는 10문항 기준으로 저장/채점)
+    const totalQuestions = STEP3_TOTAL_QUESTIONS;
+    const updatedResults = [...analysisResults, currentResult].slice(
+      0,
+      totalQuestions,
+    );
     setAnalysisResults(updatedResults);
 
-    // ✅ Result 페이지용 백업 저장 (실시간)
+    // ✅ Result 페이지용 백업 저장 (실시간, 최대 10개)
     localStorage.setItem("step3_data", JSON.stringify(updatedResults));
-    console.log("✅ Step 3 데이터 저장:", updatedResults);
+    console.log("✅ Step 3 데이터 저장(10문항 기준):", updatedResults);
 
     setTimeout(() => {
       if (currentIndex < protocol.length - 1) {
@@ -247,11 +287,10 @@ function Step3Content() {
         setIsAnswered(false);
         setPlayCount(0);
       } else {
-        // ✅ 최종 점수 계산 (백분율)
+        // ✅ 최종 점수 계산 (10문항 고정 분모)
+        const correctCount = updatedResults.filter((r) => r.isCorrect).length;
         const avgScore = Math.round(
-          (updatedResults.filter((r) => r.isCorrect).length /
-            updatedResults.length) *
-            100,
+          (correctCount / Math.max(1, totalQuestions)) * 100,
         );
 
         // ✅ SessionManager 통합 저장
@@ -265,8 +304,8 @@ function Step3Content() {
           sm.saveStep3Result({
             items: updatedResults,
             score: avgScore,
-            correctCount: updatedResults.filter((r) => r.isCorrect).length,
-            totalCount: updatedResults.length,
+            correctCount,
+            totalCount: totalQuestions,
             timestamp: Date.now(),
           });
 
@@ -286,6 +325,13 @@ function Step3Content() {
 
   return (
     <div className="flex flex-col h-full bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans">
+      {/* 상단 진행 프로그레스 바 */}
+      <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
+        <div
+          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+          style={{ width: `${((currentIndex + 1) / protocol.length) * 100}%` }}
+        />
+      </div>
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">

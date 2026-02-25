@@ -20,10 +20,34 @@ const PLACES = [
     bgClass: "bg-[linear-gradient(145deg,#f8fafc,#e2e8f0)]",
     imagePath: "/images/places/hospital.png",
   },
-  { key: "cafe", label: "커피숍", desc: "주문 및 사회적 활동", bgClass: "bg-[linear-gradient(145deg,#fff7ed,#fde68a)]", imagePath: "/images/places/cafe.png" },
-  { key: "bank", label: "은행", desc: "숫자 및 금융 인지", bgClass: "bg-[linear-gradient(145deg,#eff6ff,#dbeafe)]", imagePath: "/images/places/bank.png" },
-  { key: "park", label: "공원", desc: "청각 및 사물 이름", bgClass: "bg-[linear-gradient(145deg,#f0fdf4,#dcfce7)]", imagePath: "/images/places/park.png" },
-  { key: "mart", label: "마트", desc: "물건 사기 및 계산", bgClass: "bg-[linear-gradient(145deg,#fff1f2,#ffe4e6)]", imagePath: "/images/places/mart.png" },
+  {
+    key: "cafe",
+    label: "카페",
+    desc: "주문 및 사회적 활동",
+    bgClass: "bg-[linear-gradient(145deg,#fff7ed,#fde68a)]",
+    imagePath: "/images/places/cafe.png",
+  },
+  {
+    key: "bank",
+    label: "은행",
+    desc: "숫자 및 금융 인지",
+    bgClass: "bg-[linear-gradient(145deg,#eff6ff,#dbeafe)]",
+    imagePath: "/images/places/bank.png",
+  },
+  {
+    key: "park",
+    label: "공원",
+    desc: "청각 및 사물 이름",
+    bgClass: "bg-[linear-gradient(145deg,#f0fdf4,#dcfce7)]",
+    imagePath: "/images/places/park.png",
+  },
+  {
+    key: "mart",
+    label: "마트",
+    desc: "물건 사기 및 계산",
+    bgClass: "bg-[linear-gradient(145deg,#fff1f2,#ffe4e6)]",
+    imagePath: "/images/places/mart.png",
+  },
 ] as const;
 
 export default function SelectPage() {
@@ -100,17 +124,19 @@ export default function SelectPage() {
 
       {/* 선택 카드 섹션: 중앙 정렬 및 고정 그리드 */}
       <div className="flex-1 min-h-0 flex flex-col items-center justify-center overflow-hidden">
-        <div className="w-full max-w-6xl h-full px-6 md:px-8 lg:px-10 pt-2 md:pt-3 pb-2 md:pb-3 flex flex-col">
-          <p className="text-center text-slate-500 font-black text-xs md:text-sm uppercase tracking-[0.25em] md:tracking-[0.35em] mb-5 md:mb-7">
-            훈련을 진행할 장소를 선택해 주세요
-          </p>
+        <div className="w-full max-w-6xl h-full px-4 md:px-8 lg:px-10 pt-2 md:pt-3 pb-2 md:pb-3 flex flex-col">
+          <div className="w-full max-w-md mx-auto mt-5 rounded-2xl border border-[#0B1A3A] bg-[#0B1A3A] px-4 py-2 shadow-sm">
+            <p className="text-center text-white font-black text-sm md:text-lg tracking-tight leading-snug">
+              훈련을 진행할 장소를 선택해 주세요
+            </p>
+          </div>
 
-          <div className="flex-1 min-h-0 w-fit mx-auto grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-2.5 lg:gap-3 pt-1 md:pt-2 justify-items-center content-center">
+          <div className="flex-1 min-h-0 min-w-0 w-full max-w-[860px] mx-auto grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-2.5 lg:gap-3 justify-items-center content-center">
             {PLACES.map((p) => (
               <button
                 key={p.key}
                 onClick={() => go(p.key)}
-                className={`group w-[184px] sm:w-[216px] md:w-[246px] lg:w-[268px] aspect-square rounded-[22px] md:rounded-[28px] border-2 border-orange-100 hover:border-orange-300 transition-all duration-300 flex flex-col items-center justify-center px-3 shadow-sm hover:shadow-[0_12px_28px_rgba(249,115,22,0.16)] active:scale-95 relative overflow-hidden ${p.bgClass}`}
+                className={`group w-full max-w-[184px] sm:max-w-[216px] md:max-w-[246px] lg:max-w-[268px] aspect-square rounded-[22px] md:rounded-[28px] border-2 border-orange-100 hover:border-orange-300 transition-all duration-300 flex flex-col items-center justify-center px-3 shadow-sm hover:shadow-[0_12px_28px_rgba(249,115,22,0.16)] active:scale-95 relative overflow-hidden ${p.bgClass}`}
               >
                 {p.imagePath && (
                   <div
@@ -123,7 +149,10 @@ export default function SelectPage() {
                 <div className="text-center px-3 md:px-5 z-10">
                   <span
                     className="block text-[28px] md:text-[36px] lg:text-[44px] font-black italic text-white mb-1.5 tracking-tight leading-none"
-                    style={{ textShadow: "0 1px 0 rgba(0,0,0,0.28), 0 5px 10px rgba(0,0,0,0.26)" }}
+                    style={{
+                      textShadow:
+                        "0 1px 0 rgba(0,0,0,0.28), 0 5px 10px rgba(0,0,0,0.26)",
+                    }}
                   >
                     {p.label}
                   </span>
@@ -147,8 +176,8 @@ export default function SelectPage() {
               이전 진행 기록이 있습니다
             </h3>
             <p className="text-sm text-slate-600 font-bold mb-6">
-              {getResumeLabel(resumeModal.resumePath)} 또는 처음부터 다시
-              시작할 수 있습니다.
+              {getResumeLabel(resumeModal.resumePath)} 또는 처음부터 다시 시작할
+              수 있습니다.
             </p>
 
             <div className="grid grid-cols-1 gap-3">

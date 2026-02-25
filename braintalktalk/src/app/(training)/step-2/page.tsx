@@ -16,6 +16,10 @@ import { PlaceType } from "@/constants/trainingData";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import {
+  addSentenceLineBreaks,
+  getResponsiveSentenceSizeClass,
+} from "@/lib/text/displayText";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +34,7 @@ function Step2Content() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const analyzerRef = useRef<SpeechAnalyzer | null>(null);
+  const audioInputStreamRef = useRef<MediaStream | null>(null);
 
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -38,6 +43,10 @@ function Step2Content() {
   const [isSaving, setIsSaving] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isPromptPlaying, setIsPromptPlaying] = useState(false);
+  const [guideText, setGuideText] = useState("");
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [statusText, setStatusText] = useState("");
+  const [isRecorderReady, setIsRecorderReady] = useState(false);
   const [canRecord, setCanRecord] = useState(false);
   const [replayCount, setReplayCount] = useState(0);
 
@@ -48,88 +57,285 @@ function Step2Content() {
   const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [showTracking, setShowTracking] = useState(false);
+  const flowTokenRef = useRef(0);
 
   const protocol = useMemo(() => {
     const questions =
       SPEECH_REPETITION_PROTOCOLS[place] || SPEECH_REPETITION_PROTOCOLS.home;
-    return [...questions].sort(() => Math.random() - 0.5).slice(0, 10);
+    const sorted = [...questions].sort((a, b) => {
+      const lenA = (a.text || "").replace(/\s+/g, "").length;
+      const lenB = (b.text || "").replace(/\s+/g, "").length;
+      if (lenA !== lenB) return lenA - lenB;
+      return (a.id || 0) - (b.id || 0);
+    });
+    return [
+      ...sorted.slice(0, 2),
+      ...sorted.slice(2, 4),
+      ...sorted.slice(4, 10),
+    ];
   }, [place]);
 
   const currentItem = protocol[currentIndex];
-
-  const playPrompt = useCallback(
-    (countReplay: boolean = false) => {
-      if (!currentItem) return;
-
-      setCanRecord(false);
-      setIsPromptPlaying(true);
-
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(currentItem.text);
-        utterance.lang = "ko-KR";
-        utterance.rate = 0.85;
-        utterance.onend = () => {
-          setIsPromptPlaying(false);
-          setCanRecord(true);
-        };
-        utterance.onerror = () => {
-          setIsPromptPlaying(false);
-          setCanRecord(true);
-        };
-        window.speechSynthesis.speak(utterance);
-      } else {
-        setIsPromptPlaying(false);
-        setCanRecord(true);
-      }
-
-      if (countReplay) {
-        setReplayCount((prev) => prev + 1);
-      }
-    },
+  const formattedCurrentText = useMemo(
+    () => addSentenceLineBreaks(currentItem?.text || ""),
     [currentItem],
   );
+  const promptTextSizeClass = useMemo(
+    () => getResponsiveSentenceSizeClass(formattedCurrentText),
+    [formattedCurrentText],
+  );
+
+  const speakText = useCallback((text: string) => {
+    return new Promise<void>((resolve) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        resolve();
+        return;
+      }
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      synth.resume();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "ko-KR";
+      utterance.rate = 0.9;
+      const koVoice = synth
+        .getVoices()
+        .find((v) => v.lang?.toLowerCase().startsWith("ko"));
+      if (koVoice) utterance.voice = koVoice;
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+      synth.speak(utterance);
+    });
+  }, []);
+
+  const runCountdown = useCallback(async (from: number, token: number) => {
+    for (let i = from; i >= 1; i -= 1) {
+      if (token !== flowTokenRef.current) return false;
+      setCountdown(i);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setCountdown(null);
+    return token === flowTokenRef.current;
+  }, []);
+
+  const playStartBeep = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const AudioCtx =
+      window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) {
+      // fallback: 음성합성으로 짧은 신호 제공
+      if (window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance("삐");
+        u.lang = "ko-KR";
+        u.rate = 1.2;
+        window.speechSynthesis.speak(u);
+      }
+      return;
+    }
+    try {
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+      if (ctx.state !== "running") {
+        if (window.speechSynthesis) {
+          const u = new SpeechSynthesisUtterance("삐");
+          u.lang = "ko-KR";
+          u.rate = 1.2;
+          window.speechSynthesis.speak(u);
+        }
+        return;
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 1200;
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.24, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      osc.start(now);
+      osc.stop(now + 0.17);
+
+      setTimeout(() => {
+        ctx.close().catch(() => {});
+      }, 260);
+    } catch {
+      // 최종 fallback
+      if (window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance("삐");
+        u.lang = "ko-KR";
+        u.rate = 1.2;
+        window.speechSynthesis.speak(u);
+      }
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    setResultScore(null);
+    setTranscript("");
+    setIsSttExpanded(false);
+    setIsRecording(true);
+    setIsRecorderReady(false);
+    setStatusText("문장을 끝까지 말씀하신 후\n정지 버튼을 눌러주세요.");
+    setCanRecord(true);
+    setReviewAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    try {
+      if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
+      await analyzerRef.current.startAnalysis(
+        (level) => setAudioLevel(level),
+        audioInputStreamRef.current || undefined,
+      );
+      setIsRecorderReady(true);
+    } catch (err) {
+      console.error("❌ 녹음 시작 실패:", err);
+      setIsRecording(false);
+      setIsRecorderReady(false);
+      setStatusText("마이크 준비에 실패했습니다. 다시 시도해 주세요.");
+    }
+  }, []);
+
+  const runPromptSequence = useCallback(
+    async ({
+      autoStartRecording,
+      countReplay,
+    }: {
+      autoStartRecording: boolean;
+      countReplay: boolean;
+    }) => {
+      if (!currentItem || isRecording || isAnalyzing || resultScore !== null)
+        return;
+      const token = ++flowTokenRef.current;
+      setCanRecord(false);
+      setIsPromptPlaying(true);
+      setGuideText("듣고 따라 말해 주세요");
+      setStatusText("");
+      setCountdown(null);
+
+      const first = await runCountdown(3, token);
+      if (!first) return;
+
+      await speakText(formattedCurrentText || currentItem.text);
+      if (token !== flowTokenRef.current) return;
+
+      setGuideText("녹음이 시작됩니다");
+      const second = await runCountdown(3, token);
+      if (!second) return;
+      await playStartBeep();
+      if (token !== flowTokenRef.current) return;
+
+      setGuideText("");
+      setCountdown(null);
+      setIsPromptPlaying(false);
+
+      if (countReplay) setReplayCount((prev) => prev + 1);
+      if (autoStartRecording) await startRecording();
+      else setCanRecord(true);
+    },
+    [
+      currentItem,
+      isAnalyzing,
+      isRecording,
+      resultScore,
+      runCountdown,
+      speakText,
+      playStartBeep,
+      startRecording,
+    ],
+  );
+
+  const runReplaySequenceImmediate = useCallback(async () => {
+    if (!currentItem || isPromptPlaying || isSaving) return;
+    const token = ++flowTokenRef.current;
+
+    if (isRecording) {
+      analyzerRef.current?.cancelAnalysis();
+      setIsRecording(false);
+      setIsRecorderReady(false);
+      setIsAnalyzing(false);
+    }
+
+    setCanRecord(false);
+    setGuideText("");
+    setStatusText("문제를 다시 들려드립니다.");
+    setIsPromptPlaying(true);
+    setCountdown(null);
+
+    await speakText(formattedCurrentText || currentItem.text);
+    if (token !== flowTokenRef.current) return;
+    await playStartBeep();
+    if (token !== flowTokenRef.current) return;
+
+    setIsPromptPlaying(false);
+    setStatusText("");
+    setReplayCount((prev) => prev + 1);
+    await startRecording();
+  }, [
+    currentItem,
+    isPromptPlaying,
+    isRecording,
+    isSaving,
+    playStartBeep,
+    speakText,
+    startRecording,
+  ]);
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem("step2_recorded_audios"); // ✅ 최초 진입 시 1회 초기화
-
+    localStorage.removeItem("step2_recorded_audios");
     async function setupCamera() {
       try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+          return;
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        if (videoRef.current) videoRef.current.srcObject = videoStream;
+
+        // 오디오 입력 스트림을 미리 열고 재사용: 매 문항 초기화 지연 감소
+        try {
+          const warmupAudioStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
           });
-          if (videoRef.current) videoRef.current.srcObject = stream;
+          audioInputStreamRef.current = warmupAudioStream;
+        } catch {
+          audioInputStreamRef.current = null;
         }
       } catch (err) {
-        console.error("Step 2 Camera Error:", err);
+        console.error("Camera Error:", err);
       }
     }
     setupCamera();
-
     return () => {
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
+      flowTokenRef.current += 1;
+      if (audioInputStreamRef.current) {
+        audioInputStreamRef.current.getTracks().forEach((t) => t.stop());
+        audioInputStreamRef.current = null;
       }
+      if (typeof window !== "undefined" && window.speechSynthesis)
+        window.speechSynthesis.cancel();
     };
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (reviewAudioUrl) {
-        URL.revokeObjectURL(reviewAudioUrl);
-      }
-    };
-  }, [reviewAudioUrl]);
-
-  useEffect(() => {
     if (!isMounted || !currentItem) return;
     setReplayCount(0);
-    playPrompt(false);
-  }, [isMounted, currentItem, currentIndex, playPrompt]);
+    runPromptSequence({ autoStartRecording: true, countReplay: false });
+    // 초기 자동 플로우는 문항 전환 시에만 실행
+    // (다시 듣기/녹음 상태 변화로 재실행되지 않도록 콜백 의존성 제외)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMounted, currentItem, currentIndex]);
 
   const handleNext = useCallback(() => {
+    if (isSaving) {
+      setStatusText("녹음을 저장하는 중입니다. 잠시만 기다려주세요.");
+      return;
+    }
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current.onended = null;
@@ -140,42 +346,35 @@ function Step2Content() {
       setCurrentIndex((prev) => prev + 1);
       setResultScore(null);
       setTranscript("");
-      setIsSttExpanded(false);
-      if (reviewAudioUrl) URL.revokeObjectURL(reviewAudioUrl);
       setReviewAudioUrl(null);
       setCanRecord(false);
+      setIsRecorderReady(false);
       setReplayCount(0);
     } else {
-      // ✅ SessionManager 통합 저장
       try {
         const patient = loadPatientProfile();
         const sm = new SessionManager(
           (patient || { age: 70, educationYears: 12 }) as any,
           place,
         );
-
         const avgSymmetry =
           analysisResults.length > 0
             ? analysisResults.reduce((a, b) => a + b.faceScore, 0) /
               analysisResults.length
             : 0;
-
         const avgPronunciation =
           analysisResults.length > 0
             ? analysisResults.reduce((a, b) => a + b.speechScore, 0) /
               analysisResults.length
             : 0;
-
         sm.saveStep2Result({
           items: analysisResults,
           averageSymmetry: avgSymmetry,
           averagePronunciation: avgPronunciation,
           timestamp: Date.now(),
         });
-
-        console.log("✅ Step 2 SessionManager 저장 완료");
       } catch (error) {
-        console.error("❌ SessionManager 저장 실패:", error);
+        console.error("Save Error:", error);
       }
 
       const avgScore =
@@ -183,7 +382,6 @@ function Step2Content() {
           ? analysisResults.reduce((a, b) => a + b.finalScore, 0) /
             analysisResults.length
           : 0;
-
       router.push(
         `/step-3?place=${place}&step1=${searchParams.get("step1")}&step2=${avgScore.toFixed(0)}`,
       );
@@ -192,69 +390,32 @@ function Step2Content() {
     currentIndex,
     protocol.length,
     analysisResults,
+    isSaving,
     router,
     place,
     searchParams,
-    reviewAudioUrl,
   ]);
 
-  const handleSkipPlayback = useCallback(() => {
-    if (!isPlayingAudio) return;
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
-      audioPlayerRef.current.onended = null;
-    }
-    setIsPlayingAudio(false);
-  }, [isPlayingAudio]);
-
-  const playRecordedAudio = () => {
-    if (!reviewAudioUrl || isPlayingAudio) return;
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
-      audioPlayerRef.current.onended = null;
-    }
-    const audio = new Audio(reviewAudioUrl);
-    audioPlayerRef.current = audio;
-    setIsPlayingAudio(true);
-    audio.onended = () => setIsPlayingAudio(false);
-    audio.play().catch((e) => {
-      console.error("재생 에러:", e);
-      setIsPlayingAudio(false);
-    });
-  };
-
   const handleToggleRecording = async () => {
-    if (!canRecord || isPromptPlaying) return;
+    if (!isRecording && (!canRecord || isPromptPlaying)) return;
 
     if (!isRecording) {
-      setResultScore(null);
-      setTranscript("");
-      setIsSttExpanded(false);
-      if (reviewAudioUrl) URL.revokeObjectURL(reviewAudioUrl);
-      setReviewAudioUrl(null);
-      try {
-        if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
-        await analyzerRef.current.startAnalysis((level) =>
-          setAudioLevel(level),
-        );
-        setIsRecording(true);
-      } catch (err) {
-        console.error("❌ 녹음 시작 실패:", err);
-      }
+      await startRecording();
     } else {
+      if (!isRecorderReady) return;
+      flowTokenRef.current += 1;
+      setIsPromptPlaying(false);
       setIsRecording(false);
+      setIsRecorderReady(false);
       setIsAnalyzing(true);
+      setStatusText("목소리 인식이 완료되었습니다.");
 
       try {
         const result = await analyzerRef.current!.stopAnalysis(
           currentItem.text,
         );
-
         const speechScore = result.pronunciationScore;
         const faceScore = (sidebarMetrics.facialSymmetry || 0) * 100;
-
         let finalScore =
           speechScore >= 85 || faceScore >= 85
             ? Math.max(speechScore, faceScore)
@@ -262,110 +423,106 @@ function Step2Content() {
 
         setTranscript(result.transcript || "");
         setResultScore(Number(finalScore.toFixed(1)));
+        setAnalysisResults((prev) => [
+          ...prev,
+          {
+            text: currentItem.text,
+            finalScore: Number(finalScore.toFixed(1)),
+            speechScore,
+            faceScore,
+          },
+        ]);
 
-        const recordData = {
-          text: currentItem.text,
-          finalScore: Number(finalScore.toFixed(1)),
-          speechScore,
-          faceScore,
-        };
-
-        // ✅ 분석 결과 누적
-        setAnalysisResults((prev) => [...prev, recordData]);
-
-        // ✅ 음성 파일이 있으면 Base64 변환 후 저장
         const audioBlob = result.audioBlob;
         if (audioBlob) {
-          console.log("🎤 Step 2: 음성 파일 저장 시작");
           setIsSaving(true);
-
+          console.debug("[Step2] save:start", {
+            index: currentIndex,
+            text: currentItem.text,
+          });
           const reader = new FileReader();
           reader.onloadend = () => {
             try {
               const base64Audio = reader.result as string;
-              const rawData = localStorage.getItem("step2_recorded_audios");
-              let existingAudios: any[] = [];
+              let existing: any[] = [];
               try {
-                existingAudios = JSON.parse(rawData || "[]");
-                if (!Array.isArray(existingAudios)) existingAudios = [];
+                const raw =
+                  localStorage.getItem("step2_recorded_audios") || "[]";
+                const parsed = JSON.parse(raw);
+                existing = Array.isArray(parsed) ? parsed : [];
               } catch {
-                existingAudios = [];
+                existing = [];
               }
-
-              // ✅ Result 페이지 규격
-              const newEntry = {
-                text: recordData.text, // 목표 문장
-                audioUrl: base64Audio, // Base64 음성
-                isCorrect: recordData.finalScore >= 60,
-                finalScore: recordData.finalScore,
-                speechScore: recordData.speechScore,
-                faceScore: recordData.faceScore,
-                timestamp: new Date().toLocaleTimeString(),
-              };
-
-              // ✅ 누적 저장
-              const updatedAudios = [...existingAudios, newEntry];
               localStorage.setItem(
                 "step2_recorded_audios",
-                JSON.stringify(updatedAudios),
+                JSON.stringify([
+                  ...existing,
+                  {
+                    text: currentItem.text,
+                    audioUrl: base64Audio,
+                    isCorrect: finalScore >= 60,
+                    finalScore: Number(finalScore.toFixed(1)),
+                    speechScore,
+                    faceScore,
+                    timestamp: new Date().toLocaleTimeString(),
+                  },
+                ]),
               );
-
-              console.log("✅ Step 2 데이터 저장 완료:", newEntry);
-              console.log("📊 현재 누적 데이터:", updatedAudios);
-
-              // 리뷰에서 수동 재생할 수 있도록 URL만 저장
+              console.debug("[Step2] save:success", {
+                key: "step2_recorded_audios",
+                savedCount: existing.length + 1,
+                score: Number(finalScore.toFixed(1)),
+              });
               setReviewAudioUrl(URL.createObjectURL(audioBlob));
-            } catch (err) {
-              console.error("❌ Step 2 저장 실패:", err);
+            } catch (saveErr) {
+              console.error("Step2 localStorage 저장 실패:", saveErr);
+              setStatusText("녹음 저장 중 오류가 발생했습니다.");
             } finally {
               setIsSaving(false);
             }
           };
-
           reader.onerror = () => {
-            console.error("❌ FileReader 에러");
+            console.error("Step2 FileReader 오류");
+            setStatusText("녹음 파일 처리 중 오류가 발생했습니다.");
             setIsSaving(false);
           };
-
           reader.readAsDataURL(audioBlob);
         } else {
-          console.warn("⚠️ audioBlob이 없습니다");
+          console.warn("[Step2] save:skip (audioBlob 없음)", {
+            index: currentIndex,
+            text: currentItem.text,
+          });
           setIsSaving(false);
         }
       } catch (err) {
-        console.error("❌ 분석 실패:", err);
+        console.error("Analysis Error:", err);
+        setStatusText("분석 중 오류가 발생했습니다.");
       } finally {
         setIsAnalyzing(false);
       }
     }
   };
 
-  const replayEnabled =
-    replayCount < 1 &&
-    !isPromptPlaying &&
-    !isRecording &&
-    !isAnalyzing &&
-    !isSaving &&
-    !isPlayingAudio &&
-    !!currentItem;
-
-  const handleReplayPrompt = () => {
-    if (!replayEnabled) return;
-    playPrompt(true);
-  };
-
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className="flex flex-col h-full bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans relative">
+    <div className="flex flex-col h-full bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans relative">
+      {/* 상단 진행 프로그레스 바 */}
+      <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
+        <div
+          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+          style={{ width: `${((currentIndex + 1) / protocol.length) * 100}%` }}
+        />
+      </div>
+
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-100">
             02
           </div>
           <div>
-            <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
-              Step 02 • Repetition
+            <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest block leading-none">
+              Repetition Training
             </span>
             <h2 className="text-lg font-black text-slate-900 tracking-tight">
               문장 복창 훈련
@@ -373,187 +530,185 @@ function Step2Content() {
           </div>
         </div>
         <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
-          {currentIndex + 1} / {protocol.length}
+          {currentIndex + 1} / {protocol.length} 문항
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 sm:p-6 lg:p-10 pb-8 lg:pb-10 order-1">
-          <div className="w-full max-w-2xl mx-auto flex flex-col h-full justify-start lg:justify-center gap-4 lg:gap-5">
+      <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-hidden">
+        <main className="flex-1 flex flex-col relative p-4 sm:p-6 lg:p-10 order-1 overflow-y-auto">
+          <div className="w-full max-w-xl mx-auto flex flex-col h-full justify-center gap-6">
+            {/* 메인 텍스트 영역 */}
             <div
-              className={`w-full bg-white rounded-[40px] p-8 lg:p-12 shadow-[0_10px_40px_rgba(0,0,0,0.02)] text-center transition-all ${
+              className={`w-full rounded-[40px] p-8 lg:p-12 text-center transition-colors duration-150 ${
                 isRecording
-                  ? "ring-2 ring-orange-500/20 shadow-orange-100"
-                  : "border border-slate-50"
+                  ? "bg-orange-500 shadow-xl shadow-orange-200"
+                  : "bg-white border border-slate-100 shadow-sm"
               }`}
             >
-              <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-6">
-                Listen and Repeat
+              <p
+                className={`text-[11px] font-black uppercase tracking-[0.3em] mb-6 ${isRecording ? "text-orange-100" : "text-slate-300"}`}
+              >
+                {isRecording ? "Recording Now" : "Listen & Speak"}
               </p>
+
               <h1
-                className={`text-2xl md:text-3xl lg:text-4xl font-black leading-tight break-keep ${
-                  isPromptPlaying || isRecording
-                    ? "text-orange-600"
-                    : "text-slate-800"
+                className={`${promptTextSizeClass} font-black leading-tight break-keep whitespace-pre-line ${
+                  isRecording ? "text-white" : "text-slate-800"
                 }`}
               >
                 {isPromptPlaying
-                  ? "문제를 듣는 중입니다..."
-                  : canRecord
-                    ? "녹음 버튼을 누르고 따라 말해 주세요"
-                    : "문제를 준비 중입니다..."}
+                  ? countdown
+                    ? `${guideText}`
+                    : "들려드리는 문장을 들어보세요"
+                  : statusText
+                    ? statusText
+                    : isAnalyzing || isSaving
+                      ? "목소리를 분석하고 있습니다..."
+                      : isRecording
+                        ? "지금 바로 말씀해 주세요!"
+                        : formattedCurrentText}
               </h1>
             </div>
 
-            <div
-              className={`${resultScore !== null ? "h-auto" : "h-12"} flex items-center justify-center relative transition-all duration-500 ease-out`}
-            >
-              <div
-                className={`w-full max-w-2xl mx-auto bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-5 md:p-6 shadow-xl border border-orange-100/70 relative overflow-hidden transition-all duration-500 ease-out ${
-                  resultScore !== null
-                    ? "opacity-100 translate-y-0 scale-100"
-                    : "opacity-0 translate-y-2 scale-[0.985] pointer-events-none"
-                }`}
-              >
-                {resultScore !== null && (
-                  <>
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(251,146,60,0.12),transparent_45%)] pointer-events-none" />
-                    <div className="relative z-[1] flex items-center gap-3 md:gap-6">
-                      <div className="border-r border-orange-100 pr-3 md:pr-6 text-left md:text-center shrink-0">
-                        <span className="text-[9px] font-black text-orange-300 uppercase block mb-1">
-                          Accuracy
-                        </span>
-                        <span className="text-3xl lg:text-4xl font-black text-orange-500 tracking-tight">
-                          {resultScore}%
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-wider">
-                          STT Result
-                        </p>
-                        <p
-                          className={`text-sm lg:text-base font-bold text-slate-700 leading-snug ${
-                            isSttExpanded
-                              ? "break-words whitespace-normal"
-                              : "whitespace-nowrap overflow-hidden text-ellipsis"
-                          }`}
-                        >
-                          "{transcript.trim() ? transcript.trim() : "..."}"
-                        </p>
-                        {(transcript.trim().length > 24 || isSttExpanded) && (
-                          <button
-                            type="button"
-                            onClick={() => setIsSttExpanded((v) => !v)}
-                            className="mt-1 md:hidden text-[10px] font-black text-orange-500 underline underline-offset-2"
-                          >
-                            {isSttExpanded ? "접기" : "전체보기"}
-                          </button>
-                        )}
-                        <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 rounded-full bg-white/90 border border-orange-100">
-                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                          <span className="text-[10px] font-black uppercase tracking-wide text-orange-500">
-                            {isPlayingAudio
-                              ? "Playback Active"
-                              : "Analysis Ready"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {isPlayingAudio && (
+            {/* 결과 리포트 카드 */}
+            {resultScore !== null && (
+              <div className="w-full bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-6 shadow-xl border border-orange-100/70 relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(251,146,60,0.12),transparent_45%)] pointer-events-none" />
+                <div className="relative z-[1] flex items-center gap-6 mb-5">
+                  <div className="border-r border-orange-100 pr-6 text-center">
+                    <span className="text-[10px] font-black text-orange-400 uppercase block mb-1">
+                      정확도
+                    </span>
+                    <span className="text-4xl font-black text-orange-500">
+                      {resultScore}%
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0 rounded-2xl border border-orange-100/70 bg-white/85 p-3">
+                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">
+                      인식된 결과
+                    </p>
+                    <p
+                      className={`${getResponsiveSentenceSizeClass(transcript || "")} font-bold text-slate-700 italic leading-relaxed ${
+                        isSttExpanded
+                          ? "break-words whitespace-normal"
+                          : "whitespace-nowrap overflow-hidden text-ellipsis"
+                      }`}
+                    >
+                      "{transcript || "..."}"
+                    </p>
+                    {(transcript || "").length > 26 && (
                       <button
-                        onClick={handleSkipPlayback}
-                        className="absolute top-2 right-2 md:top-4 md:right-4 px-3 py-1.5 rounded-full text-[10px] font-black text-white bg-orange-500 hover:bg-orange-600 transition-all shadow-lg shadow-orange-200 z-[2]"
+                        type="button"
+                        onClick={() => setIsSttExpanded((prev) => !prev)}
+                        className="mt-1 text-[11px] font-black text-orange-500 hover:text-orange-600"
                       >
-                        스킵하기
+                        {isSttExpanded ? "접기" : "전체보기"}
                       </button>
                     )}
+                  </div>
+                </div>
 
-                    <div className="mt-4 w-full relative z-[1] space-y-2.5">
-                      <button
-                        onClick={playRecordedAudio}
-                        disabled={!reviewAudioUrl}
-                        className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${
-                          reviewAudioUrl
-                            ? isPlayingAudio
-                              ? "bg-orange-500 text-white"
-                              : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"
-                            : "bg-slate-100 text-slate-300"
-                        }`}
-                      >
-                        {isPlayingAudio
-                          ? "🔊 목소리 재생 중..."
-                          : "▶ 내 목소리 듣기"}
-                      </button>
-                      <button
-                        onClick={handleNext}
-                        className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl active:scale-[0.98]"
-                      >
-                        다음 문항으로
-                      </button>
-                    </div>
-                  </>
-                )}
+                  <div className="mt-5 flex flex-col gap-3 relative z-[1]">
+                    <button
+                      onClick={() => {
+                        if (reviewAudioUrl && !isPlayingAudio) {
+                          if (audioPlayerRef.current) {
+                            audioPlayerRef.current.pause();
+                            audioPlayerRef.current.currentTime = 0;
+                            audioPlayerRef.current.onended = null;
+                          }
+                          const a = new Audio(reviewAudioUrl);
+                          audioPlayerRef.current = a;
+                          setIsPlayingAudio(true);
+                          a.onended = () => setIsPlayingAudio(false);
+                          a.play().catch(() => setIsPlayingAudio(false));
+                        }
+                      }}
+                      className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${
+                        isPlayingAudio
+                          ? "bg-orange-500 text-white"
+                          : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"
+                      }`}
+                    >
+                      {isPlayingAudio ? "🔊 재생 중..." : "▶ 내 목소리 듣기"}
+                    </button>
+                    <button
+                      onClick={handleNext}
+                      disabled={isSaving}
+                      className={`w-full py-4 rounded-2xl font-black text-base transition-all shadow-xl active:scale-[0.98] ${
+                        isSaving
+                          ? "bg-slate-300 text-white cursor-not-allowed"
+                          : "bg-slate-900 text-white hover:bg-black"
+                      }`}
+                    >
+                      {isSaving ? "저장 중..." : "다음 문항으로"}
+                    </button>
+                  </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex flex-col items-center gap-4 shrink-0">
+            {/* 하단 컨트롤러 */}
+            <div className="flex flex-col items-center gap-6">
               {resultScore === null && (
                 <>
                   <button
                     type="button"
-                    onClick={handleReplayPrompt}
-                    disabled={!replayEnabled}
-                    className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${
-                      replayEnabled
-                        ? "bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100"
-                        : "bg-slate-50 border-slate-100 text-slate-300"
-                    }`}
-                  >
-                    문제 다시 듣기
-                  </button>
-                  <button
-                    onClick={handleToggleRecording}
+                    onClick={async () => {
+                      await runReplaySequenceImmediate();
+                    }}
                     disabled={
-                      isAnalyzing ||
-                      isPlayingAudio ||
-                      isSaving ||
-                      isPromptPlaying ||
-                      !canRecord
+                      replayCount >= 1 || isPromptPlaying || isSaving
                     }
-                    className={`w-20 h-20 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-90 ${
-                      isRecording
-                        ? "bg-slate-900 shadow-orange-500/20"
-                        : "bg-white border-4 border-slate-50 hover:border-orange-200"
+                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black border transition-all ${
+                      replayCount >= 1 || isPromptPlaying || isSaving
+                        ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
+                        : "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 shadow-sm"
                     }`}
                   >
-                    {isRecording ? (
-                      <div className="w-6 h-6 bg-white rounded-sm animate-pulse" />
-                    ) : isAnalyzing || isSaving ? (
-                      <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <span className="text-3xl">🎙️</span>
-                    )}
+                    <span>↻</span>
+                    <span>문제 다시 듣기</span>
                   </button>
+
+                  <div className="relative">
+                    {/* 녹음 중 파동 효과 */}
+                    {isRecording && (
+                      <>
+                        <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping" />
+                        <div className="absolute inset-0 bg-orange-200 rounded-full animate-pulse" />
+                      </>
+                    )}
+
+                    <button
+                      onClick={handleToggleRecording}
+                      disabled={
+                        !isRecording &&
+                        (isAnalyzing || isPromptPlaying || !canRecord)
+                      }
+                      className={`relative z-10 w-24 h-24 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-95 ${
+                        isRecording
+                          ? "bg-white text-orange-500"
+                          : "bg-white border-4 border-slate-50"
+                      }`}
+                    >
+                      {isPromptPlaying && countdown ? (
+                        <span className="text-4xl font-black text-orange-500">
+                          {countdown}
+                        </span>
+                      ) : isRecording ? (
+                        <div className="w-8 h-8 bg-orange-500 rounded-lg animate-pulse" />
+                      ) : isAnalyzing ? (
+                        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="text-4xl">🎙️</span>
+                      )}
+                    </button>
+                  </div>
                   <p
-                    className={`font-black text-[10px] uppercase tracking-widest ${
-                      isRecording
-                        ? "text-orange-600 animate-pulse"
-                        : isSaving
-                          ? "text-orange-400"
-                          : "text-slate-300"
-                    }`}
+                    className={`font-black text-[11px] uppercase tracking-[0.2em] ${isRecording ? "text-orange-500 animate-pulse" : "text-slate-300"}`}
                   >
                     {isRecording
-                      ? "Recording..."
-                      : isPromptPlaying
-                        ? "Listening..."
-                      : isAnalyzing
-                        ? "Analyzing..."
-                        : isSaving
-                          ? "Saving..."
-                          : isPlayingAudio
-                            ? "Reviewing..."
-                            : "Tap to Speak"}
+                      ? "Listening to your voice..."
+                      : "Press to speak"}
                   </p>
                 </>
               )}
@@ -561,7 +716,7 @@ function Step2Content() {
           </div>
         </main>
 
-        <aside className="w-full lg:w-[380px] h-auto min-h-[340px] lg:h-full mt-auto lg:mt-0 border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 relative flex flex-col overflow-visible lg:overflow-hidden order-2 p-3 lg:p-4">
+        <aside className="w-full lg:w-[380px] border-l border-slate-50 bg-white shrink-0 flex flex-col order-2">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}
@@ -573,7 +728,7 @@ function Step2Content() {
             }}
             showTracking={showTracking}
             onToggleTracking={() => setShowTracking(!showTracking)}
-            scoreLabel="종합 점수"
+            scoreLabel="실시간 대칭도"
             scoreValue={resultScore ? `${resultScore}%` : undefined}
           />
         </aside>
@@ -586,8 +741,8 @@ export default function Step2Page() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen flex items-center justify-center font-black text-slate-200">
-          LOADING...
+        <div className="h-screen flex items-center justify-center font-black text-slate-200 uppercase tracking-widest animate-pulse">
+          Initializing Training...
         </div>
       }
     >

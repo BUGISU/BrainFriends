@@ -35,18 +35,28 @@ export class AudioRecorder {
   private dataArray: Uint8Array<ArrayBuffer> | null = null;
   private animationId: number | null = null;
   private mimeType = "audio/webm";
+  private usingExternalStream = false;
 
-  async startRecording(onAudioLevel?: (level: number) => void): Promise<void> {
+  async startRecording(
+    onAudioLevel?: (level: number) => void,
+    inputStream?: MediaStream,
+  ): Promise<void> {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 16000,
-        },
-      });
+      if (inputStream && inputStream.getAudioTracks().length > 0) {
+        this.stream = inputStream;
+        this.usingExternalStream = true;
+      } else {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+            sampleRate: 16000,
+          },
+        });
+        this.usingExternalStream = false;
+      }
 
       if (onAudioLevel) {
         this.audioContext = new AudioContext();
@@ -106,6 +116,17 @@ export class AudioRecorder {
     });
   }
 
+  cancelRecording(): void {
+    if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+      this.mediaRecorder.onstop = () => {
+        this.cleanup();
+      };
+      this.mediaRecorder.stop();
+      return;
+    }
+    this.cleanup();
+  }
+
   getLastAudioBlob(): Blob | null {
     if (this.audioChunks.length === 0) return null;
     return new Blob(this.audioChunks, { type: this.mimeType });
@@ -114,7 +135,14 @@ export class AudioRecorder {
   private cleanup() {
     if (this.animationId !== null) cancelAnimationFrame(this.animationId);
     if (this.audioContext) this.audioContext.close();
-    if (this.stream) this.stream.getTracks().forEach((track) => track.stop());
+    if (this.stream && !this.usingExternalStream) {
+      this.stream.getTracks().forEach((track) => track.stop());
+      this.stream = null;
+    }
+    this.audioContext = null;
+    this.analyser = null;
+    this.dataArray = null;
+    this.animationId = null;
     this.mediaRecorder = null;
     this.audioChunks = [];
   }
@@ -310,9 +338,12 @@ export class SpeechAnalyzer {
     this.transcriber = new WhisperTranscriber();
   }
 
-  async startAnalysis(onAudioLevel?: (level: number) => void) {
+  async startAnalysis(
+    onAudioLevel?: (level: number) => void,
+    inputStream?: MediaStream,
+  ) {
     this.startTime = Date.now();
-    await this.recorder.startRecording(onAudioLevel);
+    await this.recorder.startRecording(onAudioLevel, inputStream);
   }
 
   async stopAnalysis(expectedText: string): Promise<SpeechAnalysisResult> {
@@ -366,5 +397,9 @@ export class SpeechAnalyzer {
         },
       };
     }
+  }
+
+  cancelAnalysis(): void {
+    this.recorder.cancelRecording();
   }
 }

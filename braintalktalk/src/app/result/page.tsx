@@ -12,6 +12,10 @@ import {
   scoreFluency,
 } from "@/lib/kwab/KWABScoring";
 import { SessionManager, TrainingHistoryEntry } from "@/lib/kwab/SessionManager";
+import {
+  addSentenceLineBreaks,
+  getResponsiveSentenceSizeClass,
+} from "@/lib/text/displayText";
 
 // --- 데이터 타입 및 유틸리티 로직 (보존) ---
 type ExportFile = { name: string; data: Uint8Array };
@@ -272,10 +276,14 @@ function ResultContent() {
       vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     const s1 = sessionData?.step1?.items || [];
     const s2 = sessionData?.step2?.items || [];
+    const s3 = sessionData?.step3?.items || [];
     const s4 = sessionData?.step4?.items || [];
     const step1Accuracy = s1.length
       ? s1.filter((i: any) => i.isCorrect).length / s1.length
       : queryScores[1] / 20;
+    const step3Accuracy = s3.length
+      ? s3.filter((i: any) => i?.isCorrect).length / s3.length
+      : Math.max(0, Math.min(1, Number(queryScores[3] || 0) / 100));
     const spontaneousSpeech = deriveSpontaneousSpeechFromStep4(s4);
 
     const scorePack = calculateKWABScores(
@@ -287,7 +295,8 @@ function ResultContent() {
         spontaneousSpeech,
         auditoryComprehension: {
           yesNoScore: Math.round(step1Accuracy * 60),
-          wordRecognitionScore: Math.round(step1Accuracy * 60),
+          // Step3(그림 매칭) 정확도를 낱말 인지 점수에 반영
+          wordRecognitionScore: Math.round(step3Accuracy * 60),
           commandScore: Math.round(step1Accuracy * 80),
         },
         repetition: {
@@ -342,6 +351,7 @@ function ResultContent() {
       : clamp(queryScores[2]);
 
     const s3Correct = s3.filter((i: any) => i?.isCorrect).length;
+    const s3Total = s3.length || 10;
     const s3Percent = s3.length
       ? clamp((s3Correct / s3.length) * 100)
       : clamp(queryScores[3]);
@@ -392,9 +402,9 @@ function ResultContent() {
       {
         id: 3,
         title: "그림 매칭",
-        display: `${Math.round(s3Percent)}%`,
+        display: `${s3Correct}/${s3Total}`,
         percent: s3Percent,
-        metric: `${Math.round(s3Percent)}%`,
+        metric: `${s3Correct}/${s3Total}`,
       },
       {
         id: 4,
@@ -474,6 +484,17 @@ function ResultContent() {
       weakestText: `${weakest.name} ${weakest.metric}`,
     };
   }, [derivedKwab, stepDetails]);
+
+  const formattedClinicalImpression = useMemo(() => {
+    if (!clinicalImpression) return null;
+    return {
+      ...clinicalImpression,
+      summary: addSentenceLineBreaks(clinicalImpression.summary),
+      strength: addSentenceLineBreaks(clinicalImpression.strength),
+      need: addSentenceLineBreaks(clinicalImpression.need),
+      recommendation: addSentenceLineBreaks(clinicalImpression.recommendation),
+    };
+  }, [clinicalImpression]);
 
   const normalComparison = useMemo(() => {
     if (!derivedKwab) return null;
@@ -567,6 +588,14 @@ function ResultContent() {
       step4: { items: backups.step4 },
       step5: { items: backups.step5 },
       step6: { items: backups.step6 },
+    });
+    console.debug("[Result] backups loaded", {
+      step1: backups.step1.length,
+      step2: backups.step2.length,
+      step3: backups.step3.length,
+      step4: backups.step4.length,
+      step5: backups.step5.length,
+      step6: backups.step6.length,
     });
   }, []);
 
@@ -897,17 +926,19 @@ function ResultContent() {
                   </div>
                 </div>
 
-                <p className="text-[12px] font-black text-slate-800 leading-relaxed whitespace-pre-line">
-                  {clinicalImpression?.summary}
+                <p
+                  className={`${getResponsiveSentenceSizeClass(formattedClinicalImpression?.summary || "")} font-black text-slate-800 leading-relaxed whitespace-pre-line`}
+                >
+                  {formattedClinicalImpression?.summary}
                 </p>
                 <p className="text-[11px] font-bold text-slate-600 leading-relaxed whitespace-pre-line">
-                  상대적 강점: {clinicalImpression?.strength}
+                  상대적 강점: {formattedClinicalImpression?.strength}
                 </p>
                 <p className="text-[11px] font-bold text-slate-600 leading-relaxed whitespace-pre-line">
-                  집중 훈련: {clinicalImpression?.need}
+                  집중 훈련: {formattedClinicalImpression?.need}
                 </p>
                 <p className="text-[11px] font-bold text-slate-600 leading-relaxed whitespace-pre-line">
-                  훈련 권장사항: {clinicalImpression?.recommendation}
+                  훈련 권장사항: {formattedClinicalImpression?.recommendation}
                 </p>
               </div>
             </section>

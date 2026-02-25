@@ -15,6 +15,11 @@ import { useTraining } from "../TrainingContext";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import {
+  addSentenceLineBreaks,
+  getResponsiveSentenceSizeClass,
+  shouldBreakAfterWord,
+} from "@/lib/text/displayText";
 
 export const dynamic = "force-dynamic";
 
@@ -62,9 +67,17 @@ function Step5Content() {
     [place],
   );
   const currentItem = texts[currentIndex];
-  const words = useMemo(
-    () => currentItem?.text.split(" ") || [],
+  const formattedText = useMemo(
+    () => addSentenceLineBreaks(currentItem?.text || ""),
     [currentItem],
+  );
+  const words = useMemo(
+    () => formattedText.split(/\s+/).filter(Boolean),
+    [formattedText],
+  );
+  const readingTextSizeClass = useMemo(
+    () => getResponsiveSentenceSizeClass(formattedText),
+    [formattedText],
   );
 
   useEffect(() => {
@@ -286,6 +299,13 @@ function Step5Content() {
 
   return (
     <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
+      {/* 상단 진행 프로그레스 바 */}
+      <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
+        <div
+          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+          style={{ width: `${((currentIndex + 1) / texts.length) * 100}%` }}
+        />
+      </div>
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
@@ -311,16 +331,24 @@ function Step5Content() {
             <div
               className={`bg-white border rounded-[32px] p-8 lg:p-12 shadow-sm transition-all duration-500 ${phase === "reading" ? "border-orange-500 shadow-orange-50 scale-[1.02]" : "border-slate-100"}`}
             >
-              <p className="text-xl lg:text-3xl font-black text-slate-800 leading-relaxed text-center break-keep">
+              <div
+                className={`${readingTextSizeClass} font-black text-slate-800 leading-relaxed text-center break-keep flex flex-wrap justify-center gap-y-1`}
+              >
                 {words.map((w, i) => (
-                  <span
-                    key={i}
-                    className={`transition-all duration-300 rounded-lg px-1 inline-block ${i <= highlightIndex ? "text-orange-600 bg-orange-50" : "text-slate-200"}`}
-                  >
-                    {w}{" "}
-                  </span>
+                  <React.Fragment key={`${w}-${i}`}>
+                    <span
+                      className={`transition-all duration-300 rounded-lg px-1 inline-block ${i <= highlightIndex ? "text-orange-600 bg-orange-50" : "text-slate-200"}`}
+                    >
+                      {w}
+                    </span>
+                    {shouldBreakAfterWord(w) ? (
+                      <span className="basis-full h-0" />
+                    ) : (
+                      <span className="w-1" />
+                    )}
+                  </React.Fragment>
                 ))}
-              </p>
+              </div>
             </div>
 
             <div className="flex flex-col items-center gap-6">

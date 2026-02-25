@@ -228,6 +228,13 @@ function Step6Content() {
 
   return (
     <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
+      {/* 상단 진행 프로그레스 바 */}
+      <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
+        <div
+          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+          style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
+        />
+      </div>
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">

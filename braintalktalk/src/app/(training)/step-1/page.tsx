@@ -60,25 +60,33 @@ function Step1Content() {
   const currentItem = trainingData[currentIndex];
 
   const speakWord = useCallback(
-    (text: string) => {
+    async (text: string) => {
+      console.log(`🔊 음성 출력: "${text}"`);
+      setIsSpeaking(true);
+      setCanAnswer(false);
+      setTimeLeft(null);
       if (typeof window !== "undefined" && window.speechSynthesis) {
-        console.log(`🔊 음성 출력: "${text}"`);
-        setIsSpeaking(true);
-        setCanAnswer(false);
-        setTimeLeft(null);
-        window.speechSynthesis.cancel();
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        synth.resume();
         const msg = new SpeechSynthesisUtterance(text);
         msg.lang = "ko-KR";
         msg.rate = 0.85;
-        msg.onend = () => {
-          setIsSpeaking(false);
-          setCanAnswer(true);
-          setTimeLeft(currentItem?.duration || 10);
-          setQuestionStartTime(Date.now());
-          console.log("✅ 음성 출력 완료, 답변 가능");
-        };
-        window.speechSynthesis.speak(msg);
+        const koVoice = synth
+          .getVoices()
+          .find((v) => v.lang?.toLowerCase().startsWith("ko"));
+        if (koVoice) msg.voice = koVoice;
+        await new Promise<void>((resolve) => {
+          msg.onend = () => resolve();
+          msg.onerror = () => resolve();
+          synth.speak(msg);
+        });
       }
+      setIsSpeaking(false);
+      setCanAnswer(true);
+      setTimeLeft(currentItem?.duration || 10);
+      setQuestionStartTime(Date.now());
+      console.log("✅ 음성 출력 완료, 답변 가능");
     },
     [currentItem],
   );
@@ -221,13 +229,15 @@ function Step1Content() {
     GLOBAL_SPEECH_LOCK[currentIndex] = true;
     console.log(`🎬 ${currentIndex + 1}번 문제 시작`);
     setReplayCount(0);
-    const timer = setTimeout(() => speakWord(currentItem.question), 800);
+    const timer = setTimeout(() => {
+      void speakWord(currentItem.question);
+    }, 800);
     return () => clearTimeout(timer);
   }, [currentIndex, isMounted, currentItem, speakWord]);
 
   const handleReplay = () => {
     if (replayCount < 1 && !isSpeaking && !isAnswered && canAnswer) {
-      speakWord(currentItem.question);
+      void speakWord(currentItem.question);
       setReplayCount((prev) => prev + 1);
     }
   };
@@ -252,6 +262,13 @@ function Step1Content() {
 
   return (
     <div className="flex flex-col h-full bg-[#FBFBFC] overflow-hidden text-slate-900 font-sans">
+      {/* 상단 진행 프로그레스 바 */}
+      <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
+        <div
+          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+          style={{ width: `${((currentIndex + 1) / trainingData.length) * 100}%` }}
+        />
+      </div>
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
