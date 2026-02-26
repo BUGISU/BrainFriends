@@ -329,7 +329,7 @@ function Step4Content() {
               ]
             : [];
           localStorage.setItem("step4_recorded_audios", JSON.stringify(next));
-          console.debug("[Step4] save:success", {
+          console.log("[Step4] save:success", {
             index: currentIndex,
             savedCount: next.length,
             score,
@@ -414,7 +414,7 @@ function Step4Content() {
           totalCount: allResults.length,
           timestamp: Date.now(),
         });
-        console.debug("[Step4] session:save:success", {
+        console.log("[Step4] session:save:success", {
           totalScenarios: allResults.length,
           averageKwabScore: Number(averageKwabScore.toFixed(1)),
         });

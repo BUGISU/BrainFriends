@@ -121,6 +121,13 @@ export default function SelectPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/report")}
+            className="px-4 py-1.5 rounded-full text-xs font-black shadow-sm border bg-[#0B1A3A] text-white border-[#0B1A3A] hover:bg-[#09152f] transition-all"
+          >
+            리포트 보기
+          </button>
           <span
             className={`px-4 py-1.5 rounded-full text-xs font-black shadow-sm border ${
               ageGroup === "Senior"
@@ -142,12 +149,12 @@ export default function SelectPage() {
             </p>
           </div>
 
-          <div className="flex-1 min-h-0 min-w-0 w-full max-w-[860px] mx-auto grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-2.5 lg:gap-3 justify-items-center content-center">
+          <div className="flex-1 min-h-0 min-w-0 w-full max-w-[900px] mx-auto grid grid-cols-2 md:grid-cols-3 gap-1.5 md:gap-2 lg:gap-2.5 justify-items-center content-center">
             {PLACES.map((p) => (
               <button
                 key={p.key}
                 onClick={() => go(p.key)}
-                className={`group w-full max-w-[184px] sm:max-w-[216px] md:max-w-[246px] lg:max-w-[268px] aspect-square rounded-[22px] md:rounded-[28px] border-2 border-orange-100 hover:border-orange-300 transition-all duration-300 flex flex-col items-center justify-center px-3 shadow-sm hover:shadow-[0_12px_28px_rgba(249,115,22,0.16)] active:scale-95 relative overflow-hidden ${p.bgClass}`}
+                className={`group w-full max-w-[158px] sm:max-w-[184px] md:max-w-[210px] lg:max-w-[228px] aspect-square rounded-[22px] md:rounded-[28px] border-2 border-orange-100 hover:border-orange-300 transition-all duration-300 flex flex-col items-center justify-center px-2.5 shadow-sm hover:shadow-[0_12px_28px_rgba(249,115,22,0.16)] active:scale-95 relative overflow-hidden ${p.bgClass}`}
               >
                 {p.imagePath && (
                   <div

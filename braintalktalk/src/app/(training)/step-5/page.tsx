@@ -34,7 +34,8 @@ interface ReadingMetrics {
 
 function getStep5TextSizeClass(text: string): string {
   const normalizedLength = (text || "").replace(/\s+/g, "").length;
-  if (normalizedLength >= 80) return "text-sm md:text-base lg:text-lg";
+  if (normalizedLength >= 110) return "text-xs md:text-sm lg:text-base";
+  if (normalizedLength >= 85) return "text-sm md:text-base lg:text-lg";
   if (normalizedLength >= 60) return "text-base md:text-lg lg:text-xl";
   if (normalizedLength >= 40) return "text-lg md:text-xl lg:text-2xl";
   return "text-xl md:text-2xl lg:text-3xl";
@@ -100,6 +101,7 @@ function Step5Content() {
     () => getStep5TextSizeClass(formattedText),
     [formattedText],
   );
+  const hasWhitespace = useMemo(() => /\s/.test(formattedText), [formattedText]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -439,14 +441,14 @@ function Step5Content() {
                 </div>
               )}
               <div
-                className={`${readingTextSizeClass} font-black text-slate-800 leading-snug text-center break-keep max-h-[3.4em] md:max-h-[3.6em] overflow-hidden`}
+                className={`${readingTextSizeClass} font-black text-slate-800 leading-snug text-center ${hasWhitespace ? "break-keep" : "break-all"} max-h-[2.8em] md:max-h-[2.8em] overflow-hidden`}
               >
                 {(() => {
                   let wordCursor = -1;
                   return textLines.map((line, lineIndex) => (
                     <div
                       key={`line-${lineIndex}`}
-                      className="flex flex-wrap justify-center gap-y-1"
+                      className="flex flex-wrap justify-center gap-y-1 leading-snug"
                     >
                       {line
                         .split(/\s+/)
@@ -456,7 +458,9 @@ function Step5Content() {
                           return (
                             <React.Fragment key={`w-${lineIndex}-${wordIndex}`}>
                               <span
-                                className={`transition-all duration-300 rounded-lg px-1 inline-block ${
+                                className={`transition-all duration-300 rounded-lg px-1 inline-block whitespace-normal ${
+                                  hasWhitespace ? "break-keep" : "break-all"
+                                } ${
                                   wordCursor <= highlightIndex
                                     ? "text-orange-700 bg-orange-100"
                                     : phase === "ready"

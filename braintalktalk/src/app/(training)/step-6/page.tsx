@@ -83,11 +83,15 @@ function Step6WordImage({
   answer,
   className,
   imgClassName,
+  onClick,
+  zoomLabel,
 }: {
   place: PlaceType;
   answer: string;
   className: string;
   imgClassName: string;
+  onClick?: () => void;
+  zoomLabel?: string;
 }) {
   const candidates = useMemo(
     () => buildStep6ImageCandidates(place, answer),
@@ -101,8 +105,8 @@ function Step6WordImage({
 
   const src = candidates[candidateIndex];
 
-  return (
-    <div className={className}>
+  const content = (
+    <>
       {src ? (
         <img
           src={src}
@@ -117,8 +121,23 @@ function Step6WordImage({
       ) : (
         <div className="text-slate-400 font-black text-lg">{answer.slice(0, 1)}</div>
       )}
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`${className} cursor-zoom-in`}
+        aria-label={zoomLabel || `${answer} 확대 보기`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 function getResultWordSizeClass(word: string) {
@@ -127,6 +146,17 @@ function getResultWordSizeClass(word: string) {
   if (len <= 5) return "text-4xl sm:text-5xl lg:text-7xl";
   if (len <= 8) return "text-3xl sm:text-4xl lg:text-6xl";
   return "text-2xl sm:text-3xl lg:text-5xl";
+}
+
+function getTracingGuideFontSize(
+  answer: string,
+  canvasWidth: number,
+  canvasHeight: number,
+) {
+  const len = Math.max(1, (answer || "").trim().length);
+  const widthBased = canvasWidth / Math.max(2.2, len * 1.15);
+  const heightBased = canvasHeight * 0.5;
+  return Math.max(28, Math.min(widthBased, heightBased));
 }
 
 const RESULT_PRAISES = [
@@ -176,6 +206,7 @@ function Step6Content() {
     RESULT_PRAISES[0],
   );
   const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
+  const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
 
   const questions = useMemo(
     () =>
@@ -208,7 +239,12 @@ function Step6Content() {
       ctx.strokeStyle = "#1E293B";
 
       if (showTracingGuide && currentWord) {
-        ctx.font = `900 ${Math.min(canvas.width / 3, canvas.height * 0.5)}px sans-serif`;
+        const fontSize = getTracingGuideFontSize(
+          currentWord.answer,
+          canvas.width,
+          canvas.height,
+        );
+        ctx.font = `900 ${fontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "rgba(226, 232, 240, 0.4)";
@@ -395,11 +431,13 @@ function Step6Content() {
                       <Step6WordImage
                         place={place}
                         answer={currentWord.answer}
-                        className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 inline-flex items-center justify-center shrink-0 overflow-hidden"
-                        imgClassName="w-7 h-7 object-contain"
+                        className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-100 inline-flex items-center justify-center shrink-0 overflow-hidden"
+                        imgClassName="w-11 h-11 object-contain"
+                        onClick={() => setIsImageZoomOpen(true)}
+                        zoomLabel="물건 이미지 크게 보기"
                       />
-                      <p className="text-sm font-black text-slate-800 truncate">
-                        {showHintText ? currentWord.hint : "힌트 보기를 눌러주세요"}
+                      <p className="text-xs sm:text-sm font-black text-slate-800 leading-snug break-keep">
+                        {showHintText ? currentWord.hint : "이것은 무엇인가요?"}
                       </p>
                     </div>
                     <div className="grid grid-cols-3 gap-2 shrink-0">
@@ -427,14 +465,16 @@ function Step6Content() {
                   <Step6WordImage
                     place={place}
                     answer={currentWord.answer}
-                    className="hidden lg:flex w-28 h-28 rounded-3xl bg-slate-50 border border-orange-100 mb-4 items-center justify-center overflow-hidden"
-                    imgClassName="w-20 h-20 object-contain"
+                    className="hidden lg:flex w-36 h-36 rounded-3xl bg-slate-50 border border-orange-100 mb-4 items-center justify-center overflow-hidden"
+                    imgClassName="w-28 h-28 object-contain"
+                    onClick={() => setIsImageZoomOpen(true)}
+                    zoomLabel="물건 이미지 크게 보기"
                   />
                   <p className="hidden lg:block text-[10px] font-black text-orange-500 uppercase tracking-widest mb-1">
                     Target Object
                   </p>
                   <h3 className="hidden lg:block text-2xl font-black text-slate-800 break-keep">
-                    {showHintText ? currentWord.hint : "힌트 보기를 눌러 설명을 확인해 주세요."}
+                    {showHintText ? currentWord.hint : "이것은 무엇인가요?"}
                   </h3>
 
                 </div>
@@ -502,8 +542,10 @@ function Step6Content() {
                 <Step6WordImage
                   place={place}
                   answer={currentWord.answer}
-                  className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 mx-auto mb-4 lg:mb-6 rounded-3xl bg-slate-50 border border-orange-100 flex items-center justify-center overflow-hidden"
-                  imgClassName="w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain"
+                  className="w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 mx-auto mb-4 lg:mb-6 rounded-3xl bg-slate-50 border border-orange-100 flex items-center justify-center overflow-hidden"
+                  imgClassName="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 object-contain"
+                  onClick={() => setIsImageZoomOpen(true)}
+                  zoomLabel="물건 이미지 크게 보기"
                 />
                 <h4
                   className={`${getResultWordSizeClass(currentWord.answer)} font-black text-slate-800 tracking-tight mb-3 lg:mb-4 whitespace-nowrap overflow-hidden text-ellipsis`}
@@ -540,6 +582,32 @@ function Step6Content() {
           )}
         </main>
       </div>
+      {isImageZoomOpen && (
+        <div
+          className="fixed inset-0 z-[70] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setIsImageZoomOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="이미지 확대 보기"
+        >
+          <button
+            type="button"
+            onClick={() => setIsImageZoomOpen(false)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/90 text-slate-700 font-black"
+            aria-label="확대 이미지 닫기"
+          >
+            ×
+          </button>
+          <div onClick={(e) => e.stopPropagation()}>
+            <Step6WordImage
+              place={place}
+              answer={currentWord.answer}
+              className="w-[78vw] h-[78vw] max-w-[520px] max-h-[520px] rounded-[28px] bg-white border border-orange-100 shadow-2xl flex items-center justify-center overflow-hidden"
+              imgClassName="w-[66vw] h-[66vw] max-w-[420px] max-h-[420px] object-contain"
+            />
+          </div>
+        </div>
+      )}
       <HomeExitModal
         open={isHomeExitModalOpen}
         onConfirm={confirmGoHome}
