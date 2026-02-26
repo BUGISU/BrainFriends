@@ -13,6 +13,9 @@ import { REHAB_PROTOCOLS } from "@/constants/auditoryTrainingData";
 import { PlaceType } from "@/constants/trainingData";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import { saveTrainingExitProgress } from "@/lib/trainingExitProgress";
+import { HomeExitModal } from "@/components/training/HomeExitModal";
+import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 
@@ -31,6 +34,7 @@ function Step1Content() {
   const [replayCount, setReplayCount] = useState(0);
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
   const [questionResults, setQuestionResults] = useState<any[]>([]);
+  const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -58,6 +62,13 @@ function Step1Content() {
   }, [placeParam]);
 
   const currentItem = trainingData[currentIndex];
+  const handleGoHome = () => {
+    setIsHomeExitModalOpen(true);
+  };
+  const confirmGoHome = () => {
+    saveTrainingExitProgress(placeParam, 1);
+    router.push("/select");
+  };
 
   const speakWord = useCallback(
     async (text: string) => {
@@ -299,6 +310,19 @@ function Step1Content() {
           <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
             {currentIndex + 1} / 10
           </div>
+          <button
+            type="button"
+            onClick={handleGoHome}
+            aria-label="홈으로 이동"
+            title="홈"
+            className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -315,7 +339,7 @@ function Step1Content() {
             <button
               onClick={handleReplay}
               disabled={!replayEnabled}
-              className="group flex items-center gap-2 mx-auto px-5 py-2.5 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-orange-200 hover:bg-orange-50/30 transition-all disabled:opacity-30 active:scale-95"
+              className={`group flex items-center gap-2 mx-auto px-5 py-2.5 rounded-2xl shadow-sm disabled:opacity-30 active:scale-95 ${trainingButtonStyles.orangeOutline}`}
             >
               <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center group-hover:bg-orange-500 transition-colors">
                 <svg
@@ -362,6 +386,11 @@ function Step1Content() {
           </div>
         </div>
       </main>
+      <HomeExitModal
+        open={isHomeExitModalOpen}
+        onConfirm={confirmGoHome}
+        onCancel={() => setIsHomeExitModalOpen(false)}
+      />
       <div className="h-4 shrink-0" />
     </div>
   );

@@ -11,10 +11,115 @@ import React, {
 import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 import { WRITING_WORDS } from "@/constants/writingData";
+import { VISUAL_MATCHING_IMAGE_FILENAME_MAP } from "@/constants/visualTrainingData";
+import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { loadPatientProfile } from "@/lib/patientStorage";
 import { SessionManager } from "@/lib/kwab/SessionManager";
+import { saveTrainingExitProgress } from "@/lib/trainingExitProgress";
+import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 
 export const dynamic = "force-dynamic";
+
+const STEP3_IMAGE_BASE_URL = (
+  process.env.NEXT_PUBLIC_STEP3_IMAGE_BASE_URL ||
+  "https://cdn.jsdelivr.net/gh/BUGISU/braintalktalk-assets@main/step3"
+).replace(/\/$/, "");
+
+const STEP6_IMAGE_LABEL_OVERRIDES: Partial<Record<PlaceType, Record<string, string>>> = {
+  mart: {
+    계란: "달걀",
+  },
+  park: {
+    분수대: "분수",
+  },
+};
+
+const buildNameVariants = (baseName: string) => {
+  const variants = new Set<string>();
+  variants.add(baseName);
+  variants.add(baseName.replace(/-/g, ""));
+  variants.add(baseName.replace(/-/g, "_"));
+  variants.add(baseName.split("-")[0]);
+  return Array.from(variants).filter(Boolean);
+};
+
+const buildStep6ImageCandidates = (
+  place: PlaceType,
+  answer: string,
+): string[] => {
+  const candidates: string[] = [];
+  const resolvedLabel = STEP6_IMAGE_LABEL_OVERRIDES[place]?.[answer] || answer;
+  const mappedBaseName =
+    VISUAL_MATCHING_IMAGE_FILENAME_MAP[place]?.[resolvedLabel];
+
+  if (mappedBaseName) {
+    for (const nameVariant of buildNameVariants(mappedBaseName)) {
+      candidates.push(
+        `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.png`,
+        `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.jpg`,
+        `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.jpeg`,
+        `${STEP3_IMAGE_BASE_URL}/${nameVariant}.png`,
+        `${STEP3_IMAGE_BASE_URL}/${nameVariant}.jpg`,
+        `${STEP3_IMAGE_BASE_URL}/${nameVariant}.jpeg`,
+      );
+    }
+  }
+
+  candidates.push(
+    `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(resolvedLabel)}.png`,
+    `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(resolvedLabel)}.jpg`,
+    `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(resolvedLabel)}.jpeg`,
+    `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(resolvedLabel)}.png`,
+    `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(resolvedLabel)}.jpg`,
+    `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(resolvedLabel)}.jpeg`,
+    `/images/places/${place}.png`,
+  );
+
+  return Array.from(new Set(candidates));
+};
+
+function Step6WordImage({
+  place,
+  answer,
+  className,
+  imgClassName,
+}: {
+  place: PlaceType;
+  answer: string;
+  className: string;
+  imgClassName: string;
+}) {
+  const candidates = useMemo(
+    () => buildStep6ImageCandidates(place, answer),
+    [place, answer],
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [place, answer]);
+
+  const src = candidates[candidateIndex];
+
+  return (
+    <div className={className}>
+      {src ? (
+        <img
+          src={src}
+          alt={answer}
+          className={imgClassName}
+          onError={() => {
+            setCandidateIndex((prev) =>
+              prev < candidates.length - 1 ? prev + 1 : prev,
+            );
+          }}
+        />
+      ) : (
+        <div className="text-slate-400 font-black text-lg">{answer.slice(0, 1)}</div>
+      )}
+    </div>
+  );
+}
 
 function getResultWordSizeClass(word: string) {
   const len = (word || "").trim().length;
@@ -37,6 +142,13 @@ function Step6Content() {
   const searchParams = useSearchParams();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
+  const handleGoHome = () => {
+    setIsHomeExitModalOpen(true);
+  };
+  const confirmGoHome = () => {
+    saveTrainingExitProgress(place, 6);
+    router.push("/select");
+  };
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -54,7 +166,8 @@ function Step6Content() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<"writing" | "review">("writing");
   const [isMounted, setIsMounted] = useState(false);
-  const [showHint, setShowHint] = useState(false);
+  const [showHintText, setShowHintText] = useState(false);
+  const [showTracingGuide, setShowTracingGuide] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [userStrokeCount, setUserStrokeCount] = useState(0);
   const [writingImages, setWritingImages] = useState<string[]>([]);
@@ -62,6 +175,7 @@ function Step6Content() {
   const [praiseMessage, setPraiseMessage] = useState<string>(
     RESULT_PRAISES[0],
   );
+  const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
 
   const questions = useMemo(
     () =>
@@ -93,7 +207,7 @@ function Step6Content() {
       ctx.lineWidth = 18;
       ctx.strokeStyle = "#1E293B";
 
-      if (showHint && currentWord) {
+      if (showTracingGuide && currentWord) {
         ctx.font = `900 ${Math.min(canvas.width / 3, canvas.height * 0.5)}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -102,14 +216,14 @@ function Step6Content() {
       }
     }
     setUserStrokeCount(0);
-  }, [showHint, currentWord]);
+  }, [showTracingGuide, currentWord]);
 
   useEffect(() => {
     if (phase === "writing" && isMounted) {
       const timer = setTimeout(initCanvas, 150);
       return () => clearTimeout(timer);
     }
-  }, [phase, isMounted, initCanvas, showHint, currentIndex]);
+  }, [phase, isMounted, initCanvas, showTracingGuide, currentIndex]);
 
   const startDrawing = (e: any) => {
     setIsDrawing(true);
@@ -188,7 +302,8 @@ function Step6Content() {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex((c) => c + 1);
       setPhase("writing");
-      setShowHint(false);
+      setShowHintText(false);
+      setShowTracingGuide(false);
     } else {
       // ✅ SessionManager 통합 저장
       try {
@@ -227,11 +342,11 @@ function Step6Content() {
   if (!isMounted || !currentWord) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
       {/* 상단 진행 프로그레스 바 */}
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
         <div
-          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.45)]"
           style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
         />
       </div>
@@ -249,8 +364,23 @@ function Step6Content() {
             </h2>
           </div>
         </div>
-        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
-          {currentIndex + 1} / {questions.length}
+        <div className="flex items-center gap-2">
+          <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
+            {currentIndex + 1} / {questions.length}
+          </div>
+          <button
+            type="button"
+            onClick={handleGoHome}
+            aria-label="홈으로 이동"
+            title="홈"
+            className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -259,67 +389,85 @@ function Step6Content() {
           {phase === "writing" ? (
             <div className="flex flex-col lg:flex-row h-full gap-4 lg:gap-6">
               <div className="w-full lg:w-72 flex flex-col gap-4 shrink-0 order-1">
-                <div className="flex-1 bg-white rounded-[32px] p-6 flex flex-col items-center justify-center text-center shadow-sm border border-slate-100">
+                <div className="flex-1 bg-white rounded-[28px] p-6 flex flex-col items-center justify-center text-center shadow-sm border border-orange-100">
                   <div className="lg:hidden w-full flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="text-3xl leading-none shrink-0">
-                        {currentWord.emoji}
-                      </div>
+                      <Step6WordImage
+                        place={place}
+                        answer={currentWord.answer}
+                        className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 inline-flex items-center justify-center shrink-0 overflow-hidden"
+                        imgClassName="w-7 h-7 object-contain"
+                      />
                       <p className="text-sm font-black text-slate-800 truncate">
-                        {currentWord.hint}
+                        {showHintText ? currentWord.hint : "힌트 보기를 눌러주세요"}
                       </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 shrink-0">
+                    <div className="grid grid-cols-3 gap-2 shrink-0">
                       <button
-                        onClick={() => setShowHint(!showHint)}
-                        className={`px-2.5 py-2 rounded-xl font-black text-[11px] transition-all ${showHint ? "bg-amber-500 text-white" : "bg-white border border-amber-200 text-amber-600"}`}
+                        onClick={() => setShowHintText((prev) => !prev)}
+                        className={`px-2.5 py-2 rounded-xl font-black text-[11px] ${showHintText ? trainingButtonStyles.orangeSolid : trainingButtonStyles.orangeOutline}`}
                       >
-                        {showHint ? "힌트 끄기" : "힌트 보기"}
+                        {showHintText ? "힌트 닫기" : "힌트 보기"}
+                      </button>
+                      <button
+                        onClick={() => setShowTracingGuide((prev) => !prev)}
+                        className={`px-2.5 py-2 rounded-xl font-black text-[11px] ${showTracingGuide ? trainingButtonStyles.navyPrimary : trainingButtonStyles.slateOutline}`}
+                      >
+                        {showTracingGuide ? "따라쓰기 닫기" : "따라쓰기"}
                       </button>
                       <button
                         onClick={initCanvas}
-                        className="px-2.5 py-2 bg-slate-50 text-slate-400 rounded-xl font-black text-[11px]"
+                        className={`px-2.5 py-2 rounded-xl font-black text-[11px] ${trainingButtonStyles.slateSoft}`}
                       >
                         다시 쓰기
                       </button>
                     </div>
                   </div>
 
-                  <div className="hidden lg:block text-7xl mb-4 animate-bounce-slow leading-none">
-                    {currentWord.emoji}
-                  </div>
-                  <p className="hidden lg:block text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">
+                  <Step6WordImage
+                    place={place}
+                    answer={currentWord.answer}
+                    className="hidden lg:flex w-28 h-28 rounded-3xl bg-slate-50 border border-orange-100 mb-4 items-center justify-center overflow-hidden"
+                    imgClassName="w-20 h-20 object-contain"
+                  />
+                  <p className="hidden lg:block text-[10px] font-black text-orange-500 uppercase tracking-widest mb-1">
                     Target Object
                   </p>
                   <h3 className="hidden lg:block text-2xl font-black text-slate-800 break-keep">
-                    {currentWord.hint}
+                    {showHintText ? currentWord.hint : "힌트 보기를 눌러 설명을 확인해 주세요."}
                   </h3>
 
                 </div>
                 <div className="hidden lg:grid grid-cols-1 gap-2">
                   <button
-                    onClick={() => setShowHint(!showHint)}
-                    className={`py-4 rounded-2xl font-black text-sm transition-all ${showHint ? "bg-amber-500 text-white" : "bg-white border border-amber-200 text-amber-600"}`}
+                    onClick={() => setShowHintText((prev) => !prev)}
+                    className={`py-4 rounded-2xl font-black text-sm ${showHintText ? trainingButtonStyles.orangeSolid : trainingButtonStyles.orangeOutline}`}
                   >
-                    💡 {showHint ? "힌트 끄기" : "힌트 보기"}
+                    {showHintText ? "힌트 닫기" : "힌트 보기"}
+                  </button>
+                  <button
+                    onClick={() => setShowTracingGuide((prev) => !prev)}
+                    className={`py-4 rounded-2xl font-black text-sm ${showTracingGuide ? trainingButtonStyles.navyPrimary : trainingButtonStyles.slateOutline}`}
+                  >
+                    {showTracingGuide ? "따라쓰기 닫기" : "따라쓰기"}
                   </button>
                   <button
                     onClick={initCanvas}
-                    className="py-4 bg-slate-50 text-slate-400 rounded-2xl font-black text-sm"
+                    className={`py-4 rounded-2xl font-black text-sm ${trainingButtonStyles.slateSoft}`}
                   >
-                    🔄 다시 쓰기
+                    다시 쓰기
                   </button>
                   <button
                     onClick={checkAnswer}
-                    className="py-5 bg-slate-900 text-white rounded-2xl font-black text-lg shadow-xl hover:bg-black transition-all"
+                    className={`py-5 rounded-2xl font-black text-lg ${trainingButtonStyles.navyPrimary}`}
                   >
                     작성 완료
                   </button>
                 </div>
               </div>
 
-              <div className="flex-1 min-h-[300px] lg:min-h-0 relative bg-white border-2 border-slate-100 rounded-[32px] lg:rounded-[40px] shadow-inner overflow-hidden order-2">
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 min-w-[320px] sm:min-w-[420px] px-6 py-2 rounded-xl bg-amber-50/95 border border-amber-100 text-amber-700 text-[11px] sm:text-xs font-bold text-center whitespace-nowrap shadow-sm">
+              <div className="flex-1 min-h-[300px] lg:min-h-0 relative bg-white border-2 border-orange-100 rounded-[28px] lg:rounded-[36px] shadow-inner overflow-hidden order-2">
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 min-w-[320px] sm:min-w-[420px] px-6 py-2 rounded-xl bg-orange-50/95 border border-orange-100 text-orange-700 text-[11px] sm:text-xs font-bold text-center whitespace-nowrap shadow-sm">
                   한 획 한 획 또렷하고 정확하게 작성해 주세요.
                 </div>
                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03]">
@@ -349,23 +497,26 @@ function Step6Content() {
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center animate-in zoom-in duration-300">
-              <div className="w-full max-w-[92vw] sm:max-w-[760px] bg-white p-6 sm:p-8 lg:p-12 rounded-[36px] lg:rounded-[60px] text-center shadow-2xl border border-slate-50 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-amber-400" />
-                <div className="text-5xl sm:text-6xl lg:text-8xl mb-4 lg:mb-6">
-                  {currentWord.emoji}
-                </div>
+              <div className="w-full max-w-[92vw] sm:max-w-[760px] bg-white p-6 sm:p-8 lg:p-12 rounded-[32px] lg:rounded-[48px] text-center shadow-2xl border border-orange-100 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-orange-500" />
+                <Step6WordImage
+                  place={place}
+                  answer={currentWord.answer}
+                  className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 mx-auto mb-4 lg:mb-6 rounded-3xl bg-slate-50 border border-orange-100 flex items-center justify-center overflow-hidden"
+                  imgClassName="w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain"
+                />
                 <h4
                   className={`${getResultWordSizeClass(currentWord.answer)} font-black text-slate-800 tracking-tight mb-3 lg:mb-4 whitespace-nowrap overflow-hidden text-ellipsis`}
                 >
                   {currentWord.answer}
                 </h4>
-                <p className="text-amber-500 font-black text-sm uppercase tracking-widest">
+                <p className="text-orange-500 font-black text-sm uppercase tracking-widest">
                   {praiseMessage}
                 </p>
               </div>
               <button
                 onClick={handleNext}
-                className="mt-8 lg:mt-10 px-10 lg:px-20 py-4 lg:py-6 bg-amber-500 text-white rounded-3xl font-black text-xl lg:text-2xl shadow-xl shadow-amber-100 hover:scale-105 transition-all"
+                className={`mt-8 lg:mt-10 px-10 lg:px-20 py-4 lg:py-6 rounded-3xl font-black text-xl lg:text-2xl hover:scale-[1.02] ${trainingButtonStyles.navyPrimary}`}
               >
                 {currentIndex < questions.length - 1
                   ? "다음 문제"
@@ -376,12 +527,12 @@ function Step6Content() {
 
           {phase === "writing" && (
             <div className="lg:hidden fixed left-4 right-4 z-40 space-y-2 pb-[max(env(safe-area-inset-bottom),0px)]" style={{ bottom: "9.25rem" }}>
-              <div className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-[11px] font-bold text-center">
+              <div className="px-3 py-2 rounded-xl bg-orange-50 border border-orange-100 text-orange-700 text-[11px] font-bold text-center">
                 한 획씩 정확하게 작성해 주세요.
               </div>
               <button
                 onClick={checkAnswer}
-                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-base shadow-xl hover:bg-black transition-all"
+                className={`w-full py-4 rounded-2xl font-black text-base ${trainingButtonStyles.navyPrimary}`}
               >
                 작성 완료
               </button>
@@ -389,6 +540,11 @@ function Step6Content() {
           )}
         </main>
       </div>
+      <HomeExitModal
+        open={isHomeExitModalOpen}
+        onConfirm={confirmGoHome}
+        onCancel={() => setIsHomeExitModalOpen(false)}
+      />
     </div>
   );
 }

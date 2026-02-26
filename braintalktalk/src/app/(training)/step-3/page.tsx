@@ -17,8 +17,11 @@ import {
 } from "@/constants/visualTrainingData";
 import { useTraining } from "../TrainingContext";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
+import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import { saveTrainingExitProgress } from "@/lib/trainingExitProgress";
+import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 
 export const dynamic = "force-dynamic";
 const STEP3_TOTAL_QUESTIONS = 10;
@@ -104,6 +107,13 @@ function Step3Content() {
 
   const { sidebarMetrics } = useTraining();
   const place = (searchParams?.get("place") as PlaceType) || "home";
+  const handleGoHome = () => {
+    setIsHomeExitModalOpen(true);
+  };
+  const confirmGoHome = () => {
+    saveTrainingExitProgress(place, 3);
+    router.push("/select");
+  };
 
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -118,6 +128,7 @@ function Step3Content() {
     Record<string, string>
   >({});
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
+  const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -346,8 +357,23 @@ function Step3Content() {
             </h2>
           </div>
         </div>
-        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
-          {currentIndex + 1} / {protocol.length}
+        <div className="flex items-center gap-2">
+          <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
+            {currentIndex + 1} / {protocol.length}
+          </div>
+          <button
+            type="button"
+            onClick={handleGoHome}
+            aria-label="홈으로 이동"
+            title="홈"
+            className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -372,10 +398,10 @@ function Step3Content() {
               <button
                 onClick={handleReplay}
                 disabled={!replayEnabled}
-                className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm active:scale-95 shrink-0 mb-1 pointer-events-auto transition-colors ${
+                className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm active:scale-95 shrink-0 mb-1 pointer-events-auto ${
                   replayEnabled
-                    ? "bg-orange-50 border-orange-200 hover:bg-orange-100"
-                    : "bg-white border-slate-200 opacity-60"
+                    ? trainingButtonStyles.orangeSoft
+                    : `${trainingButtonStyles.slateOutline} opacity-60`
                 }`}
               >
                 <div
@@ -470,6 +496,11 @@ function Step3Content() {
           />
         </aside>
       </div>
+      <HomeExitModal
+        open={isHomeExitModalOpen}
+        onConfirm={confirmGoHome}
+        onCancel={() => setIsHomeExitModalOpen(false)}
+      />
     </div>
   );
 }

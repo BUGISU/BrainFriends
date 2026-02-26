@@ -12,10 +12,14 @@ import {
   scoreFluency,
 } from "@/lib/kwab/KWABScoring";
 import { SessionManager, TrainingHistoryEntry } from "@/lib/kwab/SessionManager";
-import {
-  addSentenceLineBreaks,
-  getResponsiveSentenceSizeClass,
-} from "@/lib/text/displayText";
+import { addSentenceLineBreaks } from "@/lib/text/displayText";
+
+function getResultSummarySizeClass(text: string): string {
+  const normalizedLength = (text || "").replace(/\s+/g, "").length;
+  if (normalizedLength >= 56) return "text-sm md:text-base";
+  if (normalizedLength >= 36) return "text-base md:text-lg";
+  return "text-lg md:text-xl";
+}
 
 // --- 데이터 타입 및 유틸리티 로직 (보존) ---
 type ExportFile = { name: string; data: Uint8Array };
@@ -927,7 +931,7 @@ function ResultContent() {
                 </div>
 
                 <p
-                  className={`${getResponsiveSentenceSizeClass(formattedClinicalImpression?.summary || "")} font-black text-slate-800 leading-relaxed whitespace-pre-line`}
+                  className={`${getResultSummarySizeClass(formattedClinicalImpression?.summary || "")} font-black text-slate-800 leading-relaxed whitespace-pre-line`}
                 >
                   {formattedClinicalImpression?.summary}
                 </p>

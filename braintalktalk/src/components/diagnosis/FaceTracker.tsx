@@ -8,6 +8,14 @@ import {
 } from "@mediapipe/tasks-vision";
 import { calculateLipMetrics, LipMetrics } from "@/utils/faceAnalysis";
 
+const TFLITE_XNNPACK_INFO = "Created TensorFlow Lite XNNPACK delegate for CPU";
+
+function hasNoisyTfliteMessage(value: unknown): boolean {
+  if (typeof value === "string") return value.includes(TFLITE_XNNPACK_INFO);
+  if (value instanceof Error) return value.message.includes(TFLITE_XNNPACK_INFO);
+  return false;
+}
+
 // ✅ 타입을 확장해서 landmarks를 포함시킵니다.
 interface ExtendedMetrics extends LipMetrics {
   landmarks: any[];
@@ -67,6 +75,10 @@ export default function FaceTracker({
         }
         lastTickRef.current = now;
       } catch (err) {
+        if (hasNoisyTfliteMessage(err)) {
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
         console.warn("Analysis skip:", err);
       }
     }
@@ -75,6 +87,13 @@ export default function FaceTracker({
 
   useEffect(() => {
     let cancelled = false;
+    const originalConsoleError = console.error;
+
+    console.error = (...args: unknown[]) => {
+      if (args.some(hasNoisyTfliteMessage)) return;
+      originalConsoleError(...args);
+    };
+
     const init = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
@@ -113,6 +132,7 @@ export default function FaceTracker({
     init();
     return () => {
       cancelled = true;
+      console.error = originalConsoleError;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (videoRef.current?.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;

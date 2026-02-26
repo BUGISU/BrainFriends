@@ -14,14 +14,38 @@ import { useTraining } from "../TrainingContext";
 import { SPEECH_REPETITION_PROTOCOLS } from "@/constants/speechTrainingData";
 import { PlaceType } from "@/constants/trainingData";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
+import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import { saveTrainingExitProgress } from "@/lib/trainingExitProgress";
 import {
   addSentenceLineBreaks,
   getResponsiveSentenceSizeClass,
 } from "@/lib/text/displayText";
+import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 
 export const dynamic = "force-dynamic";
+
+const STEP2_AUDIO_STORAGE_KEY = "step2_recorded_audios";
+const STEP2_MAX_STORED_AUDIO_ITEMS = 4;
+const STEP2_MAX_AUDIO_URL_CHARS = 1_500_000;
+
+function isQuotaExceededError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === "QuotaExceededError" || error.code === 22;
+  }
+  if (typeof error === "object" && error !== null && "name" in error) {
+    return (error as { name?: string }).name === "QuotaExceededError";
+  }
+  return false;
+}
+
+function getResultSentenceSizeClass(text: string): string {
+  const normalizedLength = (text || "").replace(/\s+/g, "").length;
+  if (normalizedLength >= 56) return "text-sm md:text-base";
+  if (normalizedLength >= 36) return "text-base md:text-lg";
+  return "text-lg md:text-xl";
+}
 
 function Step2Content() {
   const router = useRouter();
@@ -57,6 +81,7 @@ function Step2Content() {
   const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [showTracking, setShowTracking] = useState(false);
+  const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
   const flowTokenRef = useRef(0);
 
   const protocol = useMemo(() => {
@@ -76,6 +101,13 @@ function Step2Content() {
   }, [place]);
 
   const currentItem = protocol[currentIndex];
+  const handleGoHome = () => {
+    setIsHomeExitModalOpen(true);
+  };
+  const confirmGoHome = () => {
+    saveTrainingExitProgress(place, 2);
+    router.push("/select");
+  };
   const formattedCurrentText = useMemo(
     () => addSentenceLineBreaks(currentItem?.text || ""),
     [currentItem],
@@ -287,7 +319,7 @@ function Step2Content() {
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem("step2_recorded_audios");
+    localStorage.removeItem(STEP2_AUDIO_STORAGE_KEY);
     async function setupCamera() {
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
@@ -446,31 +478,68 @@ function Step2Content() {
               const base64Audio = reader.result as string;
               let existing: any[] = [];
               try {
-                const raw =
-                  localStorage.getItem("step2_recorded_audios") || "[]";
+                const raw = localStorage.getItem(STEP2_AUDIO_STORAGE_KEY) || "[]";
                 const parsed = JSON.parse(raw);
                 existing = Array.isArray(parsed) ? parsed : [];
               } catch {
                 existing = [];
               }
-              localStorage.setItem(
-                "step2_recorded_audios",
-                JSON.stringify([
-                  ...existing,
-                  {
-                    text: currentItem.text,
-                    audioUrl: base64Audio,
-                    isCorrect: finalScore >= 60,
-                    finalScore: Number(finalScore.toFixed(1)),
-                    speechScore,
-                    faceScore,
-                    timestamp: new Date().toLocaleTimeString(),
-                  },
-                ]),
+              const nextEntry = {
+                text: currentItem.text,
+                audioUrl:
+                  typeof base64Audio === "string" &&
+                  base64Audio.length <= STEP2_MAX_AUDIO_URL_CHARS
+                    ? base64Audio
+                    : undefined,
+                isCorrect: finalScore >= 60,
+                finalScore: Number(finalScore.toFixed(1)),
+                speechScore,
+                faceScore,
+                timestamp: new Date().toLocaleTimeString(),
+              };
+
+              // localStorage 용량 초과 시 오래된 항목부터 제거하고,
+              // 마지막에는 오디오 없이 메타데이터만 저장해 흐름을 유지합니다.
+              let candidate = [...existing, nextEntry].slice(
+                -STEP2_MAX_STORED_AUDIO_ITEMS,
               );
+              let saved = false;
+              let droppedByQuota = 0;
+
+              while (!saved) {
+                try {
+                  localStorage.setItem(
+                    STEP2_AUDIO_STORAGE_KEY,
+                    JSON.stringify(candidate),
+                  );
+                  saved = true;
+                } catch (saveError) {
+                  if (!isQuotaExceededError(saveError)) {
+                    throw saveError;
+                  }
+                  if (candidate.length > 1) {
+                    candidate = candidate.slice(1);
+                    droppedByQuota += 1;
+                    continue;
+                  }
+                  if (candidate[0]?.audioUrl) {
+                    candidate = [{ ...candidate[0], audioUrl: undefined }];
+                    continue;
+                  }
+                  localStorage.removeItem(STEP2_AUDIO_STORAGE_KEY);
+                  candidate = [{ ...nextEntry, audioUrl: undefined }];
+                }
+              }
+
+              if (!nextEntry.audioUrl || droppedByQuota > 0) {
+                console.warn("[Step2] save:reduced", {
+                  droppedByQuota,
+                  hasAudio: Boolean(candidate[candidate.length - 1]?.audioUrl),
+                });
+              }
               console.debug("[Step2] save:success", {
-                key: "step2_recorded_audios",
-                savedCount: existing.length + 1,
+                key: STEP2_AUDIO_STORAGE_KEY,
+                savedCount: candidate.length,
                 score: Number(finalScore.toFixed(1)),
               });
               setReviewAudioUrl(URL.createObjectURL(audioBlob));
@@ -529,8 +598,23 @@ function Step2Content() {
             </h2>
           </div>
         </div>
-        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
-          {currentIndex + 1} / {protocol.length} 문항
+        <div className="flex items-center gap-2">
+          <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
+            {currentIndex + 1} / {protocol.length} 문항
+          </div>
+          <button
+            type="button"
+            onClick={handleGoHome}
+            aria-label="홈으로 이동"
+            title="홈"
+            className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -579,7 +663,7 @@ function Step2Content() {
                     <span className="text-[10px] font-black text-orange-400 uppercase block mb-1">
                       정확도
                     </span>
-                    <span className="text-4xl font-black text-orange-500">
+                    <span className="text-3xl md:text-4xl font-black text-orange-500">
                       {resultScore}%
                     </span>
                   </div>
@@ -588,7 +672,7 @@ function Step2Content() {
                       인식된 결과
                     </p>
                     <p
-                      className={`${getResponsiveSentenceSizeClass(transcript || "")} font-bold text-slate-700 italic leading-relaxed ${
+                      className={`${getResultSentenceSizeClass(transcript || "")} font-bold text-slate-700 italic leading-relaxed ${
                         isSttExpanded
                           ? "break-words whitespace-normal"
                           : "whitespace-nowrap overflow-hidden text-ellipsis"
@@ -624,10 +708,10 @@ function Step2Content() {
                           a.play().catch(() => setIsPlayingAudio(false));
                         }
                       }}
-                      className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${
+                      className={`w-full py-4 rounded-2xl font-black text-sm ${
                         isPlayingAudio
-                          ? "bg-orange-500 text-white"
-                          : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"
+                          ? trainingButtonStyles.orangeSolid
+                          : trainingButtonStyles.orangeSoft
                       }`}
                     >
                       {isPlayingAudio ? "🔊 재생 중..." : "▶ 내 목소리 듣기"}
@@ -635,10 +719,10 @@ function Step2Content() {
                     <button
                       onClick={handleNext}
                       disabled={isSaving}
-                      className={`w-full py-4 rounded-2xl font-black text-base transition-all shadow-xl active:scale-[0.98] ${
+                      className={`w-full py-4 rounded-2xl font-black text-base ${
                         isSaving
-                          ? "bg-slate-300 text-white cursor-not-allowed"
-                          : "bg-slate-900 text-white hover:bg-black"
+                          ? trainingButtonStyles.navyPrimaryMuted
+                          : trainingButtonStyles.navyPrimary
                       }`}
                     >
                       {isSaving ? "저장 중..." : "다음 문항으로"}
@@ -659,10 +743,10 @@ function Step2Content() {
                     disabled={
                       replayCount >= 1 || isPromptPlaying || isSaving
                     }
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black border transition-all ${
+                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black border ${
                       replayCount >= 1 || isPromptPlaying || isSaving
-                        ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
-                        : "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 shadow-sm"
+                        ? trainingButtonStyles.slateMuted
+                        : `${trainingButtonStyles.orangeSoft} shadow-sm`
                     }`}
                   >
                     <span>↻</span>
@@ -733,6 +817,11 @@ function Step2Content() {
           />
         </aside>
       </div>
+      <HomeExitModal
+        open={isHomeExitModalOpen}
+        onConfirm={confirmGoHome}
+        onCancel={() => setIsHomeExitModalOpen(false)}
+      />
     </div>
   );
 }

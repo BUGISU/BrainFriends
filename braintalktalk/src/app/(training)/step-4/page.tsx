@@ -12,12 +12,15 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 import { FLUENCY_SCENARIOS } from "@/constants/fluencyData";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
+import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import { saveTrainingExitProgress } from "@/lib/trainingExitProgress";
 import {
   addSentenceLineBreaks,
   getResponsiveSentenceSizeClass,
 } from "@/lib/text/displayText";
+import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +95,13 @@ function Step4Content() {
   const searchParams = useSearchParams();
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step3Score = searchParams.get("step3") || "0";
+  const handleGoHome = () => {
+    setIsHomeExitModalOpen(true);
+  };
+  const confirmGoHome = () => {
+    saveTrainingExitProgress(place, 4);
+    router.push("/select");
+  };
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const analyzerRef = useRef<SpeechAnalyzer | null>(null);
@@ -111,6 +121,7 @@ function Step4Content() {
   const [resolvedImageSrc, setResolvedImageSrc] = useState("");
   const [isImageResolving, setIsImageResolving] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
 
   const [currentResult, setCurrentResult] = useState<Step4EvalResult | null>(
     null,
@@ -207,8 +218,7 @@ function Step4Content() {
     setIsPromptPlaying(true);
 
     const utterance = new SpeechSynthesisUtterance(
-      formattedPrompt ||
-        "화면의 그림을 보고,\n어떤 상황인지 자유롭게 말씀해 주세요.",
+      "이 사진 속 상황을 자유롭게 이야기해 주세요.",
     );
     utterance.lang = "ko-KR";
     utterance.rate = 0.9;
@@ -228,7 +238,7 @@ function Step4Content() {
     setTimeout(() => {
       synth.speak(utterance);
     }, 80);
-  }, [currentScenario, formattedPrompt]);
+  }, [currentScenario]);
 
   useEffect(() => {
     if (!isMounted || !currentScenario) return;
@@ -260,6 +270,7 @@ function Step4Content() {
     if (phase !== "recording") return;
     if (timerRef.current) clearInterval(timerRef.current);
     setPhase("analyzing");
+    setShowHint(false);
     try {
       const analysis = await analyzerRef.current!.stopAnalysis(
         currentScenario.answerKeywords.join(" "),
@@ -329,7 +340,9 @@ function Step4Content() {
           setSaveStatusText("저장 실패");
         }
       } else {
-        console.warn("[Step4] save:skip (audioBlob 없음)", { index: currentIndex });
+        console.warn("[Step4] save:skip (audioBlob 없음)", {
+          index: currentIndex,
+        });
         setSaveStatusText("오디오 없음");
       }
 
@@ -380,7 +393,8 @@ function Step4Content() {
         );
         const averageKwabScore =
           allResults.length > 0
-            ? allResults.reduce((sum, r) => sum + r.kwabScore, 0) / allResults.length
+            ? allResults.reduce((sum, r) => sum + r.kwabScore, 0) /
+              allResults.length
             : 0;
         sm.saveStep4Result({
           items: allResults.map((r) => ({
@@ -435,13 +449,28 @@ function Step4Content() {
           </div>
           <h2 className="text-lg font-black text-slate-900">상황 설명하기</h2>
         </div>
-        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700">
-          {currentIndex + 1} / {scenarios.length}
+        <div className="flex items-center gap-2">
+          <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700">
+            {currentIndex + 1} / {scenarios.length}
+          </div>
+          <button
+            type="button"
+            onClick={handleGoHome}
+            aria-label="홈으로 이동"
+            title="홈"
+            className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            </svg>
+          </button>
         </div>
       </header>
 
       <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-        <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           {/* 이미지 영역 */}
           <div className="bg-white p-4 rounded-[40px] shadow-xl border border-slate-100">
             <div className="aspect-square rounded-[32px] overflow-hidden bg-slate-50 relative flex items-center justify-center">
@@ -468,7 +497,7 @@ function Step4Content() {
           </div>
 
           {/* 대화 및 컨트롤 영역 */}
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3 sm:gap-4">
             <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
               <span className="text-[11px] font-black text-orange-500 tracking-[0.3em] uppercase block mb-4">
                 Spontaneous Speech
@@ -477,49 +506,108 @@ function Step4Content() {
                 className={`${headlineTextSizeClass} font-black text-slate-800 leading-tight break-keep whitespace-pre-line`}
               >
                 {phase === "recording"
-                  ? "듣고 있습니다. 편하게 말씀해 주세요."
-                  : "이 그림은 어떤 장면인가요?"}
+                  ? "듣고 있습니다. \n편하게 말씀해 주세요."
+                  : "이 사진 속 상황을 자유롭게 이야기해 주세요."}
               </h1>
 
-              <div className="mt-8 flex flex-col gap-4">
-                {!showHint ? (
-                  <div className="flex flex-wrap gap-2">
+              <div className="mt-8">
+                {phase === "review" ? (
+                  <div className="w-full space-y-3">
+                    <div className="bg-white p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] border border-orange-100 shadow-lg grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 sm:gap-5 items-start">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-black text-slate-400 uppercase">
+                          인식된 문장
+                        </span>
+                        <p className="mt-1 font-bold text-slate-700 italic break-words leading-relaxed max-h-24 overflow-y-auto pr-1">
+                          "{currentResult?.transcript || "..."}"
+                        </p>
+                        <p className="mt-1 text-[11px] font-black text-emerald-600">
+                          {saveStatusText || "저장 상태 확인 중"}
+                        </p>
+                      </div>
+                      <div className="text-center shrink-0 w-full sm:w-[110px]">
+                        <span className="text-[10px] font-black text-orange-400 uppercase">
+                          유창성 점수
+                        </span>
+                        <p className="text-2xl sm:text-3xl font-black text-orange-500 leading-none mt-1">
+                          {currentResult?.kwabScore}/10
+                        </p>
+                        <button
+                          onClick={playRecordedAudio}
+                          className={`mt-2 w-full h-9 inline-flex items-center justify-center rounded-lg border text-[12px] font-black ${
+                            isPlayingAudio
+                              ? trainingButtonStyles.orangeSolid
+                              : trainingButtonStyles.orangeSoft
+                          }`}
+                          aria-label="내 목소리 재생"
+                        >
+                          {isPlayingAudio ? "⏸" : "▶"}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleNext}
+                      className={`w-full py-5 rounded-[24px] font-black text-lg ${trainingButtonStyles.navyPrimary}`}
+                    >
+                      {currentIndex < scenarios.length - 1
+                        ? "다음 상황 보기"
+                        : "결과 확인하기"}
+                    </button>
+                  </div>
+                ) : !showHint ? (
+                  <div className="flex flex-wrap gap-2 items-start">
                     <button
                       onClick={() => setShowHint(true)}
-                      className="w-fit px-5 py-2.5 rounded-2xl bg-orange-50 text-orange-600 text-xs font-black border border-orange-100 hover:bg-orange-100 transition-all"
+                      className={`w-fit px-5 py-2.5 rounded-2xl text-xs font-black ${trainingButtonStyles.orangeSoft}`}
                     >
                       💡 힌트 보기
                     </button>
                     <button
                       onClick={playInstruction}
-                      disabled={isPromptPlaying || phase === "recording" || phase === "analyzing"}
-                      className={`w-fit px-5 py-2.5 rounded-2xl text-xs font-black border transition-all ${
-                        isPromptPlaying || phase === "recording" || phase === "analyzing"
-                          ? "bg-slate-50 text-slate-400 border-slate-200"
-                          : "bg-white text-orange-700 border-orange-200 hover:bg-orange-50"
+                      disabled={
+                        isPromptPlaying ||
+                        phase === "recording" ||
+                        phase === "analyzing"
+                      }
+                      className={`w-fit px-5 py-2.5 rounded-2xl text-xs font-black border ${
+                        isPromptPlaying ||
+                        phase === "recording" ||
+                        phase === "analyzing"
+                          ? trainingButtonStyles.slateMuted
+                          : trainingButtonStyles.orangeOutline
                       }`}
                     >
                       문제 다시듣기
                     </button>
                   </div>
                 ) : (
-                  <div className="p-5 rounded-[24px] bg-slate-50 border border-slate-100 animate-in fade-in zoom-in duration-200">
+                  <div className="p-5 rounded-[24px] bg-slate-50 border border-slate-100">
                     <p className="text-sm font-bold text-slate-600 leading-relaxed break-keep">
+                      <span className="text-orange-500">상황: </span>
+                      <span className="whitespace-pre-line">
+                        {formattedPrompt}
+                      </span>
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-slate-600 leading-relaxed break-keep">
                       <span className="text-orange-500">도움말: </span>
                       <span className="whitespace-pre-line">
                         {formattedHint}
-                        {"\n"}
-                        {formattedPrompt}
                       </span>
                     </p>
                     <div className="mt-3">
                       <button
                         onClick={playInstruction}
-                        disabled={isPromptPlaying || phase === "recording" || phase === "analyzing"}
-                        className={`w-fit px-4 py-2 rounded-xl text-xs font-black border transition-all ${
-                          isPromptPlaying || phase === "recording" || phase === "analyzing"
-                            ? "bg-slate-50 text-slate-400 border-slate-200"
-                            : "bg-white text-orange-700 border-orange-200 hover:bg-orange-50"
+                        disabled={
+                          isPromptPlaying ||
+                          phase === "recording" ||
+                          phase === "analyzing"
+                        }
+                        className={`w-fit px-4 py-2 rounded-xl text-xs font-black border ${
+                          isPromptPlaying ||
+                          phase === "recording" ||
+                          phase === "analyzing"
+                            ? trainingButtonStyles.slateMuted
+                            : trainingButtonStyles.orangeOutline
                         }`}
                       >
                         문제 다시듣기
@@ -531,86 +619,51 @@ function Step4Content() {
             </div>
 
             {/* 녹음 컨트롤 */}
-            <div className="flex flex-col items-center gap-6 py-4">
-              {phase === "review" ? (
-                <div className="w-full space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="bg-white p-6 rounded-[32px] border border-orange-100 shadow-lg flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase">
-                        인식된 문장
-                      </span>
-                      <p className="font-bold text-slate-700 italic">
-                        "{currentResult?.transcript || "..."}"
-                      </p>
-                      <p className="mt-1 text-[11px] font-black text-emerald-600">
-                        {saveStatusText || "저장 상태 확인 중"}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[10px] font-black text-orange-400 uppercase">
-                        유창성 점수
-                      </span>
-                      <p className="text-3xl font-black text-orange-500">
-                        {currentResult?.kwabScore}/10
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={playRecordedAudio}
-                    className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${
-                      isPlayingAudio
-                        ? "bg-orange-500 text-white"
-                        : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"
-                    }`}
-                  >
-                    {isPlayingAudio ? "🔊 재생 중..." : "▶ 내 목소리 듣기"}
-                  </button>
-                  <button
-                    onClick={handleNext}
-                    className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black text-lg hover:bg-black transition-all shadow-xl"
-                  >
-                    {currentIndex < scenarios.length - 1
-                      ? "다음 상황 보기"
-                      : "결과 확인하기"}
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  {phase === "recording" && (
-                    <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping opacity-40" />
-                  )}
-                  <button
-                    onClick={
-                      phase === "recording" ? stopRecording : startRecording
-                    }
-                    disabled={!canRecord || phase === "analyzing"}
-                    className={`relative z-10 w-24 h-24 rounded-full shadow-2xl flex items-center justify-center transition-all ${
-                      phase === "recording"
-                        ? "bg-slate-900"
-                        : "bg-white border-4 border-slate-50"
-                    }`}
-                  >
-                    {phase === "recording" ? (
-                      <div className="w-7 h-7 bg-white rounded-sm animate-pulse" />
-                    ) : phase === "analyzing" ? (
-                      <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <span className="text-4xl">🎙️</span>
+            <div className={`w-full py-2 ${phase === "review" ? "min-h-0" : "lg:min-h-[320px]"}`}>
+              {phase !== "review" && (
+                <div className="flex flex-col items-center">
+                  <div className="relative">
+                    {phase === "recording" && (
+                      <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping opacity-40" />
                     )}
-                  </button>
+                    <button
+                      onClick={
+                        phase === "recording" ? stopRecording : startRecording
+                      }
+                      disabled={!canRecord || phase === "analyzing"}
+                      className={`relative z-10 w-24 h-24 rounded-full shadow-2xl flex items-center justify-center transition-all ${
+                        phase === "recording"
+                          ? "bg-slate-900"
+                          : "bg-white border-4 border-slate-50"
+                      }`}
+                    >
+                      {phase === "recording" ? (
+                        <div className="w-7 h-7 bg-white rounded-sm animate-pulse" />
+                      ) : phase === "analyzing" ? (
+                        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="text-4xl">🎙️</span>
+                      )}
+                    </button>
+                  </div>
+                  <p className="mt-4 text-[11px] font-black uppercase tracking-widest text-slate-300">
+                    {phase === "recording"
+                      ? "Recording..."
+                      : phase === "analyzing"
+                        ? "Analyzing..."
+                        : "Tap to Speak"}
+                  </p>
                 </div>
               )}
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-300">
-                {phase === "recording"
-                  ? "Recording..."
-                  : phase === "analyzing"
-                    ? "Analyzing..."
-                    : "Tap to Speak"}
-              </p>
             </div>
           </div>
         </div>
       </main>
+      <HomeExitModal
+        open={isHomeExitModalOpen}
+        onConfirm={confirmGoHome}
+        onCancel={() => setIsHomeExitModalOpen(false)}
+      />
     </div>
   );
 }

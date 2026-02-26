@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTrainingSession } from "@/hooks/useTrainingSession";
 import { SessionManager } from "@/lib/kwab/SessionManager";
+import { getTrainingExitProgress } from "@/lib/trainingExitProgress";
 
 const PLACES = [
   {
@@ -83,6 +84,16 @@ export default function SelectPage() {
     if (resumePath !== startPath) {
       setResumeModal({ open: true, place, resumePath });
       return;
+    }
+
+    const checkpoint = getTrainingExitProgress(place);
+    if (checkpoint?.completedThroughStep && checkpoint.completedThroughStep > 0) {
+      const nextStep = Math.min(6, checkpoint.completedThroughStep + 1);
+      const fallbackResumePath = `/step-${nextStep}?place=${encodeURIComponent(place)}`;
+      if (fallbackResumePath !== startPath) {
+        setResumeModal({ open: true, place, resumePath: fallbackResumePath });
+        return;
+      }
     }
 
     router.push(startPath);

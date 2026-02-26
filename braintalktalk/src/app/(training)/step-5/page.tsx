@@ -13,13 +13,12 @@ import { PlaceType } from "@/constants/trainingData";
 import { READING_TEXTS } from "@/constants/readingData";
 import { useTraining } from "../TrainingContext";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
+import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
-import {
-  addSentenceLineBreaks,
-  getResponsiveSentenceSizeClass,
-  shouldBreakAfterWord,
-} from "@/lib/text/displayText";
+import { saveTrainingExitProgress } from "@/lib/trainingExitProgress";
+import { addSentenceLineBreaks } from "@/lib/text/displayText";
+import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +30,14 @@ interface ReadingMetrics {
   wordsPerMinute: number;
   pauseCount: number;
   readingScore: number;
+}
+
+function getStep5TextSizeClass(text: string): string {
+  const normalizedLength = (text || "").replace(/\s+/g, "").length;
+  if (normalizedLength >= 80) return "text-sm md:text-base lg:text-lg";
+  if (normalizedLength >= 60) return "text-base md:text-lg lg:text-xl";
+  if (normalizedLength >= 40) return "text-lg md:text-xl lg:text-2xl";
+  return "text-xl md:text-2xl lg:text-3xl";
 }
 
 function Step5Content() {
@@ -48,6 +55,7 @@ function Step5Content() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const readingStartAtRef = useRef<number | null>(null);
+  const readingSecondsRef = useRef(0);
   const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
@@ -61,6 +69,15 @@ function Step5Content() {
     null,
   );
   const [results, setResults] = useState<ReadingMetrics[]>([]);
+  const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
+
+  const handleGoHome = () => {
+    setIsHomeExitModalOpen(true);
+  };
+  const confirmGoHome = () => {
+    saveTrainingExitProgress(place, 5);
+    router.push("/select");
+  };
 
   const texts = useMemo(
     () => READING_TEXTS[place] || READING_TEXTS.home,
@@ -75,14 +92,18 @@ function Step5Content() {
     () => formattedText.split(/\s+/).filter(Boolean),
     [formattedText],
   );
+  const textLines = useMemo(
+    () => formattedText.split("\n").map((line) => line.trim()).filter(Boolean),
+    [formattedText],
+  );
   const readingTextSizeClass = useMemo(
-    () => getResponsiveSentenceSizeClass(formattedText),
+    () => getStep5TextSizeClass(formattedText),
     [formattedText],
   );
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem("step5_recorded_data"); // ✅ 초기화
+    localStorage.removeItem("step5_recorded_data");
 
     async function setupCamera() {
       try {
@@ -108,11 +129,50 @@ function Step5Content() {
     };
   }, []);
 
-  const handleSkipAudio = useCallback(() => {
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
-      setIsPlayingAudio(false);
+  // UX 가이드 메시지
+  const getPhaseMessage = () => {
+    switch (phase) {
+      case "ready":
+        return "준비가 되시면 녹음 버튼을 눌러주세요.";
+      case "reading":
+        return "강조되는 단어를 천천히 따라 읽어보세요.";
+      case "review":
+        return "읽은 목소리를 확인하고 다음으로 넘어가세요.";
+      default:
+        return "";
+    }
+  };
+
+  const playStartBeep = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    try {
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+      if (ctx.state !== "running") return;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 1200;
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      osc.start(now);
+      osc.stop(now + 0.15);
+
+      setTimeout(() => {
+        ctx.close().catch(() => {});
+      }, 250);
+    } catch {
+      // ignore beep errors
     }
   }, []);
 
@@ -123,47 +183,22 @@ function Step5Content() {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 16000,
         },
       });
-      const preferredMimeTypes = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/mp4",
-      ];
-      const selectedMimeType = preferredMimeTypes.find((type) =>
-        MediaRecorder.isTypeSupported(type),
-      );
-      const mediaRecorder = selectedMimeType
-        ? new MediaRecorder(stream, { mimeType: selectedMimeType })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorderRef.current = new MediaRecorder(stream);
       audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (e) =>
+      mediaRecorderRef.current.ondataavailable = (e) =>
         audioChunksRef.current.push(e.data);
+      const startedAt = Date.now();
 
-      mediaRecorder.onstop = () => {
+      mediaRecorderRef.current.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
-        const recordedMimeType =
-          mediaRecorder.mimeType?.split(";")[0] || "audio/webm";
         const audioBlob = new Blob(audioChunksRef.current, {
-          type: recordedMimeType,
+          type: "audio/webm",
         });
-
-        const elapsedByClock =
-          readingStartAtRef.current != null
-            ? Math.max(
-                1,
-                Math.round((Date.now() - readingStartAtRef.current) / 1000),
-              )
-            : 0;
-        const finalReadingTime = Math.max(1, readingTime, elapsedByClock);
-
-        const wpm = Math.round(
-          (currentItem.wordCount / finalReadingTime) * 60,
-        );
+        const finalReadingTime = Math.max(1, readingSecondsRef.current);
+        const wpm = Math.round((currentItem.wordCount / finalReadingTime) * 60);
 
         const res: ReadingMetrics = {
           place,
@@ -171,63 +206,68 @@ function Step5Content() {
           audioUrl: URL.createObjectURL(audioBlob),
           totalTime: finalReadingTime,
           wordsPerMinute: wpm,
-          pauseCount: Math.floor(finalReadingTime / 5),
-          readingScore: Math.round(
-            Math.max(60, 100 - Math.abs(100 - wpm) * 0.5),
-          ),
+          pauseCount: 0,
+          readingScore: Math.min(100, Math.round((wpm / 100) * 100)), // 임시 로직
         };
 
         setCurrentResult(res);
+        console.debug("[Step5] analysis:done", {
+          index: currentIndex,
+          text: currentItem.text,
+          totalTime: res.totalTime,
+          wpm: res.wordsPerMinute,
+          score: res.readingScore,
+        });
 
-        // ✅ Base64 변환하여 localStorage 저장
         const reader = new FileReader();
         reader.onloadend = () => {
           try {
-            const base64Audio = reader.result as string;
-            const existingData = JSON.parse(
+            const existing = JSON.parse(
               localStorage.getItem("step5_recorded_data") || "[]",
             );
-
-            const newEntry = {
-              text: currentItem.text,
-              audioUrl: base64Audio,
-              isCorrect: res.readingScore >= 70,
-              readingScore: res.readingScore,
-              wordsPerMinute: res.wordsPerMinute,
-              totalTime: res.totalTime,
-              timestamp: new Date().toLocaleTimeString(),
-            };
-
-            localStorage.setItem(
-              "step5_recorded_data",
-              JSON.stringify([...existingData, newEntry]),
-            );
-
-            console.log("✅ Step 5 데이터 저장:", newEntry);
-          } catch (error) {
-            console.error("❌ Step 5 저장 실패:", error);
+            const next = [
+              ...existing,
+              {
+                ...res,
+                audioUrl: reader.result as string,
+                timestamp: new Date().toLocaleTimeString(),
+              },
+            ];
+            localStorage.setItem("step5_recorded_data", JSON.stringify(next));
+            console.debug("[Step5] localStorage:save:success", {
+              key: "step5_recorded_data",
+              savedCount: next.length,
+              score: res.readingScore,
+            });
+          } catch (saveError) {
+            console.error("[Step5] localStorage:save:failed", saveError);
           }
+        };
+        reader.onerror = (error) => {
+          console.error("[Step5] audio:base64:failed", error);
         };
         reader.readAsDataURL(audioBlob);
       };
 
       setPhase("reading");
       setReadingTime(0);
-      readingStartAtRef.current = Date.now();
+      readingSecondsRef.current = 0;
       setHighlightIndex(0);
-      mediaRecorder.start();
+      await playStartBeep();
+      mediaRecorderRef.current.start();
 
-      timerRef.current = setInterval(
-        () => setReadingTime((prev) => prev + 1),
-        1000,
-      );
+      timerRef.current = setInterval(() => {
+        readingSecondsRef.current += 1;
+        setReadingTime(readingSecondsRef.current);
+      }, 1000);
+
       highlightTimerRef.current = setInterval(() => {
         setHighlightIndex((p) =>
           p < words.length - 1
             ? p + 1
             : (clearInterval(highlightTimerRef.current!), p),
         );
-      }, 800);
+      }, 900); // 실독증 환자를 위해 약간 느린 하이라이트 속도
     } catch (err) {
       console.error(err);
     }
@@ -239,25 +279,41 @@ function Step5Content() {
     if (mediaRecorderRef.current?.state !== "inactive")
       mediaRecorderRef.current?.stop();
     setPhase("review");
-    readingStartAtRef.current = null;
   };
 
   const playRecordedAudio = () => {
-    if (!currentResult) return;
-    handleSkipAudio();
+    if (!currentResult?.audioUrl) return;
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      audioPlayerRef.current.onended = null;
+    }
+    if (isPlayingAudio) {
+      setIsPlayingAudio(false);
+      return;
+    }
     const audio = new Audio(currentResult.audioUrl);
     audioPlayerRef.current = audio;
     setIsPlayingAudio(true);
     audio.onended = () => setIsPlayingAudio(false);
-    audio.play();
+    audio.play().catch(() => setIsPlayingAudio(false));
   };
 
   const handleNext = () => {
-    handleSkipAudio();
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      audioPlayerRef.current.onended = null;
+      setIsPlayingAudio(false);
+    }
     if (!currentResult) return;
-
     const updatedResults = [...results, currentResult];
     setResults(updatedResults);
+    console.debug("[Step5] next:clicked", {
+      index: currentIndex,
+      totalSavedInState: updatedResults.length,
+      score: currentResult.readingScore,
+    });
 
     if (currentIndex < texts.length - 1) {
       setCurrentIndex((prev) => prev + 1);
@@ -265,32 +321,34 @@ function Step5Content() {
       setCurrentResult(null);
       setHighlightIndex(-1);
     } else {
-      // ✅ SessionManager 통합 저장
       try {
         const patient = loadPatientProfile();
         const sm = new SessionManager(
           (patient || { age: 70, educationYears: 12 }) as any,
           place,
         );
-
         sm.saveStep5Result({
-          correctAnswers: updatedResults.filter((r) => r.readingScore >= 70)
-            .length,
+          correctAnswers: updatedResults.length,
           totalQuestions: texts.length,
           timestamp: Date.now(),
           items: updatedResults as any,
         });
-
-        console.log("✅ Step 5 SessionManager 저장 완료");
+        console.debug("[Step5] session:save:success", {
+          totalQuestions: texts.length,
+          savedItems: updatedResults.length,
+        });
       } catch (error) {
-        console.error("❌ SessionManager 저장 실패:", error);
+        console.error("[Step5] session:save:failed", error);
       }
-
       const avg = Math.round(
         updatedResults.reduce((s, r) => s + r.readingScore, 0) /
           updatedResults.length,
       );
-
+      console.debug("[Step5] route:step6", {
+        avg,
+        place,
+        step4Score,
+      });
       router.push(`/step-6?place=${place}&step4=${step4Score}&step5=${avg}`);
     }
   };
@@ -298,11 +356,10 @@ function Step5Content() {
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-[#FBFBFC] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
-      {/* 상단 진행 프로그레스 바 */}
+    <div className="flex flex-col h-screen bg-slate-50 overflow-y-auto lg:overflow-hidden text-slate-900 font-sans">
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
         <div
-          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
+          className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.45)]"
           style={{ width: `${((currentIndex + 1) / texts.length) * 100}%` }}
         />
       </div>
@@ -320,34 +377,102 @@ function Step5Content() {
             </h2>
           </div>
         </div>
-        <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
-          {currentIndex + 1} / {texts.length}
+        <div className="flex items-center gap-2">
+          <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
+            {currentIndex + 1} / {texts.length}
+          </div>
+          <button
+            type="button"
+            onClick={handleGoHome}
+            aria-label="홈으로 이동"
+            title="홈"
+            className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 10.5 12 3l9 7.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5.5 9.5V21h13V9.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 21v-5h4v5"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 
       <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
         <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 lg:p-10 pb-8 lg:pb-10 order-1 overflow-y-auto">
           <div className="w-full max-w-2xl mx-auto flex flex-col h-full gap-4 lg:gap-8 justify-start lg:justify-center">
-            <div
-              className={`bg-white border rounded-[32px] p-8 lg:p-12 shadow-sm transition-all duration-500 ${phase === "reading" ? "border-orange-500 shadow-orange-50 scale-[1.02]" : "border-slate-100"}`}
-            >
-              <div
-                className={`${readingTextSizeClass} font-black text-slate-800 leading-relaxed text-center break-keep flex flex-wrap justify-center gap-y-1`}
+            <div className="w-full bg-white border border-orange-100 rounded-2xl px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.18em] mb-1">
+                Reading Guide
+              </p>
+              <p
+                className={`text-sm font-bold break-keep leading-relaxed ${
+                  phase === "reading" ? "text-orange-700" : "text-slate-600"
+                }`}
               >
-                {words.map((w, i) => (
-                  <React.Fragment key={`${w}-${i}`}>
-                    <span
-                      className={`transition-all duration-300 rounded-lg px-1 inline-block ${i <= highlightIndex ? "text-orange-600 bg-orange-50" : "text-slate-200"}`}
+                {getPhaseMessage()}
+              </p>
+            </div>
+            <div
+              className={`relative bg-white border rounded-[28px] p-8 lg:p-12 shadow-sm transition-all duration-500 ${phase === "reading" ? "border-orange-500 shadow-orange-100/70 scale-[1.01]" : "border-orange-100"}`}
+            >
+              {phase === "reading" && (
+                <div className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-orange-600 text-[11px] font-black font-mono">
+                  REC {readingTime}s
+                </div>
+              )}
+              <div
+                className={`${readingTextSizeClass} font-black text-slate-800 leading-snug text-center break-keep max-h-[3.4em] md:max-h-[3.6em] overflow-hidden`}
+              >
+                {(() => {
+                  let wordCursor = -1;
+                  return textLines.map((line, lineIndex) => (
+                    <div
+                      key={`line-${lineIndex}`}
+                      className="flex flex-wrap justify-center gap-y-1"
                     >
-                      {w}
-                    </span>
-                    {shouldBreakAfterWord(w) ? (
-                      <span className="basis-full h-0" />
-                    ) : (
-                      <span className="w-1" />
-                    )}
-                  </React.Fragment>
-                ))}
+                      {line
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((word, wordIndex) => {
+                          wordCursor += 1;
+                          return (
+                            <React.Fragment key={`w-${lineIndex}-${wordIndex}`}>
+                              <span
+                                className={`transition-all duration-300 rounded-lg px-1 inline-block ${
+                                  wordCursor <= highlightIndex
+                                    ? "text-orange-700 bg-orange-100"
+                                    : phase === "ready"
+                                      ? "text-slate-700"
+                                      : "text-slate-500"
+                                }`}
+                              >
+                                {word}
+                              </span>
+                              <span className="w-1" />
+                            </React.Fragment>
+                          );
+                        })}
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
 
@@ -355,32 +480,51 @@ function Step5Content() {
               {phase === "ready" && (
                 <button
                   onClick={startReading}
-                  className="group w-24 h-24 lg:w-32 lg:h-32 rounded-full bg-white shadow-2xl flex items-center justify-center hover:scale-105 transition-all border-4 lg:border-8 border-slate-50"
+                  className="group w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl shadow-slate-300/70 flex items-center justify-center hover:scale-105 transition-all border-4 border-white"
+                  aria-label="읽기 녹음 시작"
                 >
-                  <div className="w-14 h-14 lg:w-20 lg:h-20 bg-orange-100 rounded-full flex items-center justify-center group-hover:bg-orange-500 transition-colors">
-                    <span className="text-2xl lg:text-4xl">📖</span>
+                  <div className="w-12 h-12 lg:w-14 lg:h-14 bg-white rounded-full flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="w-6 h-6 lg:w-7 lg:h-7 text-[#0B1A3A] group-hover:text-orange-600"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                    >
+                      <rect x="9" y="3.5" width="6" height="11" rx="3" />
+                      <path
+                        strokeLinecap="round"
+                        d="M6.5 11.5a5.5 5.5 0 0 0 11 0"
+                      />
+                      <path strokeLinecap="round" d="M12 17v3.5" />
+                      <path strokeLinecap="round" d="M9 20.5h6" />
+                    </svg>
                   </div>
                 </button>
               )}
 
               {phase === "reading" && (
                 <div className="flex flex-col items-center gap-6">
-                  <button
-                    onClick={stopReading}
-                    className="w-24 h-24 lg:w-32 lg:h-32 rounded-full bg-slate-900 shadow-2xl animate-pulse flex items-center justify-center"
-                  >
-                    <div className="w-6 h-6 lg:w-8 lg:h-8 bg-white rounded-md" />
-                  </button>
-                  <div className="px-6 py-2 bg-orange-500 text-white rounded-full font-black text-lg lg:text-xl font-mono shadow-lg shadow-orange-200">
-                    REC {readingTime}s
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping opacity-35" />
+                    <div className="absolute inset-0 bg-orange-300 rounded-full animate-pulse opacity-45" />
+                    <button
+                      onClick={stopReading}
+                      className="relative z-10 w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl shadow-slate-300/70 flex items-center justify-center"
+                      aria-label="읽기 녹음 종료"
+                    >
+                      <div className="w-7 h-7 lg:w-9 lg:h-9 bg-white rounded-2xl flex items-center justify-center">
+                        <div className="w-3.5 h-3.5 lg:w-4.5 lg:h-4.5 bg-slate-900 rounded-sm" />
+                      </div>
+                    </button>
                   </div>
                 </div>
               )}
 
               {phase === "review" && currentResult && (
                 <div className="w-full max-w-xl animate-in zoom-in">
-                  <div className="w-full bg-gradient-to-br from-white via-orange-50/40 to-white rounded-[32px] p-6 shadow-xl border border-orange-100/70 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(251,146,60,0.12),transparent_45%)] pointer-events-none" />
+                  <div className="w-full bg-white rounded-[28px] p-6 shadow-xl border border-orange-100 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1.5 bg-orange-500" />
 
                     <div className="flex items-center gap-6 relative z-[1]">
                       <div className="border-r border-orange-100 pr-6 text-center shrink-0">
@@ -411,15 +555,13 @@ function Step5Content() {
                     <div className="mt-5 flex flex-col gap-3 relative z-[1]">
                       <button
                         onClick={playRecordedAudio}
-                        className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${isPlayingAudio ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-100"}`}
+                        className={`w-full py-4 rounded-2xl font-black text-sm ${isPlayingAudio ? trainingButtonStyles.orangeSolid : trainingButtonStyles.orangeOutline}`}
                       >
-                        {isPlayingAudio
-                          ? "🔊 목소리 재생 중..."
-                          : "▶ 내 목소리 듣기"}
+                        {isPlayingAudio ? "목소리 재생 중..." : "내 목소리 듣기"}
                       </button>
                       <button
                         onClick={handleNext}
-                        className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-base hover:bg-black transition-all shadow-xl active:scale-[0.98]"
+                        className={`w-full py-4 rounded-2xl font-black text-base ${trainingButtonStyles.navyPrimary}`}
                       >
                         다음 문항으로
                       </button>
@@ -451,6 +593,11 @@ function Step5Content() {
           </div>
         </aside>
       </div>
+      <HomeExitModal
+        open={isHomeExitModalOpen}
+        onConfirm={confirmGoHome}
+        onCancel={() => setIsHomeExitModalOpen(false)}
+      />
     </div>
   );
 }
@@ -459,8 +606,8 @@ export default function Step5Page() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen flex items-center justify-center font-black text-slate-200 uppercase">
-          Loading...
+        <div className="h-screen flex items-center justify-center font-black text-slate-200 uppercase tracking-tighter">
+          Initialising Training...
         </div>
       }
     >
