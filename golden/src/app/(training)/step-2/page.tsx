@@ -428,6 +428,67 @@ function Step2Content() {
     searchParams,
   ]);
 
+  const handleSkipStep = useCallback(() => {
+    try {
+      flowTokenRef.current += 1;
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      analyzerRef.current?.cancelAnalysis();
+
+      const demoItems = protocol.slice(0, 6).map((item, index) => {
+        const speechScore = 78 + (index % 3) * 5;
+        const faceScore = 72 + (index % 4) * 4;
+        const finalScore = Number((speechScore * 0.6 + faceScore * 0.4).toFixed(1));
+        return {
+          text: item.text,
+          finalScore,
+          speechScore,
+          faceScore,
+          isCorrect: finalScore >= 60,
+          timestamp: new Date().toLocaleTimeString(),
+        };
+      });
+
+      localStorage.setItem(STEP2_AUDIO_STORAGE_KEY, JSON.stringify(demoItems));
+
+      const patient = loadPatientProfile();
+      const sessionManager = new SessionManager(
+        (patient || { age: 70, educationYears: 12 }) as any,
+        place,
+      );
+      const averageSymmetry =
+        demoItems.reduce((acc, curr) => acc + curr.faceScore, 0) /
+        Math.max(1, demoItems.length);
+      const averagePronunciation =
+        demoItems.reduce((acc, curr) => acc + curr.speechScore, 0) /
+        Math.max(1, demoItems.length);
+
+      sessionManager.saveStep2Result({
+        items: demoItems.map((item) => ({
+          text: item.text,
+          symmetryScore: item.faceScore,
+          pronunciationScore: item.speechScore,
+          audioLevel: 35,
+        })),
+        averageSymmetry,
+        averagePronunciation,
+        timestamp: Date.now(),
+      });
+
+      const step2Score = Math.round(
+        demoItems.reduce((acc, curr) => acc + curr.finalScore, 0) /
+          Math.max(1, demoItems.length),
+      );
+
+      router.push(
+        `/step-3?place=${place}&step1=${searchParams.get("step1") || 0}&step2=${step2Score}`,
+      );
+    } catch (error) {
+      console.error("Step2 skip failed:", error);
+    }
+  }, [place, protocol, router, searchParams]);
+
   const handleToggleRecording = async () => {
     if (!isRecording && (!canRecord || isPromptPlaying)) return;
 
@@ -599,6 +660,13 @@ function Step2Content() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSkipStep}
+            className={`px-3 py-1.5 rounded-full font-black text-[11px] border ${trainingButtonStyles.slateSoft}`}
+          >
+            SKIP
+          </button>
           <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
             {currentIndex + 1} / {protocol.length} 문항
           </div>

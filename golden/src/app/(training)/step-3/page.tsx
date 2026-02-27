@@ -332,6 +332,46 @@ function Step3Content() {
     }, 1500);
   };
 
+  const handleSkipStep = useCallback(() => {
+    try {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+
+      const demoResults = protocol.map((item, index) => ({
+        text: item.targetWord,
+        userAnswer: index % 5 === 0 ? "skip" : item.answerId,
+        isCorrect: index % 5 !== 0,
+        timestamp: new Date().toLocaleTimeString(),
+      }));
+
+      localStorage.setItem("step3_data", JSON.stringify(demoResults));
+
+      const correctCount = demoResults.filter((item) => item.isCorrect).length;
+      const totalCount = Math.max(1, demoResults.length);
+      const score = Math.round((correctCount / totalCount) * 100);
+
+      const patient = loadPatientProfile();
+      const sessionManager = new SessionManager(
+        (patient || { age: 70, educationYears: 12 }) as any,
+        place,
+      );
+      sessionManager.saveStep3Result({
+        items: demoResults,
+        score,
+        correctCount,
+        totalCount,
+        timestamp: Date.now(),
+      });
+
+      router.push(
+        `/step-4?place=${place}&step1=${searchParams.get("step1") || 0}&step2=${searchParams.get("step2") || 0}&step3=${score}`,
+      );
+    } catch (error) {
+      console.error("Step3 skip failed:", error);
+    }
+  }, [place, protocol, router, searchParams]);
+
   if (!isMounted || !currentItem) return null;
 
   return (
@@ -358,6 +398,13 @@ function Step3Content() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSkipStep}
+            className={`px-3 py-1.5 rounded-full font-black text-[11px] border ${trainingButtonStyles.slateSoft}`}
+          >
+            SKIP
+          </button>
           <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
             {currentIndex + 1} / {protocol.length}
           </div>

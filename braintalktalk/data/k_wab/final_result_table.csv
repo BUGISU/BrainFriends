@@ -1,2 +1,0 @@
-case_id,eval_date,age,education_years,content_delivery_score_0_10,fluency_dialog_score_0_10,fluency_beach_score_0_10,fluency_score_avg_0_10,spontaneous_speech_total_0_20,aq_score_0_100,aq_age_band,aq_education_group,aq_mean,aq_minus_1sd,aq_minus_2sd,aq_sd_band
-sample-001,2026-02-23,68,6,7.0,6.0,5.0,5.5,12.5,88.0,65+,1-6,94.39,90.57,86.75,-1SD~-2SD

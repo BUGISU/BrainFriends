@@ -154,6 +154,43 @@ function Step1Content() {
     [placeParam],
   );
 
+  const handleSkipStep = useCallback(() => {
+    try {
+      const demoResults = trainingData.map((item, index) => {
+        const isCorrect = index % 4 !== 0;
+        return {
+          question: item.question,
+          correctAnswer: item.answer,
+          userAnswer: isCorrect ? item.answer : !item.answer,
+          isCorrect,
+          responseTime: 1400 + index * 120,
+        };
+      });
+
+      const finalScore = demoResults.filter((result) => result.isCorrect).length;
+      saveStep1Results(demoResults, finalScore);
+
+      const patient = loadPatientProfile();
+      const sessionManager = new SessionManager(
+        (patient || { age: 70, educationYears: 12 }) as any,
+        placeParam,
+      );
+      sessionManager.saveStep1Result({
+        correctAnswers: finalScore,
+        totalQuestions: demoResults.length,
+        averageResponseTime:
+          demoResults.reduce((acc, curr) => acc + curr.responseTime, 0) /
+          Math.max(1, demoResults.length),
+        timestamp: Date.now(),
+        items: demoResults,
+      });
+
+      router.push(`/step-2?step1=${finalScore}&place=${placeParam}`);
+    } catch (error) {
+      console.error("Step1 skip failed:", error);
+    }
+  }, [placeParam, router, saveStep1Results, trainingData]);
+
   const handleAnswer = useCallback(
     (userAnswer: boolean | null) => {
       if (isAnswered || !currentItem) return;
@@ -296,6 +333,13 @@ function Step1Content() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSkipStep}
+            className={`px-3 py-1.5 rounded-full font-black text-[11px] border ${trainingButtonStyles.slateSoft}`}
+          >
+            SKIP
+          </button>
           <div
             className={`px-3 py-1.5 rounded-full font-black text-[11px] transition-all border ${
               isSpeaking

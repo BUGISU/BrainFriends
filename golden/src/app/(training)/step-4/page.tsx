@@ -431,6 +431,70 @@ function Step4Content() {
     }
   };
 
+  const handleSkipStep = useCallback(() => {
+    try {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+
+      const demoItems = scenarios.slice(0, 3).map((scenario, index) => ({
+        situation: scenario.situation,
+        prompt: scenario.prompt,
+        transcript: "시연용 더미 응답입니다.",
+        matchedKeywords: scenario.answerKeywords.slice(0, 2),
+        relevantSentenceCount: 1,
+        totalSentenceCount: 1,
+        relevanceScore: 7 + (index % 2),
+        speechDuration: 8 + index,
+        silenceRatio: 0.12,
+        averageAmplitude: 38,
+        peakCount: 3,
+        kwabScore: 7 + (index % 2),
+        rawScore: 79 + index * 3,
+        isCorrect: true,
+        timestamp: new Date().toLocaleTimeString(),
+      }));
+
+      localStorage.setItem("step4_recorded_audios", JSON.stringify(demoItems));
+
+      const patient = loadPatientProfile();
+      const sessionManager = new SessionManager(
+        (patient || { age: 70, educationYears: 12 }) as any,
+        place,
+      );
+      const averageKwabScore =
+        demoItems.reduce((acc, curr) => acc + curr.kwabScore, 0) /
+        Math.max(1, demoItems.length);
+      const score = Math.round(averageKwabScore);
+
+      sessionManager.saveStep4Result({
+        items: demoItems.map((item) => ({
+          situation: item.situation,
+          prompt: item.prompt,
+          speechDuration: item.speechDuration,
+          silenceRatio: item.silenceRatio,
+          averageAmplitude: item.averageAmplitude,
+          peakCount: item.peakCount,
+          kwabScore: item.kwabScore,
+          rawScore: item.rawScore,
+        })),
+        averageKwabScore: Number(averageKwabScore.toFixed(1)),
+        totalScenarios: demoItems.length,
+        score,
+        correctCount: demoItems.filter((item) => item.kwabScore >= 5).length,
+        totalCount: demoItems.length,
+        timestamp: Date.now(),
+      });
+
+      router.push(
+        `/step-5?place=${place}&step3=${step3Score}&step4=${score}`,
+      );
+    } catch (error) {
+      console.error("Step4 skip failed:", error);
+    }
+  }, [place, router, scenarios, step3Score]);
+
   if (!isMounted || !currentScenario) return null;
 
   return (
@@ -450,6 +514,13 @@ function Step4Content() {
           <h2 className="text-lg font-black text-slate-900">상황 설명하기</h2>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSkipStep}
+            className={`px-3 py-1.5 rounded-full font-black text-[11px] border ${trainingButtonStyles.slateSoft}`}
+          >
+            SKIP
+          </button>
           <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700">
             {currentIndex + 1} / {scenarios.length}
           </div>

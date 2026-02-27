@@ -375,6 +375,47 @@ function Step6Content() {
     }
   };
 
+  const handleSkipStep = useCallback(() => {
+    try {
+      const demoItems = questions.map((word) => ({
+        text: word.answer,
+        userImage: "",
+        isCorrect: true,
+        expectedStrokes: word.strokes,
+        userStrokes: word.strokes,
+        timestamp: new Date().toLocaleTimeString(),
+      }));
+
+      localStorage.setItem("step6_recorded_data", JSON.stringify(demoItems));
+
+      const rawSession = localStorage.getItem("kwab_training_session");
+      const existingSession = rawSession ? JSON.parse(rawSession) : null;
+      const patientData = existingSession?.patient ||
+        loadPatientProfile() || { name: "사용자" };
+      const sessionManager = new SessionManager(patientData as any, place);
+      sessionManager.saveStep6Result({
+        completedTasks: demoItems.length,
+        totalTasks: questions.length,
+        accuracy: 100,
+        timestamp: Date.now(),
+        items: questions.map((word) => ({
+          word: word.answer,
+          expectedStrokes: word.strokes,
+          userImage: "",
+        })),
+      });
+
+      const params = new URLSearchParams({
+        place,
+        ...stepParams,
+        step6: demoItems.length.toString(),
+      });
+      router.push(`/result?${params.toString()}`);
+    } catch (error) {
+      console.error("Step6 skip failed:", error);
+    }
+  }, [place, questions, router, stepParams]);
+
   if (!isMounted || !currentWord) return null;
 
   return (
@@ -401,6 +442,13 @@ function Step6Content() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSkipStep}
+            className={`px-3 py-1.5 rounded-full font-black text-[11px] border ${trainingButtonStyles.slateSoft}`}
+          >
+            SKIP
+          </button>
           <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
             {currentIndex + 1} / {questions.length}
           </div>

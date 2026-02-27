@@ -355,6 +355,56 @@ function Step5Content() {
     }
   };
 
+  const handleSkipStep = useCallback(() => {
+    try {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (highlightTimerRef.current) clearInterval(highlightTimerRef.current);
+      if (mediaRecorderRef.current?.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current.currentTime = 0;
+        audioPlayerRef.current.onended = null;
+      }
+
+      const demoItems = texts.slice(0, 3).map((item, index) => ({
+        text: item.text,
+        totalTime: 10 + index,
+        wordsPerMinute: 84 + index * 4,
+        pauseCount: 1,
+        readingScore: 80 + index * 5,
+        isCorrect: true,
+        timestamp: new Date().toLocaleTimeString(),
+      }));
+
+      localStorage.setItem("step5_recorded_data", JSON.stringify(demoItems));
+
+      const patient = loadPatientProfile();
+      const sessionManager = new SessionManager(
+        (patient || { age: 70, educationYears: 12 }) as any,
+        place,
+      );
+      sessionManager.saveStep5Result({
+        correctAnswers: demoItems.length,
+        totalQuestions: texts.length,
+        timestamp: Date.now(),
+        items: demoItems,
+      });
+
+      const step5Score = Math.round(
+        demoItems.reduce((acc, curr) => acc + curr.readingScore, 0) /
+          Math.max(1, demoItems.length),
+      );
+
+      router.push(
+        `/step-6?place=${place}&step1=${searchParams.get("step1") || 0}&step2=${searchParams.get("step2") || 0}&step3=${searchParams.get("step3") || 0}&step4=${searchParams.get("step4") || step4Score}&step5=${step5Score}`,
+      );
+    } catch (error) {
+      console.error("Step5 skip failed:", error);
+    }
+  }, [place, router, searchParams, step4Score, texts]);
+
   if (!isMounted || !currentItem) return null;
 
   return (
@@ -380,6 +430,13 @@ function Step5Content() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSkipStep}
+            className={`px-3 py-1.5 rounded-full font-black text-[11px] border ${trainingButtonStyles.slateSoft}`}
+          >
+            SKIP
+          </button>
           <div className="bg-orange-50 px-4 py-1.5 rounded-full font-black text-xs text-orange-700 border border-orange-200">
             {currentIndex + 1} / {texts.length}
           </div>
