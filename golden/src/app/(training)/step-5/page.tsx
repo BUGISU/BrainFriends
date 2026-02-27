@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, {
   useState,
@@ -131,15 +131,15 @@ function Step5Content() {
     };
   }, []);
 
-  // UX 가이드 메시지
+  // UX 媛?대뱶 硫붿떆吏
   const getPhaseMessage = () => {
     switch (phase) {
       case "ready":
-        return "준비가 되시면 녹음 버튼을 눌러주세요.";
+        return "以鍮꾧? ?섏떆硫??뱀쓬 踰꾪듉???뚮윭二쇱꽭??";
       case "reading":
-        return "강조되는 단어를 천천히 따라 읽어보세요.";
+        return "媛뺤“?섎뒗 ?⑥뼱瑜?泥쒖쿇???곕씪 ?쎌뼱蹂댁꽭??";
       case "review":
-        return "읽은 목소리를 확인하고 다음으로 넘어가세요.";
+        return "?쎌? 紐⑹냼由щ? ?뺤씤?섍퀬 ?ㅼ쓬?쇰줈 ?섏뼱媛?몄슂.";
       default:
         return "";
     }
@@ -209,7 +209,7 @@ function Step5Content() {
           totalTime: finalReadingTime,
           wordsPerMinute: wpm,
           pauseCount: 0,
-          readingScore: Math.min(100, Math.round((wpm / 100) * 100)), // 임시 로직
+          readingScore: Math.min(100, Math.round((wpm / 100) * 100)), // ?꾩떆 濡쒖쭅
         };
 
         setCurrentResult(res);
@@ -269,7 +269,7 @@ function Step5Content() {
             ? p + 1
             : (clearInterval(highlightTimerRef.current!), p),
         );
-      }, 900); // 실독증 환자를 위해 약간 느린 하이라이트 속도
+      }, 900); // ?ㅻ룆利??섏옄瑜??꾪빐 ?쎄컙 ?먮┛ ?섏씠?쇱씠???띾룄
     } catch (err) {
       console.error(err);
     }
@@ -359,8 +359,9 @@ function Step5Content() {
     try {
       if (timerRef.current) clearInterval(timerRef.current);
       if (highlightTimerRef.current) clearInterval(highlightTimerRef.current);
-      if (mediaRecorderRef.current?.state !== "inactive") {
-        mediaRecorderRef.current.stop();
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
       }
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
@@ -422,10 +423,10 @@ function Step5Content() {
           </div>
           <div>
             <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
-              Step 05 • Reading Fluency Training
+              Step 05 ??Reading Fluency Training
             </span>
             <h2 className="text-lg font-black text-slate-900 tracking-tight">
-              텍스트 읽기 학습
+              ?띿뒪???쎄린 ?숈뒿
             </h2>
           </div>
         </div>
@@ -443,8 +444,8 @@ function Step5Content() {
           <button
             type="button"
             onClick={handleGoHome}
-            aria-label="홈으로 이동"
-            title="홈"
+            aria-label="?덉쑝濡??대룞"
+            title="Home"
             className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
           >
             <svg
@@ -542,7 +543,7 @@ function Step5Content() {
                 <button
                   onClick={startReading}
                   className="group w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl shadow-slate-300/70 flex items-center justify-center hover:scale-105 transition-all border-4 border-white"
-                  aria-label="읽기 녹음 시작"
+                  aria-label="?쎄린 ?뱀쓬 ?쒖옉"
                 >
                   <div className="w-12 h-12 lg:w-14 lg:h-14 bg-white rounded-full flex items-center justify-center group-hover:bg-orange-100 transition-colors">
                     <svg
@@ -572,7 +573,7 @@ function Step5Content() {
                     <button
                       onClick={stopReading}
                       className="relative z-10 w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl shadow-slate-300/70 flex items-center justify-center"
-                      aria-label="읽기 녹음 종료"
+                      aria-label="?쎄린 ?뱀쓬 醫낅즺"
                     >
                       <div className="w-7 h-7 lg:w-9 lg:h-9 bg-white rounded-2xl flex items-center justify-center">
                         <div className="w-3.5 h-3.5 lg:w-4.5 lg:h-4.5 bg-slate-900 rounded-sm" />
@@ -601,7 +602,7 @@ function Step5Content() {
                           Metrics
                         </p>
                         <p className="text-sm lg:text-base font-bold text-slate-700 break-words">
-                          읽기 시간 {currentResult.totalTime}s / 속도{" "}
+                          ?쎄린 ?쒓컙 {currentResult.totalTime}s / ?띾룄{" "}
                           {currentResult.wordsPerMinute} WPM
                         </p>
                         <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/90 border border-orange-100">
@@ -618,13 +619,13 @@ function Step5Content() {
                         onClick={playRecordedAudio}
                         className={`w-full py-4 rounded-2xl font-black text-sm ${isPlayingAudio ? trainingButtonStyles.orangeSolid : trainingButtonStyles.orangeOutline}`}
                       >
-                        {isPlayingAudio ? "목소리 재생 중..." : "내 목소리 듣기"}
+                        {isPlayingAudio ? "紐⑹냼由??ъ깮 以?.." : "??紐⑹냼由??ｊ린"}
                       </button>
                       <button
                         onClick={handleNext}
                         className={`w-full py-4 rounded-2xl font-black text-base ${trainingButtonStyles.navyPrimary}`}
                       >
-                        다음 문항으로
+                        ?ㅼ쓬 臾명빆?쇰줈
                       </button>
                     </div>
                   </div>
@@ -646,7 +647,7 @@ function Step5Content() {
                 audioLevel: phase === "reading" ? 40 : 0,
               }}
               showTracking={false}
-              scoreLabel="현재 성취도"
+              scoreLabel="현재 상태"
               scoreValue={
                 currentResult ? `${currentResult.readingScore}%` : "-"
               }
@@ -676,3 +677,4 @@ export default function Step5Page() {
     </Suspense>
   );
 }
+
