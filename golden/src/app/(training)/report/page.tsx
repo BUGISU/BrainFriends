@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -6,13 +6,27 @@ import { useTrainingSession } from "@/hooks/useTrainingSession";
 import { SessionManager, TrainingHistoryEntry } from "@/lib/kwab/SessionManager";
 
 const STEP_META = [
-  { key: "step1", label: "Step 1 Comprehension" },
-  { key: "step2", label: "Step 2 Repetition" },
-  { key: "step3", label: "Step 3 Matching" },
-  { key: "step4", label: "Step 4 Fluency" },
-  { key: "step5", label: "Step 5 Reading" },
-  { key: "step6", label: "Step 6 Writing" },
+  { key: "step1", label: "1단계 이해" },
+  { key: "step2", label: "2단계 따라 말하기" },
+  { key: "step3", label: "3단계 매칭" },
+  { key: "step4", label: "4단계 유창성" },
+  { key: "step5", label: "5단계 읽기" },
+  { key: "step6", label: "6단계 쓰기" },
 ] as const;
+
+type StepKey = (typeof STEP_META)[number]["key"];
+
+function getStepItems(row: TrainingHistoryEntry, key: StepKey): any[] {
+  const raw = row.stepDetails?.[key as keyof typeof row.stepDetails];
+  return Array.isArray(raw) ? raw : [];
+}
+
+function getStepScore(row: TrainingHistoryEntry, key: StepKey): number {
+  const raw = row.stepScores?.[key as keyof typeof row.stepScores];
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 function ReportContent() {
   const router = useRouter();
@@ -35,13 +49,20 @@ function ReportContent() {
     setSelected(rows[0] || null);
   }, [patient]);
 
+  const stopPlayback = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.onended = null;
+    }
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   const playAudio = (url: string, id: string) => {
     try {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        audioRef.current.onended = null;
-      }
+      stopPlayback();
       const audio = new Audio(url);
       audioRef.current = audio;
       setPlayingId(id);
@@ -53,26 +74,59 @@ function ReportContent() {
     }
   };
 
+  const playSpeechFallback = (text: string, id: string) => {
+    try {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        return;
+      }
+      stopPlayback();
+      const utterance = new SpeechSynthesisUtterance(text || "음성 데이터가 없습니다.");
+      utterance.lang = "ko-KR";
+      utterance.rate = 0.9;
+      utterance.onend = () => setPlayingId(null);
+      utterance.onerror = () => setPlayingId(null);
+      setPlayingId(id);
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      setPlayingId(null);
+    }
+  };
+
+  const availableSteps = selected
+    ? STEP_META.map((s) => ({
+        ...s,
+        items: getStepItems(selected, s.key),
+      })).filter((s) => s.items.length > 0)
+    : [];
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="h-16 px-6 border-b border-orange-100 flex items-center justify-between bg-white sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-500 text-white font-black flex items-center justify-center">
-            R
-          </div>
+          <img
+            src="/images/logo/logo.png"
+            alt="GOLDEN logo"
+            className="w-10 h-10 rounded-xl object-cover"
+          />
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-orange-500">
               Report
             </p>
-            <h1 className="text-lg font-black">Patient Report</h1>
+            <h1 className="text-lg font-black">재활 활동 기록</h1>
           </div>
         </div>
         <button
           type="button"
           onClick={() => router.push("/select")}
-          className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-black hover:bg-slate-100 transition-colors"
+          aria-label="홈으로 이동"
+          title="홈"
+          className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors flex items-center justify-center"
         >
-          Back to Select
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+          </svg>
         </button>
       </header>
 
@@ -83,13 +137,13 @@ function ReportContent() {
               Patient
             </p>
             <p className="text-sm font-bold text-slate-700">
-              {patient?.name || "No Patient"}
+              {patient?.name || "환자 정보 없음"}
             </p>
           </div>
 
           {history.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm font-bold text-slate-500">
-              No saved reports.
+              저장된 리포트가 없습니다.
             </div>
           ) : (
             <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
@@ -108,7 +162,7 @@ function ReportContent() {
                     {new Date(row.completedAt).toLocaleString("ko-KR")}
                   </p>
                   <p className="text-[11px] font-bold text-slate-600 mt-1">
-                    Place: {row.place} · AQ {row.aq}
+                    장소: {row.place} · AQ {row.aq}
                   </p>
                 </button>
               ))}
@@ -119,7 +173,11 @@ function ReportContent() {
         <section className="bg-white border border-orange-100 rounded-2xl p-4 md:p-5">
           {!selected ? (
             <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-bold text-slate-500">
-              No report selected.
+              선택된 리포트가 없습니다.
+            </div>
+          ) : availableSteps.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-bold text-slate-500">
+              데이터가 없습니다.
             </div>
           ) : (
             <div className="space-y-4 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2 pb-24">
@@ -128,105 +186,95 @@ function ReportContent() {
                   {new Date(selected.completedAt).toLocaleString("ko-KR")}
                 </p>
                 <p className="text-sm font-bold text-slate-600 mt-1">
-                  Patient: {selected.patientName} · Place: {selected.place} · AQ {selected.aq}
+                  환자: {selected.patientName} · 장소: {selected.place} · AQ {selected.aq}
                 </p>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {STEP_META.map((s) => (
+                {availableSteps.map((s) => (
                   <div
                     key={s.key}
                     className="rounded-xl border border-slate-200 bg-white p-3"
                   >
                     <p className="text-[10px] font-black text-slate-500">{s.label}</p>
                     <p className="text-lg font-black text-slate-800 mt-1">
-                      {Number(
-                        selected.stepScores[
-                          s.key as keyof typeof selected.stepScores
-                        ] || 0,
-                      )}
-                      %
+                      {getStepScore(selected, s.key)}%
                     </p>
                   </div>
                 ))}
               </div>
 
               <div className="space-y-3">
-                {STEP_META.map((s) => {
-                  const items = Array.isArray(
-                    selected.stepDetails?.[
-                      s.key as keyof typeof selected.stepDetails
-                    ],
-                  )
-                    ? (selected.stepDetails[
-                        s.key as keyof typeof selected.stepDetails
-                      ] as any[])
-                    : [];
-
-                  return (
-                    <div
-                      key={`detail-${s.key}`}
-                      className="rounded-xl border border-slate-200 overflow-hidden"
-                    >
-                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
-                        <p className="text-xs font-black text-slate-700">
-                          {s.label} Details ({items.length})
-                        </p>
-                      </div>
-
-                      {items.length === 0 ? (
-                        <div className="p-3 text-xs font-bold text-slate-400">
-                          No records
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 p-2">
-                          {items.map((it: any, idx: number) => {
-                            const pid = `${s.key}-${idx}`;
-                            return (
-                              <div
-                                key={pid}
-                                className="rounded-lg border border-slate-200 bg-white p-3"
-                              >
-                                <p className="text-[10px] font-black text-slate-400 mb-1">
-                                  #{idx + 1}
-                                </p>
-                                <p className="text-xs font-bold text-slate-700 break-keep">
-                                  {String(
-                                    it?.text ||
-                                      it?.word ||
-                                      it?.prompt ||
-                                      it?.targetText ||
-                                      "...",
-                                  )}
-                                </p>
-
-                                {it?.userImage && (
-                                  <div className="mt-2 h-24 bg-slate-50 border border-slate-200 rounded-md overflow-hidden flex items-center justify-center">
-                                    <img
-                                      src={it.userImage}
-                                      alt="writing-result"
-                                      className="max-h-full max-w-full object-contain"
-                                    />
-                                  </div>
-                                )}
-
-                                {it?.audioUrl && (
-                                  <button
-                                    type="button"
-                                    onClick={() => playAudio(it.audioUrl, pid)}
-                                    className="mt-2 w-full py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-[11px] font-black text-slate-700 transition-colors"
-                                  >
-                                    {playingId === pid ? "Playing..." : "Play Audio"}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                {availableSteps.map((s) => (
+                  <div
+                    key={`detail-${s.key}`}
+                    className="rounded-xl border border-slate-200 overflow-hidden"
+                  >
+                    <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                      <p className="text-xs font-black text-slate-700">
+                        {s.label} 상세 ({s.items.length})
+                      </p>
                     </div>
-                  );
-                })}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 p-2">
+                      {s.items.map((it: any, idx: number) => {
+                        const pid = `${s.key}-${idx}`;
+                        return (
+                          <div
+                            key={pid}
+                            className="rounded-lg border border-slate-200 bg-white p-3"
+                          >
+                            <p className="text-[10px] font-black text-slate-400 mb-1">
+                              #{idx + 1}
+                            </p>
+                            <p className="text-xs font-bold text-slate-700 break-keep">
+                              {String(
+                                it?.text ||
+                                  it?.word ||
+                                  it?.prompt ||
+                                  it?.targetText ||
+                                  "데이터 없음",
+                              )}
+                            </p>
+
+                            {it?.userImage && (
+                              <div className="mt-2 h-24 bg-slate-50 border border-slate-200 rounded-md overflow-hidden flex items-center justify-center">
+                                <img
+                                  src={it.userImage}
+                                  alt="쓰기 결과"
+                                  className="max-h-full max-w-full object-contain"
+                                />
+                              </div>
+                            )}
+
+                            {(it?.audioUrl || s.key === "step5") && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  it?.audioUrl
+                                    ? playAudio(it.audioUrl, pid)
+                                    : playSpeechFallback(
+                                        String(
+                                          it?.text ||
+                                            it?.word ||
+                                            it?.prompt ||
+                                            it?.targetText ||
+                                            "음성 데이터가 없습니다.",
+                                        ),
+                                        pid,
+                                      )
+                                }
+                                className="mt-2 w-full py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-[11px] font-black text-slate-700 transition-colors"
+                              >
+                                {playingId === pid ? "재생 중..." : "음성 재생"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -238,7 +286,7 @@ function ReportContent() {
 
 export default function ReportPage() {
   return (
-    <Suspense fallback={<div className="p-6">Loading report...</div>}>
+    <Suspense fallback={<div className="p-6">리포트 불러오는 중...</div>}>
       <ReportContent />
     </Suspense>
   );

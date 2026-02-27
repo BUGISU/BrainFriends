@@ -11,7 +11,10 @@ import {
   scoreContentDelivery,
   scoreFluency,
 } from "@/lib/kwab/KWABScoring";
-import { SessionManager, TrainingHistoryEntry } from "@/lib/kwab/SessionManager";
+import {
+  SessionManager,
+  TrainingHistoryEntry,
+} from "@/lib/kwab/SessionManager";
 import { addSentenceLineBreaks } from "@/lib/text/displayText";
 
 function getResultSummarySizeClass(text: string): string {
@@ -152,9 +155,8 @@ function ResultContent() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [sessionData, setSessionData] = useState<any>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
-  const [selectedHistory, setSelectedHistory] = useState<TrainingHistoryEntry | null>(
-    null,
-  );
+  const [selectedHistory, setSelectedHistory] =
+    useState<TrainingHistoryEntry | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
 
   const place = useMemo(
@@ -212,7 +214,9 @@ function ResultContent() {
         if (keywords.indexOf(kw) !== idx) return false;
         return normalizedTranscript.includes(normalize(kw));
       }).length;
-      const keywordCoverage = keywords.length ? uniqueHits / keywords.length : 0;
+      const keywordCoverage = keywords.length
+        ? uniqueHits / keywords.length
+        : 0;
 
       const sentenceParts = transcript
         .split(/[.!?\n]+/)
@@ -224,8 +228,9 @@ function ResultContent() {
       const hasCompleteSentences =
         sentenceParts.some((s) => s.length >= 12) ||
         /[다요니다]\s*$/.test(transcript);
-      const hasWordFindingDifficulty =
-        /(음|어|저기|그게|그거|...|…)/.test(transcript);
+      const hasWordFindingDifficulty = /(음|어|저기|그게|그거|...|…)/.test(
+        transcript,
+      );
       const speechDurationSec = Number(item?.speechDuration || 0);
       const charsPerSec =
         speechDurationSec > 0 ? transcript.length / speechDurationSec : 0;
@@ -332,10 +337,12 @@ function ResultContent() {
   }, [place, queryScores, sessionData]);
 
   const stepDetails = useMemo(() => {
-    const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, v));
+    const clamp = (v: number, min = 0, max = 100) =>
+      Math.min(max, Math.max(min, v));
     const avg = (arr: number[]) =>
       arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-    const fmt1 = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+    const fmt1 = (v: number) =>
+      Number.isInteger(v) ? String(v) : v.toFixed(1);
 
     const s1 = sessionData?.step1?.items || [];
     const s2 = sessionData?.step2?.items || [];
@@ -351,7 +358,9 @@ function ResultContent() {
       : clamp((queryScores[1] / 20) * 100);
 
     const s2Score = s2.length
-      ? clamp(avg(s2.map((i: any) => Number(i?.finalScore ?? i?.speechScore ?? 0))))
+      ? clamp(
+          avg(s2.map((i: any) => Number(i?.finalScore ?? i?.speechScore ?? 0))),
+        )
       : clamp(queryScores[2]);
 
     const s3Correct = s3.filter((i: any) => i?.isCorrect).length;
@@ -363,7 +372,12 @@ function ResultContent() {
     const s4Score = s4.length
       ? Math.min(
           10,
-          Math.max(0, avg(s4.map((i: any) => Number(i?.fluencyScore ?? i?.kwabScore ?? 0)))),
+          Math.max(
+            0,
+            avg(
+              s4.map((i: any) => Number(i?.fluencyScore ?? i?.kwabScore ?? 0)),
+            ),
+          ),
         )
       : Math.min(10, Math.max(0, Number(queryScores[4] || 0)));
     const s4Percent = clamp(s4Score * 10);
@@ -446,10 +460,9 @@ function ResultContent() {
 
   const clinicalImpression = useMemo(() => {
     if (!derivedKwab) return null;
-    const stepMap = Object.fromEntries(stepDetails.map((d) => [d.id, d])) as Record<
-      number,
-      (typeof stepDetails)[number]
-    >;
+    const stepMap = Object.fromEntries(
+      stepDetails.map((d) => [d.id, d]),
+    ) as Record<number, (typeof stepDetails)[number]>;
 
     const comprehension = stepMap[1];
     const repetition = stepMap[2];
@@ -459,14 +472,24 @@ function ResultContent() {
     const writing = stepMap[6];
 
     const domains = [
-      { name: "청각 이해", percent: comprehension.percent, metric: comprehension.metric },
-      { name: "따라말하기", percent: repetition.percent, metric: repetition.metric },
+      {
+        name: "청각 이해",
+        percent: comprehension.percent,
+        metric: comprehension.metric,
+      },
+      {
+        name: "따라말하기",
+        percent: repetition.percent,
+        metric: repetition.metric,
+      },
       { name: "그림 매칭", percent: matching.percent, metric: matching.metric },
       { name: "유창성", percent: fluency.percent, metric: fluency.metric },
       { name: "읽기", percent: reading.percent, metric: reading.metric },
       { name: "쓰기", percent: writing.percent, metric: writing.metric },
     ];
-    const strongest = domains.reduce((a, b) => (a.percent >= b.percent ? a : b));
+    const strongest = domains.reduce((a, b) =>
+      a.percent >= b.percent ? a : b,
+    );
     const weakest = domains.reduce((a, b) => (a.percent <= b.percent ? a : b));
 
     const typeLabel = derivedKwab.aphasiaType || "비특이적 실어증";
@@ -542,7 +565,9 @@ function ResultContent() {
   useEffect(() => {
     if (
       selectedHistory &&
-      !previousHistory.some((row) => row.historyId === selectedHistory.historyId)
+      !previousHistory.some(
+        (row) => row.historyId === selectedHistory.historyId,
+      )
     ) {
       setSelectedHistory(null);
     }
@@ -556,7 +581,11 @@ function ResultContent() {
     // 이전기록 페이지네이션(4개 초과) 확인을 위해 최소 6개(현재 1 + 이전 5) 보장
     if (all.length < 6) {
       const need = 6 - all.length;
-      const inserted = SessionManager.seedMockHistoryFor(patientForHistory, place, need);
+      const inserted = SessionManager.seedMockHistoryFor(
+        patientForHistory,
+        place,
+        need,
+      );
       if (inserted > 0) {
         setHistoryRefreshKey((v) => v + 1);
       }
@@ -629,17 +658,52 @@ function ResultContent() {
     URL.revokeObjectURL(url);
   };
 
+  const stopPlayback = () => {
+    audioRef.current?.pause();
+    if (audioRef.current) audioRef.current.currentTime = 0;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   const playAudio = (url: string, id: string) => {
     if (playingIndex === id) {
-      audioRef.current?.pause();
+      stopPlayback();
       setPlayingIndex(null);
       return;
     }
+    stopPlayback();
     audioRef.current = new Audio(url);
     audioRef.current.play();
     setPlayingIndex(id);
     audioRef.current.onended = () => setPlayingIndex(null);
   };
+
+  const playSpeechFallback = (text: string, id: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return;
+    }
+    if (playingIndex === id) {
+      stopPlayback();
+      setPlayingIndex(null);
+      return;
+    }
+    stopPlayback();
+    const utterance = new SpeechSynthesisUtterance(text || "음성 데이터가 없습니다.");
+    utterance.lang = "ko-KR";
+    utterance.rate = 0.92;
+    utterance.onend = () => setPlayingIndex(null);
+    utterance.onerror = () => setPlayingIndex(null);
+    setPlayingIndex(id);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const shouldShowPlayButton = (stepId: number, item: any) =>
+    [2, 4, 5].includes(stepId) &&
+    Boolean(item?.audioUrl || item?.text || item?.transcript || item?.targetText || item?.prompt);
+
+  const getPlayableText = (item: any) =>
+    String(item?.text || item?.transcript || item?.targetText || item?.targetWord || item?.prompt || "음성 데이터가 없습니다.");
 
   if (!isMounted || !sessionData) return null;
 
@@ -767,38 +831,69 @@ function ResultContent() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-[#F8FAFC] text-[#0f172a] pb-12 font-sans">
+      <div className="h-full min-h-screen overflow-y-auto bg-[#F8FAFC] text-[#0f172a] pb-12 font-sans">
         {/* 상단바 */}
-        <nav className="no-print bg-white/90 backdrop-blur-md sticky top-0 z-50 border-b border-orange-100 px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-black text-xs italic">L</span>
+        <header className="no-print h-16 px-6 border-b border-orange-100 flex items-center justify-between bg-white sticky top-0 z-40">
+          <div className="flex items-center gap-3">
+            <img
+              src="/images/logo/logo.png"
+              alt="GOLDEN logo"
+              className="w-10 h-10 rounded-xl object-cover"
+            />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-orange-500">
+                Report
+              </p>
+              <h1 className="text-lg font-black">재활 평가 결과</h1>
             </div>
-            <h1 className="font-black text-sm tracking-tighter text-slate-900 uppercase">
-              Diagnosis Report
-            </h1>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => router.push("/")}
-              className="px-4 py-2 bg-white text-slate-900 border border-orange-200 rounded-xl text-xs font-bold shadow-sm hover:bg-orange-50 active:scale-95 transition-all"
+          <button
+            type="button"
+            onClick={() => router.push("/select")}
+            aria-label="홈으로 이동"
+            title="홈"
+            className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors flex items-center justify-center"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
             >
-              처음으로
-            </button>
-            <button
-              onClick={handleExportData}
-              className="px-4 py-2 bg-white text-slate-900 border border-orange-200 rounded-xl text-xs font-bold shadow-sm hover:bg-orange-50 active:scale-95 transition-all"
-            >
-              데이터 백업
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-orange-600 active:scale-95 transition-all"
-            >
-              진단서 출력 (PDF)
-            </button>
-          </div>
-        </nav>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 10.5 12 3l9 7.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5.5 9.5V21h13V9.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 21v-5h4v5"
+              />
+            </svg>
+          </button>
+        </header>
+
+        <div className="no-print max-w-5xl mx-auto w-full px-6 pt-3 flex justify-end gap-2">
+          <button
+            onClick={handleExportData}
+            className="px-4 py-2 bg-white text-slate-900 border border-orange-200 rounded-xl text-xs font-bold shadow-sm hover:bg-orange-50 active:scale-95 transition-all"
+          >
+            데이터 백업
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-orange-600 active:scale-95 transition-all"
+          >
+            진단서 출력 (PDF)
+          </button>
+        </div>
 
         <main className="max-w-5xl mx-auto px-6 py-8 space-y-4 print-container">
           {/* [HEADER] 공식 진단서 스타일 */}
@@ -860,7 +955,10 @@ function ResultContent() {
               </h3>
               <div className="profile-body">
                 <div className="flex justify-center mb-5 profile-chart-wrap">
-                  <svg viewBox="0 0 200 200" className="w-48 h-48 profile-chart">
+                  <svg
+                    viewBox="0 0 200 200"
+                    className="w-48 h-48 profile-chart"
+                  >
                     {[0.25, 0.5, 0.75, 1].map((st) => (
                       <polygon
                         key={st}
@@ -911,19 +1009,25 @@ function ResultContent() {
               <div className="bg-orange-50/40 border border-orange-200 rounded-xl p-4 space-y-3 impression-content">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="rounded-lg border border-orange-200 bg-white px-3 py-2">
-                    <p className="text-[10px] font-black text-slate-600">종합 해석</p>
+                    <p className="text-[10px] font-black text-slate-600">
+                      종합 해석
+                    </p>
                     <p className="text-[11px] font-black text-slate-800">
                       {clinicalImpression?.aqText}
                     </p>
                   </div>
                   <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2">
-                    <p className="text-[10px] font-black text-slate-600">상대적 강점</p>
+                    <p className="text-[10px] font-black text-slate-600">
+                      상대적 강점
+                    </p>
                     <p className="text-[11px] font-black text-emerald-600">
                       {clinicalImpression?.strongestText}
                     </p>
                   </div>
                   <div className="rounded-lg border border-sky-200 bg-white px-3 py-2">
-                    <p className="text-[10px] font-black text-slate-600">집중 중재 영역</p>
+                    <p className="text-[10px] font-black text-slate-600">
+                      집중 중재 영역
+                    </p>
                     <p className="text-[11px] font-black text-sky-700">
                       {clinicalImpression?.weakestText}
                     </p>
@@ -1030,7 +1134,9 @@ function ResultContent() {
                     })}
                     <button
                       onClick={() =>
-                        setHistoryPage((p) => Math.min(historyTotalPages, p + 1))
+                        setHistoryPage((p) =>
+                          Math.min(historyTotalPages, p + 1),
+                        )
                       }
                       disabled={historyPage === historyTotalPages}
                       className="px-2 py-1 rounded-md border border-slate-200 text-[10px] font-black text-slate-600 disabled:opacity-40"
@@ -1066,15 +1172,17 @@ function ResultContent() {
                   >
                     <div className="flex items-center justify-between text-[11px] font-black text-slate-700">
                       <span>
-                        {index + 1}. {new Date(row.completedAt).toLocaleDateString("ko-KR")}
+                        {index + 1}.{" "}
+                        {new Date(row.completedAt).toLocaleDateString("ko-KR")}
                       </span>
                       <span className="text-slate-800">AQ {row.aq}</span>
                     </div>
                     <p className="mt-1 text-[10px] font-bold text-slate-500">
-                      중증도: {aqSeverityLabel(row.aq)} · 청각 {row.stepScores.step1}% · 따라말
-                      {row.stepScores.step2}% · 매칭 {row.stepScores.step3}% · 유창{" "}
-                      {row.stepScores.step4}% · 읽기 {row.stepScores.step5}% · 쓰기{" "}
-                      {row.stepScores.step6}%
+                      중증도: {aqSeverityLabel(row.aq)} · 청각{" "}
+                      {row.stepScores.step1}% · 따라말
+                      {row.stepScores.step2}% · 매칭 {row.stepScores.step3}% ·
+                      유창 {row.stepScores.step4}% · 읽기 {row.stepScores.step5}
+                      % · 쓰기 {row.stepScores.step6}%
                     </p>
                   </div>
                 ))}
@@ -1090,15 +1198,18 @@ function ResultContent() {
                     이전 기록 상세
                   </h3>
                   <p className="text-xs font-bold text-slate-600">
-                    {new Date(selectedHistory.completedAt).toLocaleString("ko-KR")} · AQ{" "}
-                    {selectedHistory.aq}
+                    {new Date(selectedHistory.completedAt).toLocaleString(
+                      "ko-KR",
+                    )}{" "}
+                    · AQ {selectedHistory.aq}
                   </p>
                 </div>
               </div>
 
               <div className="space-y-3">
                 {stepDetails.map((step) => {
-                  const key = `step${step.id}` as keyof TrainingHistoryEntry["stepDetails"];
+                  const key =
+                    `step${step.id}` as keyof TrainingHistoryEntry["stepDetails"];
                   const items = selectedHistory.stepDetails?.[key] || [];
                   const isOpen = openAllAccordions || openStepId === step.id;
                   return (
@@ -1175,17 +1286,24 @@ function ResultContent() {
                                 )}
 
                                 <p className="text-xs font-bold text-slate-600 leading-snug mb-2">
-                                  "{it.text || it.targetText || it.targetWord || "..."}"
+                                  "
+                                  {it.text ||
+                                    it.targetText ||
+                                    it.targetWord ||
+                                    "..."}
+                                  "
                                 </p>
 
-                                {it.audioUrl && (
+                                {shouldShowPlayButton(step.id, it) && (
                                   <button
-                                    onClick={() =>
-                                      playAudio(
-                                        it.audioUrl,
-                                        `h-${selectedHistory.historyId}-s${step.id}-${i}`,
-                                      )
-                                    }
+                                    onClick={() => {
+                                      const id = `h-${selectedHistory.historyId}-s${step.id}-${i}`;
+                                      if (it.audioUrl) {
+                                        playAudio(it.audioUrl, id);
+                                      } else {
+                                        playSpeechFallback(getPlayableText(it), id);
+                                      }
+                                    }}
                                     className={`w-full py-1.5 rounded-md text-[10px] font-black flex items-center justify-center gap-2 transition-all ${playingIndex === `h-${selectedHistory.historyId}-s${step.id}-${i}` ? "bg-slate-900 text-white shadow-sm" : "bg-slate-50 text-slate-600 group-hover:bg-orange-50 group-hover:text-slate-900"}`}
                                   >
                                     {playingIndex ===
@@ -1308,14 +1426,24 @@ function ResultContent() {
                               )}
 
                               <p className="text-xs font-bold text-slate-600 leading-snug mb-2">
-                                "{it.text || it.targetText || it.targetWord || "..."}"
+                                "
+                                {it.text ||
+                                  it.targetText ||
+                                  it.targetWord ||
+                                  "..."}
+                                "
                               </p>
 
-                              {it.audioUrl && (
+                              {shouldShowPlayButton(step.id, it) && (
                                 <button
-                                  onClick={() =>
-                                    playAudio(it.audioUrl, `s${step.id}-${i}`)
-                                  }
+                                  onClick={() => {
+                                    const id = `s${step.id}-${i}`;
+                                    if (it.audioUrl) {
+                                      playAudio(it.audioUrl, id);
+                                    } else {
+                                      playSpeechFallback(getPlayableText(it), id);
+                                    }
+                                  }}
                                   className={`w-full py-1.5 rounded-md text-[10px] font-black flex items-center justify-center gap-2 transition-all ${playingIndex === `s${step.id}-${i}` ? "bg-slate-900 text-white shadow-sm" : "bg-slate-50 text-slate-600 group-hover:bg-orange-50 group-hover:text-slate-900"}`}
                                 >
                                   {playingIndex === `s${step.id}-${i}` ? (
@@ -1339,7 +1467,6 @@ function ResultContent() {
               })}
             </div>
           </section>
-
         </main>
       </div>
     </>

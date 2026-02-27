@@ -508,9 +508,11 @@ function Step4Content() {
       </div>
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-100">
-            04
-          </div>
+          <img
+            src="/images/logo/logo.png"
+            alt="GOLDEN logo"
+            className="w-10 h-10 rounded-xl object-cover"
+          />
           <h2 className="text-lg font-black text-slate-900">상황 설명하기</h2>
         </div>
         <div className="flex items-center gap-2">

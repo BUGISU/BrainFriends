@@ -126,12 +126,12 @@ export const VISUAL_MATCHING_IMAGE_FILENAME_MAP: Record<
     베개: "pillow",
   },
   hospital: {
-    붕대: "glasses",
-    주사기: "water-bottle",
-    반창고: "towel",
+    붕대: "bandage",
+    주사기: "syringe",
+    반창고: "plaster",
     실내화: "slipper",
-    리모컨: "blanket",
-    옷걸이: "calendar",
+    리모컨: "remote-control",
+    옷걸이: "hanger",
     마스크: "mask",
     청진기: "stethoscope",
     의사: "doctor",
@@ -232,3 +232,4 @@ export const VISUAL_MATCHING_PROTOCOLS: Record<PlaceType, VisualQuestion[]> = {
   park: createQuestionSet(PLACE_SEEDS.park),
   mart: createQuestionSet(PLACE_SEEDS.mart),
 };
+

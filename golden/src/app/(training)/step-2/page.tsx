@@ -27,7 +27,7 @@ import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 export const dynamic = "force-dynamic";
 
 const STEP2_AUDIO_STORAGE_KEY = "step2_recorded_audios";
-const STEP2_MAX_STORED_AUDIO_ITEMS = 4;
+const STEP2_MAX_STORED_AUDIO_ITEMS = 10;
 const STEP2_MAX_AUDIO_URL_CHARS = 1_500_000;
 
 function isQuotaExceededError(error: unknown): boolean {
@@ -436,7 +436,7 @@ function Step2Content() {
       }
       analyzerRef.current?.cancelAnalysis();
 
-      const demoItems = protocol.slice(0, 6).map((item, index) => {
+      const demoItems = protocol.slice(0, STEP2_MAX_STORED_AUDIO_ITEMS).map((item, index) => {
         const speechScore = 78 + (index % 3) * 5;
         const faceScore = 72 + (index % 4) * 4;
         const finalScore = Number((speechScore * 0.6 + faceScore * 0.4).toFixed(1));
@@ -559,13 +559,14 @@ function Step2Content() {
                 timestamp: new Date().toLocaleTimeString(),
               };
 
-              // localStorage 용량 초과 시 오래된 항목부터 제거하고,
-              // 마지막에는 오디오 없이 메타데이터만 저장해 흐름을 유지합니다.
+              // localStorage 용량 초과 시 항목 수를 줄이지 않고,
+              // 오래된 항목의 audioUrl만 제거해 10개 메타데이터를 최대한 유지합니다.
               let candidate = [...existing, nextEntry].slice(
                 -STEP2_MAX_STORED_AUDIO_ITEMS,
               );
               let saved = false;
               let droppedByQuota = 0;
+              let strippedAudioCount = 0;
 
               while (!saved) {
                 try {
@@ -578,23 +579,35 @@ function Step2Content() {
                   if (!isQuotaExceededError(saveError)) {
                     throw saveError;
                   }
+
+                  const oldestAudioIndex = candidate.findIndex(
+                    (item) => Boolean(item?.audioUrl),
+                  );
+                  if (oldestAudioIndex >= 0) {
+                    candidate[oldestAudioIndex] = {
+                      ...candidate[oldestAudioIndex],
+                      audioUrl: undefined,
+                    };
+                    strippedAudioCount += 1;
+                    continue;
+                  }
+
                   if (candidate.length > 1) {
                     candidate = candidate.slice(1);
                     droppedByQuota += 1;
                     continue;
                   }
-                  if (candidate[0]?.audioUrl) {
-                    candidate = [{ ...candidate[0], audioUrl: undefined }];
-                    continue;
-                  }
+
                   localStorage.removeItem(STEP2_AUDIO_STORAGE_KEY);
                   candidate = [{ ...nextEntry, audioUrl: undefined }];
                 }
               }
 
-              if (!nextEntry.audioUrl || droppedByQuota > 0) {
+              if (!nextEntry.audioUrl || strippedAudioCount > 0 || droppedByQuota > 0) {
                 console.warn("[Step2] save:reduced", {
+                  strippedAudioCount,
                   droppedByQuota,
+                  savedCount: candidate.length,
                   hasAudio: Boolean(candidate[candidate.length - 1]?.audioUrl),
                 });
               }
@@ -647,9 +660,11 @@ function Step2Content() {
 
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-orange-100">
-            02
-          </div>
+          <img
+            src="/images/logo/logo.png"
+            alt="GOLDEN logo"
+            className="w-10 h-10 rounded-xl object-cover"
+          />
           <div>
             <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest block leading-none">
               Repetition Training

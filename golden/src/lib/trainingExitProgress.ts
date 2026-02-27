@@ -58,3 +58,19 @@ export function getTrainingExitProgress(place: string): {
     return null;
   }
 }
+
+export function clearTrainingExitProgress(place: string) {
+  if (typeof window === "undefined") return;
+
+  try {
+    const raw = localStorage.getItem(EXIT_PROGRESS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as ExitProgressByPlace;
+    if (!parsed || typeof parsed !== "object") return;
+
+    delete parsed[place];
+    localStorage.setItem(EXIT_PROGRESS_KEY, JSON.stringify(parsed));
+  } catch {
+    // no-op
+  }
+}

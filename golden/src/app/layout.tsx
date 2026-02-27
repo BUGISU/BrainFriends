@@ -3,7 +3,7 @@ import "./globals.css";
 import Script from "next/script";
 
 export const metadata: Metadata = {
-  title: "BrainTalkTalk",
+  title: "브레인프렌즈 GOLDEN",
   description: "SaMD 기반 언어 재활 훈련",
 };
 

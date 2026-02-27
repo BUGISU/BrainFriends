@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTrainingSession } from "@/hooks/useTrainingSession";
 import { SessionManager } from "@/lib/kwab/SessionManager";
-import { getTrainingExitProgress } from "@/lib/trainingExitProgress";
+import {
+  clearTrainingExitProgress,
+  getTrainingExitProgress,
+} from "@/lib/trainingExitProgress";
 
 const PLACES = [
   {
@@ -54,11 +57,16 @@ const PLACES = [
 export default function SelectPage() {
   const router = useRouter();
   const { patient, ageGroup } = useTrainingSession();
+  const [isMounted, setIsMounted] = useState(false);
   const [resumeModal, setResumeModal] = useState<{
     open: boolean;
     place: string;
     resumePath: string;
   }>({ open: false, place: "", resumePath: "" });
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const getStartPath = (place: string) =>
     `/step-1?place=${encodeURIComponent(place)}`;
@@ -70,6 +78,7 @@ export default function SelectPage() {
     if (path.includes("/step-4")) return "Step 4 이어하기";
     if (path.includes("/step-3")) return "Step 3 이어하기";
     if (path.includes("/step-2")) return "Step 2 이어하기";
+    if (path.includes("/step-1")) return "Step 1 이어하기";
     return "처음부터 시작";
   };
 
@@ -78,22 +87,28 @@ export default function SelectPage() {
       router.push(getStartPath(place));
       return;
     }
-    const resumePath = SessionManager.getResumePath(patient as any, place);
+
     const startPath = getStartPath(place);
+    const checkpoint = getTrainingExitProgress(place);
+
+    // 홈 이탈 체크포인트가 있으면 이어하기를 우선 제공
+    if (checkpoint?.currentStep && checkpoint.currentStep >= 1 && checkpoint.currentStep <= 6) {
+      const checkpointResumePath = `/step-${checkpoint.currentStep}?place=${encodeURIComponent(place)}`;
+      setResumeModal({ open: true, place, resumePath: checkpointResumePath });
+      return;
+    }
+
+    const resumePath = SessionManager.getResumePath(patient as any, place);
+
+    // report(=result)까지 완료된 세션은 이어하기를 띄우지 않고 처음부터 시작
+    if (resumePath.includes("/result")) {
+      router.push(startPath);
+      return;
+    }
 
     if (resumePath !== startPath) {
       setResumeModal({ open: true, place, resumePath });
       return;
-    }
-
-    const checkpoint = getTrainingExitProgress(place);
-    if (checkpoint?.completedThroughStep && checkpoint.completedThroughStep > 0) {
-      const nextStep = Math.min(6, checkpoint.completedThroughStep + 1);
-      const fallbackResumePath = `/step-${nextStep}?place=${encodeURIComponent(place)}`;
-      if (fallbackResumePath !== startPath) {
-        setResumeModal({ open: true, place, resumePath: fallbackResumePath });
-        return;
-      }
     }
 
     router.push(startPath);
@@ -104,23 +119,32 @@ export default function SelectPage() {
       {/* 상단 프로필 섹션: Step 페이지 헤더와 높이감을 맞춤 */}
       <div className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-5">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white text-lg font-black shadow-sm">
-            B
-          </div>
+          <img
+            src="/images/logo/logo.png"
+            alt="GOLDEN logo"
+            className="w-10 h-10 rounded-xl object-cover"
+          />
           <div className="space-y-1.5">
             <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest leading-none">
               Active Patient Profile
             </p>
             <h2 className="text-lg font-black text-slate-900 tracking-tight leading-none">
-              {patient?.name ?? "정보 없음"}
+              {isMounted ? patient?.name ?? "정보 없음" : "정보 없음"}
               <span className="text-sm font-bold text-slate-500 ml-2">
-                {patient?.age ?? "-"}세
+                {isMounted ? patient?.age ?? "-" : "-"}세
               </span>
             </h2>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="px-4 py-1.5 rounded-full text-xs font-black shadow-sm border bg-white text-slate-700 border-slate-200 hover:bg-slate-100 transition-all"
+          >
+            로그아웃
+          </button>
           <button
             type="button"
             onClick={() => router.push("/report")}
@@ -202,6 +226,7 @@ export default function SelectPage() {
               <button
                 onClick={() => {
                   router.push(resumeModal.resumePath);
+                  clearTrainingExitProgress(resumeModal.place);
                   setResumeModal({ open: false, place: "", resumePath: "" });
                 }}
                 className="w-full py-3.5 rounded-2xl bg-[#0B1A3A] text-white font-black hover:bg-[#09152f] transition-all"
@@ -216,6 +241,7 @@ export default function SelectPage() {
                       resumeModal.place,
                     );
                   }
+                  clearTrainingExitProgress(resumeModal.place);
                   router.push(getStartPath(resumeModal.place));
                   setResumeModal({ open: false, place: "", resumePath: "" });
                 }}

@@ -71,9 +71,11 @@ const buildImageCandidates = (
         `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.png`,
         `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.jpg`,
         `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.jpeg`,
+        `${STEP3_IMAGE_BASE_URL}/${place}/${nameVariant}.webp`,
         `${STEP3_IMAGE_BASE_URL}/${nameVariant}.png`,
         `${STEP3_IMAGE_BASE_URL}/${nameVariant}.jpg`,
         `${STEP3_IMAGE_BASE_URL}/${nameVariant}.jpeg`,
+        `${STEP3_IMAGE_BASE_URL}/${nameVariant}.webp`,
       );
     }
   }
@@ -82,9 +84,11 @@ const buildImageCandidates = (
     `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(option.label)}.png`,
     `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(option.label)}.jpg`,
     `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(option.label)}.jpeg`,
+    `${STEP3_IMAGE_BASE_URL}/${place}/${encodeURIComponent(option.label)}.webp`,
     `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(option.label)}.png`,
     `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(option.label)}.jpg`,
     `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(option.label)}.jpeg`,
+    `${STEP3_IMAGE_BASE_URL}/${encodeURIComponent(option.label)}.webp`,
   );
 
   if (option.emoji) candidates.push(toTwemojiSvgUrl(option.emoji));
@@ -385,9 +389,11 @@ function Step3Content() {
       </div>
       <header className="h-16 px-6 border-b border-orange-100 flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm">
-            03
-          </div>
+          <img
+            src="/images/logo/logo.png"
+            alt="GOLDEN logo"
+            className="w-10 h-10 rounded-xl object-cover"
+          />
           <div>
             <span className="text-orange-500 font-black text-[10px] uppercase tracking-widest leading-none block">
               Step 03 • Visual-Auditory Association

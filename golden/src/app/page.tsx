@@ -171,7 +171,7 @@ export default function HomePage() {
                 B
               </span>
               <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                브레인톡톡
+                GOLDEN
               </h1>
             </div>
             <p className="text-orange-500 font-bold uppercase tracking-[0.2em] text-[10px]">
