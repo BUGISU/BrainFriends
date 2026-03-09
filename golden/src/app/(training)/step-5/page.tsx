@@ -473,13 +473,13 @@ function Step5Content() {
       count: 0,
     };
     try {
-      setPhase("reading");
       setReadingTime(0);
       readingSecondsRef.current = 0;
       setHighlightIndex(0);
       await playStartBeep();
       if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
       await analyzerRef.current.startAnalysis();
+      setPhase("reading");
       updateRuntimeStatus({
         recording: true,
         saving: false,
@@ -502,6 +502,8 @@ function Step5Content() {
       }, 900);
     } catch (err) {
       console.error(err);
+      setPhase("ready");
+      setHighlightIndex(-1);
       updateRuntimeStatus({
         recording: false,
         pageError: true,
@@ -522,11 +524,16 @@ function Step5Content() {
       if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
       const analysis = await analyzerRef.current.stopAnalysis(currentItem.text);
       if (analysis.errorReason) {
+        const runtimeMessage = analysis.errorReason.includes("recorder_stop_failed")
+          ? "녹음 장치 초기화에 실패했습니다. 마이크 권한/연결 상태를 확인 후 다시 시도해 주세요."
+          : `음성 인식 실패(${analysis.errorReason})`;
         updateRuntimeStatus({
           pageError: true,
           needsRetry: true,
-          message: `음성 인식 실패(${analysis.errorReason})`,
+          message: runtimeMessage,
         });
+        setPhase("ready");
+        setHighlightIndex(-1);
         return;
       }
       const audioBlob = analysis.audioBlob;
@@ -589,6 +596,35 @@ function Step5Content() {
         vowelAccuracy,
       }).score;
       const transcript = String(analysis.transcript || "").trim();
+      const spokenChars = (transcript.match(/[가-힣a-zA-Z0-9]/g) || []).length;
+      if (spokenChars < 2) {
+        updateRuntimeStatus({
+          pageError: true,
+          needsRetry: true,
+          message: "음성이 충분히 인식되지 않았습니다. 다시 읽어주세요.",
+        });
+        setCurrentResult({
+          place,
+          text: currentItem.text,
+          transcript,
+          isCorrect: false,
+          audioUrl: audioBlob ? URL.createObjectURL(audioBlob) : "",
+          totalTime: finalReadingTime,
+          responseTime: Math.max(0, Math.round(finalReadingTime * 1000)),
+          recognitionResponseMs: Math.max(0, Math.round(finalReadingTime * 1000)),
+          wordsPerMinute: 0,
+          pauseCount: 0,
+          readingScore: 0,
+          readingAccuracyScore: 0,
+          fluencyScore: 0,
+          articulationClarityScore: 0,
+          consonantAccuracy: 0,
+          vowelAccuracy: 0,
+          articulationWritingConsistency: 0,
+          dataSource: "measured",
+        });
+        return;
+      }
       const readingAccuracyScore = calculateTextSimilarityPercent(
         currentItem.text,
         transcript,

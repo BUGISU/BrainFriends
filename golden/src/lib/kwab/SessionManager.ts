@@ -447,9 +447,15 @@ export class SessionManager {
       return { totalScore: 0 };
     }
 
-    const totalScore = Math.round(
-      (step5.correctAnswers / step5.totalQuestions) * 100,
-    );
+    const itemScores = (step5.items || [])
+      .map((item: any) => Number(item?.readingScore))
+      .filter((v: number) => Number.isFinite(v));
+    const totalScore = itemScores.length
+      ? Math.round(
+          itemScores.reduce((sum: number, v: number) => sum + v, 0) /
+            itemScores.length,
+        )
+      : Math.round((step5.correctAnswers / step5.totalQuestions) * 100);
     return { totalScore: Math.min(totalScore, 100) };
   }
 
@@ -552,10 +558,21 @@ export class SessionManager {
       ? Math.round(this.session.step4.score * 10)
       : 0;
     const step5 = this.session.step5
-      ? Math.round(
-          (this.session.step5.correctAnswers / this.session.step5.totalQuestions) *
-            100,
-        )
+      ? (() => {
+          const itemScores = (this.session.step5?.items || [])
+            .map((item: any) => Number(item?.readingScore))
+            .filter((v: number) => Number.isFinite(v));
+          if (itemScores.length) {
+            return Math.round(
+              itemScores.reduce((sum: number, v: number) => sum + v, 0) /
+                itemScores.length,
+            );
+          }
+          return Math.round(
+            (this.session.step5.correctAnswers / this.session.step5.totalQuestions) *
+              100,
+          );
+        })()
       : 0;
     const step6 = this.session.step6 ? Math.round(this.session.step6.accuracy) : 0;
     return { step1, step2, step3, step4, step5, step6 };
@@ -975,9 +992,20 @@ export class SessionManager {
     const step4 = String(session.step4?.score ?? 0);
     const step5 = session.step5
       ? String(
-          Math.round(
-            (session.step5.correctAnswers / session.step5.totalQuestions) * 100,
-          ),
+          (() => {
+            const itemScores = (session.step5?.items || [])
+              .map((item: any) => Number(item?.readingScore))
+              .filter((v: number) => Number.isFinite(v));
+            if (itemScores.length) {
+              return Math.round(
+                itemScores.reduce((sum: number, v: number) => sum + v, 0) /
+                  itemScores.length,
+              );
+            }
+            return Math.round(
+              (session.step5.correctAnswers / session.step5.totalQuestions) * 100,
+            );
+          })(),
         )
       : "0";
     const step6 = String(session.step6?.accuracy ?? 0);

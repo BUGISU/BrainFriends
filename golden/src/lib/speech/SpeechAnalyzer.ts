@@ -362,8 +362,27 @@ export class SpeechAnalyzer {
   }
 
   async stopAnalysis(expectedText: string): Promise<SpeechAnalysisResult> {
-    const audioBlob = await this.recorder.stopRecording();
+    let audioBlob: Blob;
     const duration = Date.now() - this.startTime;
+    try {
+      audioBlob = await this.recorder.stopRecording();
+    } catch (error) {
+      return {
+        transcript: "",
+        confidence: 0,
+        pronunciationScore: 0,
+        duration: Math.max(0, duration),
+        audioLevel: 0,
+        errorReason:
+          error instanceof Error
+            ? `recorder_stop_failed:${error.message}`
+            : "recorder_stop_failed:unknown",
+        details: {
+          consonantAccuracy: 0,
+          vowelAccuracy: 0,
+        },
+      };
+    }
     const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === "true";
 
     if (isDevMode) {
