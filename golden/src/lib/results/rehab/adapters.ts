@@ -181,8 +181,16 @@ export function extractDetailMetrics(
   if (step === 6) {
     return [
       {
+        key: "writingAccuracy",
+        label: "쓰기 정확도",
+        unit: "%",
+        higherBetter: true,
+        current: correctnessPercent(details),
+        previous: null,
+      },
+      {
         key: "strokeMatch",
-        label: "획수 일치도",
+        label: "획순 정확도",
         unit: "%",
         higherBetter: true,
         current: strokeMatchPercent(details),
@@ -194,30 +202,6 @@ export function extractDetailMetrics(
         unit: "%",
         higherBetter: true,
         current: averageShapeSimilarity(details),
-        previous: null,
-      },
-      {
-        key: "formStability",
-        label: "형태 안정도",
-        unit: "%",
-        higherBetter: true,
-        current: averageWritingConsistency(details),
-        previous: null,
-      },
-      {
-        key: "strokeGap",
-        label: "평균 획 오차",
-        unit: "획",
-        higherBetter: false,
-        current: averageStrokeGap(details),
-        previous: null,
-      },
-      {
-        key: "passRate",
-        label: "통과율",
-        unit: "%",
-        higherBetter: true,
-        current: correctnessPercent(details),
         previous: null,
       },
     ];

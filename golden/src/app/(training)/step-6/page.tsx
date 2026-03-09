@@ -26,8 +26,15 @@ import {
   toCompressedDataUrl,
 } from "@/features/steps/step6/utils";
 import { Step6WordImage } from "@/features/steps/step6/components/Step6WordImage";
+import {
+  buildStepSignature,
+  isResumeMetaMatched,
+  saveResumeMeta,
+} from "@/lib/trainingResume";
 
 export const dynamic = "force-dynamic";
+const STEP6_STORAGE_KEY = "step6_recorded_data";
+const STEP6_QUESTIONS_KEY_PREFIX = "step6_questions";
 
 const RESULT_PRAISES = [
   "좋아요, 정답입니다!",
@@ -104,11 +111,49 @@ function Step6Content() {
   const guideSparkleTimerRef = useRef<number | null>(null);
 
   const questions = useMemo(
-    () =>
-      [...(WRITING_WORDS[place] || WRITING_WORDS.home)]
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 5),
+    () => {
+      const buildQuestions = () =>
+        [...(WRITING_WORDS[place] || WRITING_WORDS.home)]
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 5);
+      if (typeof window === "undefined") return buildQuestions();
+
+      const questionsStorageKey = `${STEP6_QUESTIONS_KEY_PREFIX}:${place}`;
+      try {
+        const raw = sessionStorage.getItem(questionsStorageKey);
+        const parsed = raw ? JSON.parse(raw) : null;
+        const isValid =
+          Array.isArray(parsed) &&
+          parsed.length > 0 &&
+          parsed.every(
+            (item) =>
+              item &&
+              typeof item.answer === "string" &&
+              typeof item.hint === "string",
+          );
+        if (isValid) return parsed;
+      } catch {
+        // ignore and rebuild
+      }
+
+      const nextQuestions = buildQuestions();
+      try {
+        sessionStorage.setItem(questionsStorageKey, JSON.stringify(nextQuestions));
+      } catch {
+        // ignore
+      }
+      return nextQuestions;
+    },
     [place],
+  );
+  const stepSignature = useMemo(
+    () =>
+      buildStepSignature(
+        "step6",
+        place,
+        questions.map((item) => `${item.answer}|${item.hint}`),
+      ),
+    [place, questions],
   );
   const currentWord = questions[currentIndex];
   const getExpectedStrokeCount = useCallback(
@@ -173,8 +218,57 @@ function Step6Content() {
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem("step6_recorded_data");
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || questions.length === 0) return;
+    try {
+      if (!isResumeMetaMatched(STEP6_STORAGE_KEY, stepSignature)) return;
+      const raw = localStorage.getItem(STEP6_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      const byIndex = new Map<number, any>();
+      parsed.slice(-questions.length).forEach((row: any, fallbackIndex: number) => {
+        const resolvedIndex = Number.isFinite(Number(row?.index))
+          ? Number(row.index)
+          : fallbackIndex;
+        if (resolvedIndex < 0 || resolvedIndex >= questions.length) return;
+        byIndex.set(resolvedIndex, row);
+      });
+      const restored = Array.from(byIndex.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map((entry) => entry[1]);
+      if (restored.length >= questions.length) return;
+
+      const questionWords = new Set(questions.map((q) => String(q?.answer || "")));
+      const looksSameSession = restored.every((row: any) =>
+        questionWords.has(String(row?.text || "")),
+      );
+      if (!looksSameSession) return;
+
+      const imageMap = new Map<number, string>();
+      restored.forEach((row: any, fallbackIndex: number) => {
+        const resolvedIndex = Number.isFinite(Number(row?.index))
+          ? Number(row.index)
+          : fallbackIndex;
+        if (
+          Number.isFinite(resolvedIndex) &&
+          resolvedIndex >= 0 &&
+          typeof row?.userImage === "string"
+        ) {
+          imageMap.set(resolvedIndex, row.userImage);
+        }
+      });
+
+      setWritingImages(questions.map((_, idx) => imageMap.get(idx) || ""));
+      setCorrectCount(restored.filter((row: any) => Boolean(row?.isCorrect)).length);
+      setCurrentIndex(Math.min(restored.length, questions.length - 1));
+      setPhase("writing");
+      console.log(`↩️ Step 6 이어하기 복원: ${restored.length}/${questions.length}`);
+    } catch (error) {
+      console.error("Step 6 이어하기 복원 실패:", error);
+    }
+  }, [questions, stepSignature]);
 
   useEffect(() => {
     return () => {
@@ -291,10 +385,11 @@ function Step6Content() {
 
       // 2) Result 페이지 localStorage 저장
       const existingData = JSON.parse(
-        localStorage.getItem("step6_recorded_data") || "[]",
+        localStorage.getItem(STEP6_STORAGE_KEY) || "[]",
       );
 
       const newEntry = {
+        index: currentIndex,
         text: currentWord.answer,
         userImage: imageData,
         isCorrect: true,
@@ -309,11 +404,26 @@ function Step6Content() {
       };
 
       const maxItems = Math.max(5, questions.length || 5);
-      let candidate = [...existingData, newEntry].slice(-maxItems);
+      const byIndex = new Map<number, any>();
+      if (Array.isArray(existingData)) {
+        existingData.slice(-questions.length).forEach((row: any, fallbackIndex: number) => {
+          const resolvedIndex = Number.isFinite(Number(row?.index))
+            ? Number(row.index)
+            : fallbackIndex;
+          if (resolvedIndex < 0 || resolvedIndex >= questions.length) return;
+          byIndex.set(resolvedIndex, row);
+        });
+      }
+      byIndex.set(currentIndex, newEntry);
+      let candidate = Array.from(byIndex.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map((entry) => entry[1])
+        .slice(0, maxItems);
       let saved = false;
       while (!saved) {
         try {
-          localStorage.setItem("step6_recorded_data", JSON.stringify(candidate));
+          localStorage.setItem(STEP6_STORAGE_KEY, JSON.stringify(candidate));
+          saveResumeMeta(STEP6_STORAGE_KEY, stepSignature, candidate.length);
           saved = true;
         } catch (saveError) {
           if (!isQuotaExceededError(saveError)) throw saveError;
@@ -365,7 +475,7 @@ function Step6Content() {
           loadPatientProfile() || { name: "user" };
         const sm = new SessionManager(patientData as any, place);
         const recordedRows = JSON.parse(
-          localStorage.getItem("step6_recorded_data") || "[]",
+          localStorage.getItem(STEP6_STORAGE_KEY) || "[]",
         );
         const consistencyByWord = new Map<string, number>();
         const userStrokesByWord = new Map<string, number>();
@@ -453,6 +563,9 @@ function Step6Content() {
           : step6QualityScore.toString(),
       });
       const isRehabStep6 = isRehabMode && rehabTargetStep === 6;
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`${STEP6_QUESTIONS_KEY_PREFIX}:${place}`);
+      }
       if (isRehabStep6) {
         params.set("trainMode", "rehab");
         params.set("targetStep", "6");
@@ -467,7 +580,7 @@ function Step6Content() {
     try {
       const randomFloat = (min: number, max: number, digits = 1) =>
         Number((Math.random() * (max - min) + min).toFixed(digits));
-      const demoItems = questions.map((word) => {
+      const demoItems = questions.map((word, index) => {
         const expectedStrokes = getExpectedStrokeCount({
           answer: word.answer,
           strokes: word.strokes,
@@ -476,6 +589,7 @@ function Step6Content() {
         const userStrokes = Math.max(1, expectedStrokes + strokeOffset);
         const writingScore = randomFloat(60, 96, 0);
         return {
+          index,
           text: word.answer,
           userImage: "",
           isCorrect: Math.random() < 0.72,
@@ -495,7 +609,8 @@ function Step6Content() {
         };
       });
 
-      localStorage.setItem("step6_recorded_data", JSON.stringify(demoItems));
+      localStorage.setItem(STEP6_STORAGE_KEY, JSON.stringify(demoItems));
+      saveResumeMeta(STEP6_STORAGE_KEY, stepSignature, demoItems.length);
 
       const rawSession = localStorage.getItem("kwab_training_session");
       const existingSession = rawSession ? JSON.parse(rawSession) : null;
@@ -536,6 +651,9 @@ function Step6Content() {
         step6: String(step6Accuracy),
       });
       const isRehabStep6 = isRehabMode && rehabTargetStep === 6;
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`${STEP6_QUESTIONS_KEY_PREFIX}:${place}`);
+      }
       if (isRehabStep6) {
         params.set("trainMode", "rehab");
         params.set("targetStep", "6");
@@ -556,6 +674,7 @@ function Step6Content() {
     stepParams,
     isRehabMode,
     rehabTargetStep,
+    stepSignature,
   ]);
 
   if (!isMounted || !currentWord) return null;

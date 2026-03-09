@@ -16,9 +16,15 @@ import { saveTrainingExitProgress } from "@/lib/trainingExitProgress";
 import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { trainingButtonStyles } from "@/lib/ui/trainingButtonStyles";
 import { buildStep1TrainingData } from "@/features/steps/step1/utils";
+import {
+  buildStepSignature,
+  isResumeMetaMatched,
+  saveResumeMeta,
+} from "@/lib/trainingResume";
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
 const STEP_RESPONSE_BONUS_THRESHOLD_MS = 6000;
+const STEP1_STORAGE_KEY = "step1_data";
 
 function calculateCompositeScore(
   results: Array<{ isCorrect: boolean; responseTime: number }>,
@@ -48,7 +54,6 @@ function Step1Content() {
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAnswered, setIsAnswered] = useState(false);
   const [canAnswer, setCanAnswer] = useState(false);
@@ -93,8 +98,68 @@ function Step1Content() {
   const trainingData = useMemo(() => {
     return buildStep1TrainingData(placeParam);
   }, [placeParam]);
+  const stepSignature = useMemo(
+    () =>
+      buildStepSignature(
+        "step1",
+        placeParam,
+        trainingData.map((item) => `${item.question}|${item.answer ? "1" : "0"}`),
+      ),
+    [placeParam, trainingData],
+  );
 
   const currentItem = trainingData[currentIndex];
+
+  useEffect(() => {
+    if (typeof window === "undefined" || trainingData.length === 0) return;
+    try {
+      if (!isResumeMetaMatched(STEP1_STORAGE_KEY, stepSignature)) return;
+      const raw = localStorage.getItem(STEP1_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      if (parsed.length >= trainingData.length) return;
+
+      const normalized = parsed
+        .map((row: any, idx: number) => {
+          const fallback = trainingData[idx];
+          const questionText =
+            typeof row?.question === "string"
+              ? row.question
+              : typeof row?.text === "string"
+                ? row.text
+                : fallback?.question || "";
+          const correctAnswer =
+            typeof row?.correctAnswer === "boolean"
+              ? row.correctAnswer
+              : typeof fallback?.answer === "boolean"
+                ? fallback.answer
+                : false;
+          return {
+            question: questionText,
+            text: questionText,
+            userAnswer:
+              typeof row?.userAnswer === "boolean" || row?.userAnswer === null
+                ? row.userAnswer
+                : null,
+            isCorrect: Boolean(row?.isCorrect),
+            responseTime: Number(row?.responseTime || 0),
+            correctAnswer,
+          };
+        })
+        .filter((row: any) => row.question);
+
+      if (normalized.length === 0 || normalized.length >= trainingData.length) return;
+
+      const resumedScore = normalized.filter((row: any) => row.isCorrect).length;
+      setQuestionResults(normalized);
+      setScore(resumedScore);
+      setCurrentIndex(Math.min(normalized.length, trainingData.length - 1));
+      console.log(`↩️ Step 1 이어하기 복원: ${normalized.length}/${trainingData.length}`);
+    } catch (error) {
+      console.error("Step 1 이어하기 복원 실패:", error);
+    }
+  }, [stepSignature, trainingData]);
+
   const handleGoHome = () => {
     setIsHomeExitModalOpen(true);
   };
@@ -119,7 +184,6 @@ function Step1Content() {
       console.log(`🔊 음성 출력: "${text}"`);
       setIsSpeaking(true);
       setCanAnswer(false);
-      setTimeLeft(null);
       if (typeof window !== "undefined" && window.speechSynthesis) {
         const synth = window.speechSynthesis;
         synth.cancel();
@@ -139,7 +203,6 @@ function Step1Content() {
       }
       setIsSpeaking(false);
       setCanAnswer(true);
-      setTimeLeft(currentItem?.duration || 10);
       setQuestionStartTime(Date.now());
       console.log("✅ 음성 출력 완료, 답변 가능");
     },
@@ -165,6 +228,7 @@ function Step1Content() {
         }));
 
         localStorage.setItem("step1_data", JSON.stringify(formattedForResult));
+        saveResumeMeta(STEP1_STORAGE_KEY, stepSignature, formattedForResult.length);
         console.log("✅ Step 1 Result 페이지용 백업 저장:", formattedForResult);
 
         // 2. ✅ SessionManager용 데이터 (question 필드 사용)
@@ -200,7 +264,7 @@ function Step1Content() {
         console.error("❌ Step 1 저장 실패:", error);
       }
     },
-    [placeParam],
+    [placeParam, stepSignature],
   );
 
   const handleSkipStep = useCallback(() => {
@@ -289,6 +353,21 @@ function Step1Content() {
 
       setQuestionResults(updatedResults);
       if (isCorrect) setScore((s) => s + 1);
+      try {
+        const progressForStorage = updatedResults.map((r) => ({
+          question: r.question,
+          text: r.question,
+          userAnswer: r.userAnswer,
+          correctAnswer: r.correctAnswer,
+          isCorrect: r.isCorrect,
+          responseTime: r.responseTime,
+          timestamp: new Date().toLocaleTimeString(),
+        }));
+        localStorage.setItem(STEP1_STORAGE_KEY, JSON.stringify(progressForStorage));
+        saveResumeMeta(STEP1_STORAGE_KEY, stepSignature, progressForStorage.length);
+      } catch (error) {
+        console.error("Step 1 진행 저장 실패:", error);
+      }
 
       setTimeout(() => {
         if (currentIndex < trainingData.length - 1) {
@@ -364,16 +443,6 @@ function Step1Content() {
   const replayEnabled =
     replayCount < 1 && !isSpeaking && !isAnswered && canAnswer;
 
-  useEffect(() => {
-    if (!isMounted || timeLeft === null || isSpeaking) return;
-    if (timeLeft <= 0) return;
-    const timer = setInterval(
-      () => setTimeLeft((prev) => (prev && prev > 0 ? prev - 1 : 0)),
-      1000,
-    );
-    return () => clearInterval(timer);
-  }, [isMounted, timeLeft, isSpeaking, handleAnswer]);
-
   if (!isMounted || !currentItem) return null;
 
   return (
@@ -429,7 +498,7 @@ function Step1Content() {
           >
             {isSpeaking
               ? "LISTENING..."
-              : `${timeLeft ?? currentItem.duration}s`}
+              : "ANSWER READY"}
           </div>
           <div
             className={`px-4 py-1.5 rounded-full font-black text-xs border ${isRehabMode ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}

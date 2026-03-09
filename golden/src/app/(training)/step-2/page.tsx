@@ -34,6 +34,12 @@ import {
   getSttErrorMessage,
   isQuotaExceededError,
 } from "@/features/steps/step2/utils";
+import {
+  buildStepSignature,
+  clearResumeMeta,
+  isResumeMetaMatched,
+  saveResumeMeta,
+} from "@/lib/trainingResume";
 
 export const dynamic = "force-dynamic";
 
@@ -168,6 +174,15 @@ function Step2Content() {
       ...sorted.slice(4, 10),
     ];
   }, [place]);
+  const stepSignature = useMemo(
+    () =>
+      buildStepSignature(
+        "step2",
+        place,
+        protocol.map((item) => `${item.id ?? ""}|${item.text ?? ""}`),
+      ),
+    [place, protocol],
+  );
 
   const currentItem = protocol[currentIndex];
 
@@ -623,7 +638,36 @@ function Step2Content() {
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem(STEP2_AUDIO_STORAGE_KEY);
+    try {
+      if (!isResumeMetaMatched(STEP2_AUDIO_STORAGE_KEY, stepSignature)) {
+        throw new Error("step2-signature-mismatch");
+      }
+      const raw = localStorage.getItem(STEP2_AUDIO_STORAGE_KEY) || "[]";
+      const parsed = JSON.parse(raw);
+      const saved = Array.isArray(parsed) ? parsed : [];
+      if (saved.length > 0) {
+        const byIndex = new Map<number, any>();
+        saved.slice(-protocol.length).forEach((row: any, fallbackIndex: number) => {
+          const resolvedIndex = Number.isFinite(Number(row?.index))
+            ? Number(row.index)
+            : fallbackIndex;
+          if (resolvedIndex < 0 || resolvedIndex >= protocol.length) return;
+          byIndex.set(resolvedIndex, row);
+        });
+        const restored = Array.from(byIndex.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map((entry) => entry[1]);
+        const safeCount = Math.min(restored.length, protocol.length);
+        if (safeCount < protocol.length) {
+          setAnalysisResults(restored as any[]);
+          setCurrentIndex(
+            Math.min(Math.max(0, safeCount), Math.max(0, protocol.length - 1)),
+          );
+        }
+      }
+    } catch {
+      // ignore restore failure and start from first item
+    }
     async function setupCamera() {
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
@@ -657,7 +701,7 @@ function Step2Content() {
         window.speechSynthesis.cancel();
       resetRuntimeStatus();
     };
-  }, [resetRuntimeStatus]);
+  }, [protocol.length, resetRuntimeStatus, stepSignature]);
 
   useEffect(() => {
     if (!isMounted || !currentItem) return;
@@ -784,7 +828,9 @@ function Step2Content() {
       }
       analyzerRef.current?.cancelAnalysis();
 
-      const demoItems = protocol.slice(0, STEP2_MAX_STORED_AUDIO_ITEMS).map((item) => {
+      const demoItems = protocol
+        .slice(0, STEP2_MAX_STORED_AUDIO_ITEMS)
+        .map((item, index) => {
         const speechScore = randomFloat(62, 95);
         const faceScore = randomFloat(60, 94);
         const consonantAccuracy = randomFloat(58, 96);
@@ -793,6 +839,7 @@ function Step2Content() {
           ((consonantAccuracy + vowelAccuracy) / 2).toFixed(1),
         );
         return {
+          index,
           text: item.text,
           finalScore,
           speechScore,
@@ -807,6 +854,7 @@ function Step2Content() {
       });
 
       localStorage.setItem(STEP2_AUDIO_STORAGE_KEY, JSON.stringify(demoItems));
+      saveResumeMeta(STEP2_AUDIO_STORAGE_KEY, stepSignature, demoItems.length);
 
       const patient = loadPatientProfile();
       const sessionManager = new SessionManager(
@@ -855,7 +903,7 @@ function Step2Content() {
     } catch (error) {
       console.error("Step2 skip failed:", error);
     }
-  }, [place, protocol, pushStep3OrRehabResult, resetRuntimeStatus]);
+  }, [place, protocol, pushStep3OrRehabResult, resetRuntimeStatus, stepSignature]);
 
   const handleToggleRecording = async () => {
     if (!isRecording && (!canRecord || isPromptPlaying)) return;
@@ -958,45 +1006,34 @@ function Step2Content() {
           consonantAccuracy: consonantAccuracy / 100,
           vowelAccuracy: vowelAccuracy / 100,
         });
-        updateRuntimeStatus({
-          pageError: false,
-          needsRetry: false,
-          message: "분석 완료",
-        });
-        setTranscript(result.transcript || "");
-        setResultScore(Number(finalScore.toFixed(1)));
-        setResultConsonantAccuracy(Number(consonantAccuracy.toFixed(1)));
-        setResultVowelAccuracy(Number(vowelAccuracy.toFixed(1)));
-        setAnalysisResults((prev) => [
-          ...prev,
-          {
-            text: currentItem.text,
-            transcript: result.transcript || "",
-            isCorrect: finalScore >= 60,
-            finalScore: Number(finalScore.toFixed(1)),
-            speechScore,
-            faceScore,
-            symmetryScore: faceScore,
-            pronunciationScore: speechScore,
-            consonantAccuracy: Number(consonantAccuracy.toFixed(1)),
-            vowelAccuracy: Number(vowelAccuracy.toFixed(1)),
-            consonantDetail: {
-              closureRatePct: Number(consonantDetail.closureRatePct.toFixed(1)),
-              closureHoldMs: Number(consonantDetail.closureHoldMs.toFixed(1)),
-              lipSymmetryPct: Number(consonantDetail.lipSymmetryPct.toFixed(1)),
-              openingSpeedMs: Number(consonantDetail.openingSpeedMs.toFixed(1)),
-            },
-            vowelDetail: {
-              mouthOpeningPct: Number(vowelDetail.mouthOpeningPct.toFixed(1)),
-              mouthWidthPct: Number(vowelDetail.mouthWidthPct.toFixed(1)),
-              roundingPct: Number(vowelDetail.roundingPct.toFixed(1)),
-              patternMatchPct: Number(vowelDetail.patternMatchPct.toFixed(1)),
-            },
-            dataSource: "measured",
-            audioLevel: audioLevel,
-            responseTime: responseTimeMs,
+        const currentResultEntry = {
+          index: currentIndex,
+          text: currentItem.text,
+          transcript: result.transcript || "",
+          isCorrect: finalScore >= 60,
+          finalScore: Number(finalScore.toFixed(1)),
+          speechScore,
+          faceScore,
+          symmetryScore: faceScore,
+          pronunciationScore: speechScore,
+          consonantAccuracy: Number(consonantAccuracy.toFixed(1)),
+          vowelAccuracy: Number(vowelAccuracy.toFixed(1)),
+          consonantDetail: {
+            closureRatePct: Number(consonantDetail.closureRatePct.toFixed(1)),
+            closureHoldMs: Number(consonantDetail.closureHoldMs.toFixed(1)),
+            lipSymmetryPct: Number(consonantDetail.lipSymmetryPct.toFixed(1)),
+            openingSpeedMs: Number(consonantDetail.openingSpeedMs.toFixed(1)),
           },
-        ]);
+          vowelDetail: {
+            mouthOpeningPct: Number(vowelDetail.mouthOpeningPct.toFixed(1)),
+            mouthWidthPct: Number(vowelDetail.mouthWidthPct.toFixed(1)),
+            roundingPct: Number(vowelDetail.roundingPct.toFixed(1)),
+            patternMatchPct: Number(vowelDetail.patternMatchPct.toFixed(1)),
+          },
+          dataSource: "measured" as const,
+          audioLevel: audioLevel,
+          responseTime: responseTimeMs,
+        };
         articulationAggregateRef.current = {
           consonantSum: 0,
           vowelSum: 0,
@@ -1011,6 +1048,7 @@ function Step2Content() {
           count: 0,
         };
 
+        let saveSucceeded = false;
         const audioBlob = result.audioBlob;
         if (audioBlob) {
           setIsSaving(true);
@@ -1022,138 +1060,138 @@ function Step2Content() {
             index: currentIndex,
             text: currentItem.text,
           });
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            try {
-              const base64Audio = reader.result as string;
-              let existing: any[] = [];
+          saveSucceeded = await new Promise<boolean>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
               try {
-                const raw = localStorage.getItem(STEP2_AUDIO_STORAGE_KEY) || "[]";
-                const parsed = JSON.parse(raw);
-                existing = Array.isArray(parsed) ? parsed : [];
-              } catch {
-                existing = [];
-              }
-              const nextEntry = {
-                text: currentItem.text,
-                audioUrl:
-                  typeof base64Audio === "string" &&
-                  base64Audio.length <= STEP2_MAX_AUDIO_URL_CHARS
-                    ? base64Audio
-                    : undefined,
-                isCorrect: finalScore >= 60,
-                finalScore: Number(finalScore.toFixed(1)),
-                speechScore,
-                faceScore,
-                consonantAccuracy: Number(consonantAccuracy.toFixed(1)),
-                vowelAccuracy: Number(vowelAccuracy.toFixed(1)),
-                consonantDetail: {
-                  closureRatePct: Number(consonantDetail.closureRatePct.toFixed(1)),
-                  closureHoldMs: Number(consonantDetail.closureHoldMs.toFixed(1)),
-                  lipSymmetryPct: Number(consonantDetail.lipSymmetryPct.toFixed(1)),
-                  openingSpeedMs: Number(consonantDetail.openingSpeedMs.toFixed(1)),
-                },
-                vowelDetail: {
-                  mouthOpeningPct: Number(vowelDetail.mouthOpeningPct.toFixed(1)),
-                  mouthWidthPct: Number(vowelDetail.mouthWidthPct.toFixed(1)),
-                  roundingPct: Number(vowelDetail.roundingPct.toFixed(1)),
-                  patternMatchPct: Number(vowelDetail.patternMatchPct.toFixed(1)),
-                },
-                dataSource: "measured",
-                timestamp: new Date().toLocaleTimeString(),
-                responseTime: responseTimeMs,
-              };
-
-              // localStorage 용량 초과 시 항목 수를 줄이지 않고,
-              // 오래된 항목의 audioUrl만 제거해 10개 메타데이터를 최대한 유지합니다.
-              let candidate = [...existing, nextEntry].slice(
-                -STEP2_MAX_STORED_AUDIO_ITEMS,
-              );
-              let saved = false;
-              let droppedByQuota = 0;
-              let strippedAudioCount = 0;
-
-              while (!saved) {
+                const base64Audio = reader.result as string;
+                let existing: any[] = [];
                 try {
-                  localStorage.setItem(
-                    STEP2_AUDIO_STORAGE_KEY,
-                    JSON.stringify(candidate),
-                  );
-                  saved = true;
-                } catch (saveError) {
-                  if (!isQuotaExceededError(saveError)) {
-                    throw saveError;
-                  }
-
-                  const oldestAudioIndex = candidate.findIndex(
-                    (item) => Boolean(item?.audioUrl),
-                  );
-                  if (oldestAudioIndex >= 0) {
-                    candidate[oldestAudioIndex] = {
-                      ...candidate[oldestAudioIndex],
-                      audioUrl: undefined,
-                    };
-                    strippedAudioCount += 1;
-                    continue;
-                  }
-
-                  if (candidate.length > 1) {
-                    candidate = candidate.slice(1);
-                    droppedByQuota += 1;
-                    continue;
-                  }
-
-                  localStorage.removeItem(STEP2_AUDIO_STORAGE_KEY);
-                  candidate = [{ ...nextEntry, audioUrl: undefined }];
+                  const raw = localStorage.getItem(STEP2_AUDIO_STORAGE_KEY) || "[]";
+                  const parsed = JSON.parse(raw);
+                  existing = Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  existing = [];
                 }
-              }
+                const nextEntry = {
+                  ...currentResultEntry,
+                  audioUrl:
+                    typeof base64Audio === "string" &&
+                    base64Audio.length <= STEP2_MAX_AUDIO_URL_CHARS
+                      ? base64Audio
+                      : undefined,
+                  timestamp: new Date().toLocaleTimeString(),
+                };
 
-              if (!nextEntry.audioUrl || strippedAudioCount > 0 || droppedByQuota > 0) {
-                console.warn("[Step2] save:reduced", {
-                  strippedAudioCount,
-                  droppedByQuota,
+                const byIndex = new Map<number, any>();
+                existing.slice(-protocol.length).forEach((row: any, fallbackIndex: number) => {
+                  const resolvedIndex = Number.isFinite(Number(row?.index))
+                    ? Number(row.index)
+                    : fallbackIndex;
+                  if (resolvedIndex < 0 || resolvedIndex >= protocol.length) return;
+                  byIndex.set(resolvedIndex, row);
+                });
+                byIndex.set(currentIndex, nextEntry);
+                let candidate = Array.from(byIndex.entries())
+                  .sort((a, b) => a[0] - b[0])
+                  .map((entry) => entry[1])
+                  .slice(-Math.min(STEP2_MAX_STORED_AUDIO_ITEMS, protocol.length));
+                let saved = false;
+                let droppedByQuota = 0;
+                let strippedAudioCount = 0;
+
+                while (!saved) {
+                  try {
+                    localStorage.setItem(
+                      STEP2_AUDIO_STORAGE_KEY,
+                      JSON.stringify(candidate),
+                    );
+                    saveResumeMeta(
+                      STEP2_AUDIO_STORAGE_KEY,
+                      stepSignature,
+                      candidate.length,
+                    );
+                    saved = true;
+                  } catch (saveError) {
+                    if (!isQuotaExceededError(saveError)) {
+                      throw saveError;
+                    }
+
+                    const oldestAudioIndex = candidate.findIndex(
+                      (item) => Boolean(item?.audioUrl),
+                    );
+                    if (oldestAudioIndex >= 0) {
+                      candidate[oldestAudioIndex] = {
+                        ...candidate[oldestAudioIndex],
+                        audioUrl: undefined,
+                      };
+                      strippedAudioCount += 1;
+                      continue;
+                    }
+
+                    if (candidate.length > 1) {
+                      candidate = candidate.slice(1);
+                      droppedByQuota += 1;
+                      continue;
+                    }
+
+                    localStorage.removeItem(STEP2_AUDIO_STORAGE_KEY);
+                    clearResumeMeta(STEP2_AUDIO_STORAGE_KEY);
+                    candidate = [{ ...nextEntry, audioUrl: undefined }];
+                  }
+                }
+
+                if (!nextEntry.audioUrl || strippedAudioCount > 0 || droppedByQuota > 0) {
+                  console.warn("[Step2] save:reduced", {
+                    strippedAudioCount,
+                    droppedByQuota,
+                    savedCount: candidate.length,
+                    hasAudio: Boolean(candidate[candidate.length - 1]?.audioUrl),
+                  });
+                }
+                console.debug("[Step2] save:success", {
+                  key: STEP2_AUDIO_STORAGE_KEY,
                   savedCount: candidate.length,
-                  hasAudio: Boolean(candidate[candidate.length - 1]?.audioUrl),
+                  score: Number(finalScore.toFixed(1)),
+                });
+                setReviewAudioUrl(URL.createObjectURL(audioBlob));
+                updateRuntimeStatus({
+                  pageError: false,
+                  needsRetry: false,
+                  message: "저장 완료",
+                });
+                resolve(true);
+              } catch (saveErr) {
+                console.error("Step2 localStorage 저장 실패:", saveErr);
+                setStatusText("녹음 저장 중 오류가 발생했습니다.");
+                updateRuntimeStatus({
+                  pageError: true,
+                  needsRetry: true,
+                  message:
+                    "저장 실패(용량/저장소 이슈 가능): 브라우저 저장소를 확인하고 해당 문항을 다시 녹음해 주세요.",
+                });
+                resolve(false);
+              } finally {
+                setIsSaving(false);
+                updateRuntimeStatus({
+                  saving: false,
                 });
               }
-              console.debug("[Step2] save:success", {
-                key: STEP2_AUDIO_STORAGE_KEY,
-                savedCount: candidate.length,
-                score: Number(finalScore.toFixed(1)),
-              });
-              setReviewAudioUrl(URL.createObjectURL(audioBlob));
-              updateRuntimeStatus({
-                pageError: false,
-                needsRetry: false,
-                message: "저장 완료",
-              });
-            } catch (saveErr) {
-              console.error("Step2 localStorage 저장 실패:", saveErr);
-              setStatusText("녹음 저장 중 오류가 발생했습니다.");
-              updateRuntimeStatus({
-                pageError: true,
-                needsRetry: true,
-                message: "저장 실패: 브라우저 저장소 상태를 확인해 주세요.",
-              });
-            } finally {
+            };
+            reader.onerror = () => {
+              console.error("Step2 FileReader 오류");
+              setStatusText("녹음 파일 처리 중 오류가 발생했습니다.");
               setIsSaving(false);
               updateRuntimeStatus({
                 saving: false,
+                pageError: true,
+                needsRetry: true,
+                message: "오디오 파일 처리 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
               });
-            }
-          };
-          reader.onerror = () => {
-            console.error("Step2 FileReader 오류");
-            setStatusText("녹음 파일 처리 중 오류가 발생했습니다.");
-            setIsSaving(false);
-            updateRuntimeStatus({
-              saving: false,
-              pageError: true,
-              needsRetry: true,
-              message: "오디오 파일 처리 오류가 발생했습니다.",
-            });
-          };
-          reader.readAsDataURL(audioBlob);
+              resolve(false);
+            };
+            reader.readAsDataURL(audioBlob);
+          });
         } else {
           console.warn("[Step2] save:skip (audioBlob 없음)", {
             index: currentIndex,
@@ -1164,9 +1202,41 @@ function Step2Content() {
             saving: false,
             pageError: true,
             needsRetry: true,
-            message: "오디오 저장 데이터가 생성되지 않았습니다.",
+            message: "오디오 저장 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
           });
+          saveSucceeded = false;
         }
+        if (!saveSucceeded) {
+          setTranscript("");
+          setResultScore(null);
+          setResultConsonantAccuracy(null);
+          setResultVowelAccuracy(null);
+          setCanRecord(true);
+          return;
+        }
+        updateRuntimeStatus({
+          pageError: false,
+          needsRetry: false,
+          message: "분석 완료",
+        });
+        setTranscript(result.transcript || "");
+        setResultScore(Number(finalScore.toFixed(1)));
+        setResultConsonantAccuracy(Number(consonantAccuracy.toFixed(1)));
+        setResultVowelAccuracy(Number(vowelAccuracy.toFixed(1)));
+        setAnalysisResults((prev) => {
+          const byIndex = new Map<number, any>();
+          prev.forEach((row: any, fallbackIndex: number) => {
+            const resolvedIndex = Number.isFinite(Number(row?.index))
+              ? Number(row.index)
+              : fallbackIndex;
+            if (resolvedIndex < 0 || resolvedIndex >= protocol.length) return;
+            byIndex.set(resolvedIndex, row);
+          });
+          byIndex.set(currentIndex, currentResultEntry);
+          return Array.from(byIndex.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map((entry) => entry[1]);
+        });
       } catch (err) {
         console.error("Analysis Error:", err);
         setStatusText("분석 중 오류가 발생했습니다.");
@@ -1175,8 +1245,13 @@ function Step2Content() {
           saving: false,
           pageError: true,
           needsRetry: true,
-          message: "분석 오류: 다시 실행해 주세요.",
+          message: "분석 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
         });
+        setTranscript("");
+        setResultScore(null);
+        setResultConsonantAccuracy(null);
+        setResultVowelAccuracy(null);
+        setCanRecord(true);
       } finally {
         setIsAnalyzing(false);
       }

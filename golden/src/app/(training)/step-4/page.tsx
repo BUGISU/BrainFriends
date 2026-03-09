@@ -36,12 +36,18 @@ import {
   STEP4_IMAGE_RAW_BASE_URL,
   toDataUrl,
 } from "@/features/steps/step4/utils";
+import {
+  buildStepSignature,
+  isResumeMetaMatched,
+  saveResumeMeta,
+} from "@/lib/trainingResume";
 
 export const dynamic = "force-dynamic";
 
 type Phase = "ready" | "recording" | "analyzing" | "review";
 
 type Step4EvalResult = {
+  index?: number;
   situation: string;
   prompt: string;
   transcript: string;
@@ -79,6 +85,7 @@ type Step4EvalResult = {
     patternMatchPct: number;
   };
 };
+const STEP4_STORAGE_KEY = "step4_recorded_audios";
 
 function Step4Content() {
   const router = useRouter();
@@ -211,6 +218,15 @@ function Step4Content() {
   const scenarios = useMemo(
     () => FLUENCY_SCENARIOS[place] || FLUENCY_SCENARIOS.home,
     [place],
+  );
+  const stepSignature = useMemo(
+    () =>
+      buildStepSignature(
+        "step4",
+        place,
+        scenarios.map((item) => `${item.id ?? ""}|${item.situation ?? ""}|${item.prompt ?? ""}`),
+      ),
+    [place, scenarios],
   );
   const currentScenario = scenarios[currentIndex];
 
@@ -393,7 +409,78 @@ function Step4Content() {
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem("step4_recorded_audios");
+    try {
+      if (!isResumeMetaMatched(STEP4_STORAGE_KEY, stepSignature)) {
+        throw new Error("step4-signature-mismatch");
+      }
+      const raw = localStorage.getItem(STEP4_STORAGE_KEY) || "[]";
+      const parsed = JSON.parse(raw);
+      const saved = Array.isArray(parsed) ? parsed : [];
+      if (saved.length > 0) {
+        const sourceRows = saved.slice(-scenarios.length);
+        const byIndex = new Map<number, Step4EvalResult>();
+        sourceRows.forEach((row: any, fallbackIndex: number) => {
+          const resolvedIndex = Number.isFinite(Number(row?.index))
+            ? Number(row.index)
+            : fallbackIndex;
+          if (resolvedIndex < 0 || resolvedIndex >= scenarios.length) return;
+          byIndex.set(resolvedIndex, {
+            index: resolvedIndex,
+            situation: String(row?.situation || row?.text || ""),
+            prompt: String(row?.prompt || ""),
+            transcript: String(row?.transcript || ""),
+            isCorrect: Boolean(row?.isCorrect),
+            matchedKeywords: Array.isArray(row?.matchedKeywords)
+              ? row.matchedKeywords
+              : [],
+            relevantSentenceCount: Number(row?.relevantSentenceCount ?? 1),
+            totalSentenceCount: Number(row?.totalSentenceCount ?? 1),
+            relevanceScore: Number(row?.relevanceScore ?? row?.contentComponentScore ?? 0),
+            contentComponentScore: Number(row?.contentComponentScore ?? 0),
+            fluencyComponentScore: Number(row?.fluencyComponentScore ?? 0),
+            clarityComponentScore: Number(row?.clarityComponentScore ?? 0),
+            responseStartComponentScore: Number(row?.responseStartComponentScore ?? 0),
+            responseStartMs:
+              row?.responseStartMs === null || row?.responseStartMs === undefined
+                ? null
+                : Number(row.responseStartMs),
+            finalScore: Number(row?.finalScore ?? 0),
+            speechDuration: Number(row?.speechDuration ?? 0),
+            silenceRatio: Number(row?.silenceRatio ?? 0),
+            averageAmplitude: Number(row?.averageAmplitude ?? 0),
+            peakCount: Number(row?.peakCount ?? 0),
+            kwabScore: Number(row?.kwabScore ?? row?.fluencyScore ?? 0),
+            rawScore: Number(row?.rawScore ?? 0),
+            audioUrl: typeof row?.audioUrl === "string" ? row.audioUrl : "",
+            consonantAccuracy:
+              row?.consonantAccuracy === undefined
+                ? undefined
+                : Number(row.consonantAccuracy),
+            vowelAccuracy:
+              row?.vowelAccuracy === undefined ? undefined : Number(row.vowelAccuracy),
+            articulationWritingConsistency:
+              row?.articulationWritingConsistency === undefined
+                ? undefined
+                : Number(row.articulationWritingConsistency),
+            consonantDetail: row?.consonantDetail,
+            vowelDetail: row?.vowelDetail,
+          });
+        });
+        const restored = Array.from(byIndex.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map((entry) => entry[1]);
+        const safeCount = Math.min(restored.length, scenarios.length);
+        if (safeCount < scenarios.length) {
+          const resumed = restored.slice(0, safeCount);
+          setAllResults(resumed);
+          setCurrentIndex(
+            Math.min(Math.max(0, safeCount), Math.max(0, scenarios.length - 1)),
+          );
+        }
+      }
+    } catch {
+      // ignore restore failure and start from first item
+    }
     resetRuntimeStatus();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -406,7 +493,7 @@ function Step4Content() {
       }
       resetRuntimeStatus();
     };
-  }, [resetRuntimeStatus]);
+  }, [resetRuntimeStatus, scenarios.length, stepSignature]);
 
   // 안내 음성 재생 (단순 버전)
   const playInstruction = useCallback(() => {
@@ -598,6 +685,7 @@ function Step4Content() {
       });
 
       const evalResult: Step4EvalResult = {
+        index: currentIndex,
         situation: currentScenario.situation,
         prompt: currentScenario.prompt,
         transcript,
@@ -640,9 +728,7 @@ function Step4Content() {
         },
       };
 
-      setCurrentResult(evalResult);
-      setAllResults((prev) => [...prev, evalResult]);
-
+      let saveSucceeded = false;
       if (analysis.audioBlob) {
         updateRuntimeStatus({
           saving: true,
@@ -651,51 +737,65 @@ function Step4Content() {
         try {
           const base64Audio = await toDataUrl(analysis.audioBlob);
           const existing = JSON.parse(
-            localStorage.getItem("step4_recorded_audios") || "[]",
+            localStorage.getItem(STEP4_STORAGE_KEY) || "[]",
           );
-          const next = Array.isArray(existing)
-            ? [
-                ...existing,
-                {
-                  text: currentScenario.situation,
-                  prompt: currentScenario.prompt,
-                  transcript: transcript || "...",
-                  consonantAccuracy: Number(consonantAccuracy.toFixed(1)),
-                  vowelAccuracy: Number(vowelAccuracy.toFixed(1)),
-                  articulationWritingConsistency: Number(
-                    articulationWritingConsistency.toFixed(1),
-                  ),
-                  consonantDetail: {
-                    closureRatePct: Number(consonantDetail.closureRatePct.toFixed(1)),
-                    closureHoldMs: Number(consonantDetail.closureHoldMs.toFixed(1)),
-                    lipSymmetryPct: Number(consonantDetail.lipSymmetryPct.toFixed(1)),
-                    openingSpeedMs: Number(consonantDetail.openingSpeedMs.toFixed(1)),
-                  },
-                  vowelDetail: {
-                    mouthOpeningPct: Number(vowelDetail.mouthOpeningPct.toFixed(1)),
-                    mouthWidthPct: Number(vowelDetail.mouthWidthPct.toFixed(1)),
-                    roundingPct: Number(vowelDetail.roundingPct.toFixed(1)),
-                    patternMatchPct: Number(vowelDetail.patternMatchPct.toFixed(1)),
-                  },
-                  audioUrl: base64Audio,
-                  isCorrect: scored.kwabScore >= 5,
-                  contentComponentScore: scored.contentScore,
-                  fluencyComponentScore: scored.fluencyScore,
-                  clarityComponentScore: scored.clarityScore,
-                  responseStartComponentScore: scored.responseStartScore,
-                  responseStartMs,
-                  responseTime: responseStartMs,
-                  finalScore: scored.finalScore,
-                  fluencyScore: scored.kwabScore,
-                  kwabScore: scored.kwabScore,
-                  rawScore: analysis.pronunciationScore,
-                  speechDuration: speechDurationSec,
-                  silenceRatio: 0,
-                  timestamp: new Date().toLocaleTimeString(),
-                },
-              ]
-            : [];
-          localStorage.setItem("step4_recorded_audios", JSON.stringify(next));
+          const nextEntry = {
+            index: currentIndex,
+            text: currentScenario.situation,
+            prompt: currentScenario.prompt,
+            transcript: transcript || "...",
+            consonantAccuracy: Number(consonantAccuracy.toFixed(1)),
+            vowelAccuracy: Number(vowelAccuracy.toFixed(1)),
+            articulationWritingConsistency: Number(
+              articulationWritingConsistency.toFixed(1),
+            ),
+            consonantDetail: {
+              closureRatePct: Number(consonantDetail.closureRatePct.toFixed(1)),
+              closureHoldMs: Number(consonantDetail.closureHoldMs.toFixed(1)),
+              lipSymmetryPct: Number(consonantDetail.lipSymmetryPct.toFixed(1)),
+              openingSpeedMs: Number(consonantDetail.openingSpeedMs.toFixed(1)),
+            },
+            vowelDetail: {
+              mouthOpeningPct: Number(vowelDetail.mouthOpeningPct.toFixed(1)),
+              mouthWidthPct: Number(vowelDetail.mouthWidthPct.toFixed(1)),
+              roundingPct: Number(vowelDetail.roundingPct.toFixed(1)),
+              patternMatchPct: Number(vowelDetail.patternMatchPct.toFixed(1)),
+            },
+            audioUrl: base64Audio,
+            isCorrect: scored.kwabScore >= 5,
+            contentComponentScore: scored.contentScore,
+            fluencyComponentScore: scored.fluencyScore,
+            clarityComponentScore: scored.clarityScore,
+            responseStartComponentScore: scored.responseStartScore,
+            responseStartMs,
+            responseTime: responseStartMs,
+            finalScore: scored.finalScore,
+            fluencyScore: scored.kwabScore,
+            kwabScore: scored.kwabScore,
+            rawScore: analysis.pronunciationScore,
+            speechDuration: speechDurationSec,
+            silenceRatio: 0,
+            timestamp: new Date().toLocaleTimeString(),
+          };
+
+          const byIndex = new Map<number, any>();
+          if (Array.isArray(existing)) {
+            const sourceRows = existing.slice(-scenarios.length);
+            sourceRows.forEach((row: any, fallbackIndex: number) => {
+              const resolvedIndex = Number.isFinite(Number(row?.index))
+                ? Number(row.index)
+                : fallbackIndex;
+              if (resolvedIndex < 0 || resolvedIndex >= scenarios.length) return;
+              byIndex.set(resolvedIndex, row);
+            });
+          }
+          byIndex.set(currentIndex, nextEntry);
+          const next = Array.from(byIndex.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map((entry) => entry[1])
+            .slice(0, scenarios.length);
+          localStorage.setItem(STEP4_STORAGE_KEY, JSON.stringify(next));
+          saveResumeMeta(STEP4_STORAGE_KEY, stepSignature, next.length);
           console.log("[Step4] save:success", {
             index: currentIndex,
             savedCount: next.length,
@@ -707,13 +807,15 @@ function Step4Content() {
             needsRetry: false,
             message: "저장 완료",
           });
+          saveSucceeded = true;
         } catch (e) {
           console.error("[Step4] save:failed", e);
           setSaveStatusText("저장 실패");
           updateRuntimeStatus({
             pageError: true,
             needsRetry: true,
-            message: "저장 실패: 브라우저 저장소 상태를 확인해 주세요.",
+            message:
+              "저장 실패(용량/저장소 이슈 가능): 브라우저 저장소를 확인하고 해당 문항을 다시 녹음해 주세요.",
           });
         } finally {
           updateRuntimeStatus({
@@ -728,10 +830,30 @@ function Step4Content() {
         updateRuntimeStatus({
           pageError: true,
           needsRetry: true,
-          message: "오디오 데이터가 생성되지 않았습니다.",
+          message: "오디오 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
         });
       }
-
+      if (!saveSucceeded) {
+        setCurrentResult(null);
+        setSaveStatusText("재녹음 필요");
+        setPhase("ready");
+        return;
+      }
+      setCurrentResult(evalResult);
+      setAllResults((prev) => {
+        const byIndex = new Map<number, Step4EvalResult>();
+        prev.forEach((row, idx) => {
+          const resolvedIndex = Number.isFinite(Number(row?.index))
+            ? Number(row.index)
+            : idx;
+          if (resolvedIndex < 0 || resolvedIndex >= scenarios.length) return;
+          byIndex.set(resolvedIndex, row);
+        });
+        byIndex.set(currentIndex, evalResult);
+        return Array.from(byIndex.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map((entry) => entry[1]);
+      });
       setPhase("review");
     } catch (err) {
       console.error("[Step4] analyze:failed", err);
@@ -740,7 +862,7 @@ function Step4Content() {
         saving: false,
         pageError: true,
         needsRetry: true,
-        message: "분석 중 오류가 발생했습니다.",
+        message: "분석 중 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
       });
       setPhase("ready");
     }
@@ -853,10 +975,11 @@ function Step4Content() {
         window.speechSynthesis.cancel();
       }
 
-      const demoItems = scenarios.slice(0, 3).map((scenario) => {
+      const demoItems = scenarios.slice(0, 3).map((scenario, index) => {
         const finalScore = randomFloat(58, 96);
         const kwabScore = Number((finalScore / 10).toFixed(1));
         return {
+          index,
           situation: scenario.situation,
           prompt: scenario.prompt,
           transcript: "시연용 더미 응답입니다.",
@@ -882,7 +1005,8 @@ function Step4Content() {
         };
       });
 
-      localStorage.setItem("step4_recorded_audios", JSON.stringify(demoItems));
+      localStorage.setItem(STEP4_STORAGE_KEY, JSON.stringify(demoItems));
+      saveResumeMeta(STEP4_STORAGE_KEY, stepSignature, demoItems.length);
 
       const patient = loadPatientProfile();
       const sessionManager = new SessionManager(
@@ -933,7 +1057,7 @@ function Step4Content() {
     } catch (error) {
       console.error("Step4 skip failed:", error);
     }
-  }, [place, pushStep5OrRehabResult, scenarios]);
+  }, [place, pushStep5OrRehabResult, scenarios, stepSignature]);
 
   if (!isMounted || !currentScenario) return null;
 

@@ -30,10 +30,17 @@ import {
   blendArticulationAccuracy,
   getStep5TextSizeClass,
 } from "@/features/steps/step5/utils";
+import {
+  buildStepSignature,
+  isResumeMetaMatched,
+  saveResumeMeta,
+} from "@/lib/trainingResume";
 
 export const dynamic = "force-dynamic";
+const STEP5_STORAGE_KEY = "step5_recorded_data";
 
 interface ReadingMetrics {
+  index?: number;
   place: string;
   text: string;
   transcript?: string;
@@ -232,6 +239,15 @@ function Step5Content() {
     () => READING_TEXTS[place] || READING_TEXTS.home,
     [place],
   );
+  const stepSignature = useMemo(
+    () =>
+      buildStepSignature(
+        "step5",
+        place,
+        texts.map((item) => item.text),
+      ),
+    [place, texts],
+  );
   const currentItem = texts[currentIndex];
   const formattedText = useMemo(
     () => addSentenceLineBreaks(currentItem?.text || ""),
@@ -384,7 +400,36 @@ function Step5Content() {
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.removeItem("step5_recorded_data");
+    try {
+      if (!isResumeMetaMatched(STEP5_STORAGE_KEY, stepSignature)) {
+        throw new Error("step5-signature-mismatch");
+      }
+      const raw = localStorage.getItem(STEP5_STORAGE_KEY) || "[]";
+      const parsed = JSON.parse(raw);
+      const saved = Array.isArray(parsed) ? parsed : [];
+      if (saved.length > 0) {
+        const byIndex = new Map<number, ReadingMetrics>();
+        saved.slice(-texts.length).forEach((row: any, fallbackIndex: number) => {
+          const resolvedIndex = Number.isFinite(Number(row?.index))
+            ? Number(row.index)
+            : fallbackIndex;
+          if (resolvedIndex < 0 || resolvedIndex >= texts.length) return;
+          byIndex.set(resolvedIndex, row as ReadingMetrics);
+        });
+        const restored = Array.from(byIndex.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map((entry) => entry[1]);
+        const safeCount = Math.min(restored.length, texts.length);
+        if (safeCount < texts.length) {
+          setResults(restored.slice(0, safeCount));
+          setCurrentIndex(
+            Math.min(Math.max(0, safeCount), Math.max(0, texts.length - 1)),
+          );
+        }
+      }
+    } catch {
+      // ignore restore failure and start from first item
+    }
     analyzerRef.current = new SpeechAnalyzer();
     resetRuntimeStatus();
 
@@ -412,7 +457,7 @@ function Step5Content() {
       }
       resetRuntimeStatus();
     };
-  }, [resetRuntimeStatus]);
+  }, [resetRuntimeStatus, texts.length, stepSignature]);
 
   const getPhaseMessage = () => {
     switch (phase) {
@@ -603,26 +648,9 @@ function Step5Content() {
           needsRetry: true,
           message: "음성이 충분히 인식되지 않았습니다. 다시 읽어주세요.",
         });
-        setCurrentResult({
-          place,
-          text: currentItem.text,
-          transcript,
-          isCorrect: false,
-          audioUrl: audioBlob ? URL.createObjectURL(audioBlob) : "",
-          totalTime: finalReadingTime,
-          responseTime: Math.max(0, Math.round(finalReadingTime * 1000)),
-          recognitionResponseMs: Math.max(0, Math.round(finalReadingTime * 1000)),
-          wordsPerMinute: 0,
-          pauseCount: 0,
-          readingScore: 0,
-          readingAccuracyScore: 0,
-          fluencyScore: 0,
-          articulationClarityScore: 0,
-          consonantAccuracy: 0,
-          vowelAccuracy: 0,
-          articulationWritingConsistency: 0,
-          dataSource: "measured",
-        });
+        setCurrentResult(null);
+        setPhase("ready");
+        setHighlightIndex(-1);
         return;
       }
       const readingAccuracyScore = calculateTextSimilarityPercent(
@@ -660,6 +688,7 @@ function Step5Content() {
       });
 
       const res: ReadingMetrics = {
+        index: currentIndex,
         place,
         text: currentItem.text,
         transcript,
@@ -694,7 +723,6 @@ function Step5Content() {
         dataSource: "measured",
       };
 
-      setCurrentResult(res);
       articulationAggregateRef.current = {
         consonantSum: 0,
         vowelSum: 0,
@@ -709,46 +737,91 @@ function Step5Content() {
         count: 0,
       };
 
+      let saveSucceeded = true;
       if (audioBlob) {
         updateRuntimeStatus({
           saving: true,
           message: "결과 저장 중",
         });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          try {
-            const existing = JSON.parse(
-              localStorage.getItem("step5_recorded_data") || "[]",
-            );
-            const next = [
-              ...existing,
-              {
+        saveSucceeded = await new Promise<boolean>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            try {
+              const existing = JSON.parse(
+                localStorage.getItem(STEP5_STORAGE_KEY) || "[]",
+              );
+              const nextEntry = {
                 ...res,
+                index: currentIndex,
                 audioUrl: reader.result as string,
                 timestamp: new Date().toLocaleTimeString(),
-              },
-            ];
-            localStorage.setItem("step5_recorded_data", JSON.stringify(next));
-            updateRuntimeStatus({
-              pageError: false,
-              needsRetry: false,
-              message: "저장 완료",
-            });
-          } catch (saveError) {
-            console.error(saveError);
-            updateRuntimeStatus({
-              pageError: true,
-              needsRetry: true,
-              message: "저장 실패: 브라우저 저장소 상태를 확인해 주세요.",
-            });
-          } finally {
+              };
+              const byIndex = new Map<number, any>();
+              if (Array.isArray(existing)) {
+                existing.slice(-texts.length).forEach((row: any, fallbackIndex: number) => {
+                  const resolvedIndex = Number.isFinite(Number(row?.index))
+                    ? Number(row.index)
+                    : fallbackIndex;
+                  if (resolvedIndex < 0 || resolvedIndex >= texts.length) return;
+                  byIndex.set(resolvedIndex, row);
+                });
+              }
+              byIndex.set(currentIndex, nextEntry);
+              const next = Array.from(byIndex.entries())
+                .sort((a, b) => a[0] - b[0])
+                .map((entry) => entry[1])
+                .slice(0, texts.length);
+              localStorage.setItem(STEP5_STORAGE_KEY, JSON.stringify(next));
+              saveResumeMeta(STEP5_STORAGE_KEY, stepSignature, next.length);
+              updateRuntimeStatus({
+                pageError: false,
+                needsRetry: false,
+                message: "저장 완료",
+              });
+              resolve(true);
+            } catch (saveError) {
+              console.error(saveError);
+              updateRuntimeStatus({
+                pageError: true,
+                needsRetry: true,
+                message:
+                  "저장 실패(용량/저장소 이슈 가능): 브라우저 저장소를 확인하고 해당 문항을 다시 녹음해 주세요.",
+              });
+              resolve(false);
+            } finally {
+              updateRuntimeStatus({
+                saving: false,
+              });
+            }
+          };
+          reader.onerror = () => {
             updateRuntimeStatus({
               saving: false,
+              pageError: true,
+              needsRetry: true,
+              message: "오디오 파일 처리 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
             });
-          }
-        };
-        reader.readAsDataURL(audioBlob);
+            resolve(false);
+          };
+          reader.readAsDataURL(audioBlob);
+        });
+      } else {
+        updateRuntimeStatus({
+          pageError: true,
+          needsRetry: true,
+          message: "오디오 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
+        });
+        saveSucceeded = false;
       }
+
+      if (!saveSucceeded) {
+        setCurrentResult(null);
+        setPhase("ready");
+        setHighlightIndex(-1);
+        return;
+      }
+      setCurrentResult(res);
+      setPhase("review");
     } catch (error) {
       console.error(error);
       updateRuntimeStatus({
@@ -756,10 +829,12 @@ function Step5Content() {
         saving: false,
         pageError: true,
         needsRetry: true,
-        message: "분석 중 오류가 발생했습니다.",
+        message:
+          "분석 중 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
       });
-    } finally {
-      setPhase("review");
+      setCurrentResult(null);
+      setPhase("ready");
+      setHighlightIndex(-1);
     }
   };
 
@@ -786,7 +861,21 @@ function Step5Content() {
       setIsPlayingAudio(false);
     }
     if (!currentResult) return;
-    const updatedResults = [...results, currentResult];
+    const byIndex = new Map<number, ReadingMetrics>();
+    results.forEach((row, fallbackIndex) => {
+      const resolvedIndex = Number.isFinite(Number(row?.index))
+        ? Number(row.index)
+        : fallbackIndex;
+      if (resolvedIndex < 0 || resolvedIndex >= texts.length) return;
+      byIndex.set(resolvedIndex, row);
+    });
+    const currentResultIndex = Number.isFinite(Number(currentResult?.index))
+      ? Number(currentResult.index)
+      : currentIndex;
+    byIndex.set(currentResultIndex, { ...currentResult, index: currentResultIndex });
+    const updatedResults = Array.from(byIndex.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map((entry) => entry[1]);
     setResults(updatedResults);
 
     if (currentIndex < texts.length - 1) {
@@ -842,7 +931,7 @@ function Step5Content() {
       analyzerRef.current?.cancelAnalysis();
       resetRuntimeStatus();
 
-      const demoResults: ReadingMetrics[] = texts.map((item) => {
+      const demoResults: ReadingMetrics[] = texts.map((item, index) => {
         const totalTime = randomFloat(7, 16, 0);
         const wordsPerMinute = randomFloat(45, 130, 0);
         const readingAccuracyScore = randomFloat(62, 98, 1);
@@ -866,6 +955,7 @@ function Step5Content() {
         );
 
         return {
+          index,
           place,
           text: item.text,
           transcript: item.text,
@@ -891,7 +981,8 @@ function Step5Content() {
         ...res,
         timestamp: new Date().toLocaleTimeString(),
       }));
-      localStorage.setItem("step5_recorded_data", JSON.stringify(recordedPayload));
+      localStorage.setItem(STEP5_STORAGE_KEY, JSON.stringify(recordedPayload));
+      saveResumeMeta(STEP5_STORAGE_KEY, stepSignature, recordedPayload.length);
 
       const patient = loadPatientProfile();
       const sm = new SessionManager(
@@ -925,7 +1016,7 @@ function Step5Content() {
       console.error("Step5 skip failed:", error);
       pushStep6OrRehabResult(80);
     }
-  }, [pushStep6OrRehabResult, resetRuntimeStatus, texts]);
+  }, [pushStep6OrRehabResult, resetRuntimeStatus, texts, stepSignature]);
 
   if (!isMounted || !currentItem) return null;
 

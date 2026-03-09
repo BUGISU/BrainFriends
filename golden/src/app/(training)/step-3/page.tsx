@@ -30,10 +30,23 @@ import {
   shuffleArray,
   type Step3VisualOption as VisualOption,
 } from "@/features/steps/step3/utils";
+import {
+  buildStepSignature,
+  isResumeMetaMatched,
+  saveResumeMeta,
+} from "@/lib/trainingResume";
 
 export const dynamic = "force-dynamic";
 const STEP3_TOTAL_QUESTIONS = 10;
 const STEP_RESPONSE_BONUS_THRESHOLD_MS = 6000;
+const STEP3_STORAGE_KEY = "step3_data";
+const STEP3_PROTOCOL_KEY_PREFIX = "step3_protocol";
+type Step3ProtocolItem = {
+  targetWord: string;
+  answerId: string;
+  options: VisualOption[];
+  [key: string]: unknown;
+};
 
 function calculateCompositeScore(
   results: Array<{ isCorrect: boolean; responseTime?: number }>,
@@ -171,28 +184,68 @@ function Step3Content() {
 
   const imageCacheRef = useRef<Record<string, string>>({});
 
-  const protocol = useMemo(() => {
-    const allQuestions = (
-      VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
-    ).slice(0, VISUAL_MATCHING_RECOMMENDED_COUNT);
-    const sampledQuestions = shuffleArray(allQuestions).slice(
-      0,
-      STEP3_TOTAL_QUESTIONS,
-    );
-
-    // 문항 순서 랜덤 + 문항 내부 보기 순서 랜덤(정답 위치 고정 방지)
-    return sampledQuestions.map((q) => {
-      const shuffledOptions = shuffleArray(q.options);
-      const shuffledAnswer = shuffledOptions.find(
-        (opt) => opt.label === q.targetWord,
+  const protocol = useMemo<Step3ProtocolItem[]>(() => {
+    const buildProtocol = (): Step3ProtocolItem[] => {
+      const allQuestions = (
+        VISUAL_MATCHING_PROTOCOLS[place] || VISUAL_MATCHING_PROTOCOLS.home
+      ).slice(0, VISUAL_MATCHING_RECOMMENDED_COUNT);
+      const sampledQuestions = shuffleArray(allQuestions).slice(
+        0,
+        STEP3_TOTAL_QUESTIONS,
       );
-      return {
-        ...q,
-        options: shuffledOptions,
-        answerId: shuffledAnswer?.id ?? q.answerId,
-      };
-    });
+      return sampledQuestions.map((q) => {
+        const shuffledOptions = shuffleArray(q.options);
+        const shuffledAnswer = shuffledOptions.find(
+          (opt) => opt.label === q.targetWord,
+        );
+        return {
+          ...q,
+          options: shuffledOptions,
+          answerId: shuffledAnswer?.id ?? q.answerId,
+        };
+      });
+    };
+
+    if (typeof window === "undefined") {
+      return buildProtocol();
+    }
+
+    const protocolStorageKey = `${STEP3_PROTOCOL_KEY_PREFIX}:${place}`;
+    try {
+      const raw = sessionStorage.getItem(protocolStorageKey);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const isValid =
+        Array.isArray(parsed) &&
+        parsed.length === STEP3_TOTAL_QUESTIONS &&
+        parsed.every(
+          (item) =>
+            item &&
+            typeof item.targetWord === "string" &&
+            Array.isArray(item.options) &&
+            typeof item.answerId === "string",
+        );
+      if (isValid) return parsed as Step3ProtocolItem[];
+    } catch {
+      // ignore and rebuild
+    }
+
+    const nextProtocol = buildProtocol();
+    try {
+      sessionStorage.setItem(protocolStorageKey, JSON.stringify(nextProtocol));
+    } catch {
+      // ignore
+    }
+    return nextProtocol;
   }, [place]);
+  const stepSignature = useMemo(
+    () =>
+      buildStepSignature(
+        "step3",
+        place,
+        protocol.map((item) => `${item.targetWord}|${item.answerId}`),
+      ),
+    [place, protocol],
+  );
 
   const currentItem = protocol[currentIndex];
 
@@ -317,13 +370,37 @@ function Step3Content() {
   useEffect(() => {
     setIsMounted(true);
     GLOBAL_SPEECH_LOCK = {};
-    localStorage.removeItem("step3_data"); // ✅ 초기화
 
     return () => {
       if (typeof window !== "undefined" && window.speechSynthesis)
         window.speechSynthesis.cancel();
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || protocol.length === 0) return;
+    try {
+      if (!isResumeMetaMatched(STEP3_STORAGE_KEY, stepSignature)) return;
+      const raw = localStorage.getItem(STEP3_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      if (parsed.length >= protocol.length) return;
+
+      const protocolWords = new Set(
+        protocol.map((item) => String(item?.targetWord || "")),
+      );
+      const looksSameSession = parsed.every((row: any) =>
+        protocolWords.has(String(row?.text || "")),
+      );
+      if (!looksSameSession) return;
+
+      setAnalysisResults(parsed);
+      setCurrentIndex(Math.min(parsed.length, protocol.length - 1));
+      console.log(`↩️ Step 3 이어하기 복원: ${parsed.length}/${protocol.length}`);
+    } catch (error) {
+      console.error("Step 3 이어하기 복원 실패:", error);
+    }
+  }, [protocol, stepSignature]);
 
   const speakWord = useCallback((text: string) => {
     if (typeof window === "undefined") return;
@@ -539,7 +616,8 @@ function Step3Content() {
     setAnalysisResults(updatedResults);
 
     // ✅ Result 페이지용 백업 저장 (실시간, 최대 10개)
-    localStorage.setItem("step3_data", JSON.stringify(updatedResults));
+    localStorage.setItem(STEP3_STORAGE_KEY, JSON.stringify(updatedResults));
+    saveResumeMeta(STEP3_STORAGE_KEY, stepSignature, updatedResults.length);
     console.log("✅ Step 3 데이터 저장(10문항 기준):", updatedResults);
 
     setTimeout(() => {
@@ -587,6 +665,9 @@ function Step3Content() {
         } catch (e) {
           console.error("❌ Step 3 SessionManager 저장 실패:", e);
         }
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem(`${STEP3_PROTOCOL_KEY_PREFIX}:${place}`);
+        }
 
         pushStep4OrRehabResult(avgScore);
       }
@@ -620,7 +701,8 @@ function Step3Content() {
         };
       });
 
-      localStorage.setItem("step3_data", JSON.stringify(demoResults));
+      localStorage.setItem(STEP3_STORAGE_KEY, JSON.stringify(demoResults));
+      saveResumeMeta(STEP3_STORAGE_KEY, stepSignature, demoResults.length);
 
       const totalCount = Math.max(1, demoResults.length);
       const scoring = calculateCompositeScore(demoResults, totalCount);
@@ -651,12 +733,15 @@ function Step3Content() {
           ) / Math.max(1, demoResults.length),
         timestamp: Date.now(),
       });
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`${STEP3_PROTOCOL_KEY_PREFIX}:${place}`);
+      }
 
       pushStep4OrRehabResult(score);
     } catch (error) {
       console.error("Step3 skip failed:", error);
     }
-  }, [place, protocol, pushStep4OrRehabResult]);
+  }, [place, protocol, pushStep4OrRehabResult, stepSignature]);
 
   if (!isMounted || !currentItem) return null;
 

@@ -49,8 +49,10 @@ export function RehabDetailBlocks({
   };
 
   const displayMetrics =
-    safeStep === 2 ? getStep2DetailChips(detailComparisons) : detailComparisons;
-  const useThreeGrid = safeStep === 1 || safeStep === 2 || safeStep === 3;
+    safeStep === 2
+      ? getStep2DetailChips(detailComparisons)
+      : detailComparisons;
+  const useThreeGrid = safeStep === 1 || safeStep === 2 || safeStep === 3 || safeStep === 6;
   const useStep4Grid = safeStep === 4 || safeStep === 5;
 
   return (
