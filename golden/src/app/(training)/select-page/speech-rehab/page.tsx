@@ -32,7 +32,7 @@ const STEP_CARDS = [
     title: "Step 1",
     subtitle: "청각 이해",
     desc: "들리는 소리를 집중해서 이해하기",
-    route: "/step-1",
+    route: "/programs/step-1",
     icon: <Headphones className="w-6 h-6" />,
     imagePath: "/images/mode/step1.png",
     accentColor: "from-slate-500/55 to-slate-800/70",
@@ -42,7 +42,7 @@ const STEP_CARDS = [
     title: "Step 2",
     subtitle: "따라말하기",
     desc: "제시된 문장을 따라 말하기",
-    route: "/step-2",
+    route: "/programs/step-2",
     icon: <MessageSquare className="w-6 h-6" />,
     imagePath: "/images/mode/step2.png",
     accentColor: "from-slate-500/55 to-slate-800/70",
@@ -52,7 +52,7 @@ const STEP_CARDS = [
     title: "Step 3",
     subtitle: "단어 명명",
     desc: "사물의 이름을 정확히 부르기",
-    route: "/step-3",
+    route: "/programs/step-3",
     icon: <Tag className="w-6 h-6" />,
     imagePath: "/images/mode/step3.png",
     accentColor: "from-slate-500/55 to-slate-800/70",
@@ -62,7 +62,7 @@ const STEP_CARDS = [
     title: "Step 4",
     subtitle: "유창성",
     desc: "막힘없이 매끄럽게 말하기",
-    route: "/step-4",
+    route: "/programs/step-4",
     icon: <Zap className="w-6 h-6" />,
     imagePath: "/images/mode/step4.png",
     accentColor: "from-slate-500/55 to-slate-800/70",
@@ -72,7 +72,7 @@ const STEP_CARDS = [
     title: "Step 5",
     subtitle: "읽기",
     desc: "글자를 눈으로 보고 소리내어 읽기",
-    route: "/step-5",
+    route: "/programs/step-5",
     icon: <BookOpen className="w-6 h-6" />,
     imagePath: "/images/mode/step5.png",
     accentColor: "from-slate-500/55 to-slate-800/70",
@@ -82,7 +82,7 @@ const STEP_CARDS = [
     title: "Step 6",
     subtitle: "쓰기",
     desc: "정확한 획순으로 글자 써보기",
-    route: "/step-6",
+    route: "/programs/step-6",
     icon: <PenTool className="w-6 h-6" />,
     imagePath: "/images/mode/step6.png",
     accentColor: "from-slate-500/55 to-slate-800/70",
@@ -126,7 +126,7 @@ export default function RehabPage() {
       sessionStorage.setItem("btt.trainingMode", "rehab");
     }
     router.push(
-      `${route}?place=${encodeURIComponent(selectedPlace.key)}&trainMode=rehab&targetStep=${route.replace("/step-", "")}`,
+      `${route}?place=${encodeURIComponent(selectedPlace.key)}&trainMode=rehab&targetStep=${route.replace("/programs/step-", "")}`,
     );
   };
 
@@ -164,10 +164,10 @@ export default function RehabPage() {
         <div className="flex items-center justify-end gap-2 sm:gap-3 flex-wrap">
           <button
             type="button"
-            onClick={() => router.push("/select")}
+            onClick={() => router.push("/select-page/mode")}
             className="h-8 sm:h-9 min-w-[90px] sm:min-w-[98px] px-3 sm:px-4 rounded-full text-[11px] sm:text-xs font-black shadow-sm border bg-gradient-to-r from-sky-600 to-sky-500 text-white border-sky-500 hover:from-sky-700 hover:to-sky-600 transition-all"
           >
-            자가진단
+            활동선택
           </button>
           <button
             type="button"
@@ -186,7 +186,7 @@ export default function RehabPage() {
         </div>
       </div>
 
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-10 pb-20 sm:pb-10">
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-20 sm:pb-24 min-h-[calc(100vh-12.5rem)] flex flex-col justify-center">
         <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 mb-6 sm:mb-10">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 tracking-tight">
@@ -240,12 +240,12 @@ export default function RehabPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
           {STEP_CARDS.map((step) => (
             <button
               key={step.id}
               onClick={() => moveStep(step.route)}
-              className="group relative w-full aspect-[16/10] sm:aspect-[4/3] rounded-[24px] sm:rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
+              className="group relative w-full aspect-[16/10] sm:aspect-[4/3] lg:aspect-[5/4] 2xl:aspect-[4/3] rounded-[24px] sm:rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
             >
               <div
                 className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"

@@ -439,112 +439,43 @@ function ResultContent() {
     <>
       <style jsx global>{`
         @page {
-          size: A4 portrait;
-          margin: 50px;
+          margin: 12mm;
         }
         @media print {
+          html,
           body {
-            background: white !important;
-            font-size: 8.5pt !important;
-            line-height: 1.2 !important;
+            height: auto !important;
+            overflow: visible !important;
           }
-          .no-print {
-            display: none !important;
-          }
-          .print-only {
-            display: block !important;
+          body {
+            background: #fff !important;
           }
           .print-container {
-            width: auto;
-            max-width: none;
-            padding: 0;
-            margin: 0 auto;
-            box-shadow: none !important;
-            gap: 1.5mm !important;
+            width: auto !important;
+            max-width: none !important;
+            padding: 0 !important;
+            margin: 0 auto !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          .h-full,
+          .min-h-screen,
+          .overflow-y-auto {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
+          .sticky,
+          .fixed {
+            position: static !important;
           }
           section {
-            page-break-inside: avoid;
-            border: 1px solid #eee !important;
-            border-radius: 10px !important;
-            margin-bottom: 1.5mm !important;
-            padding: 7px !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
           }
-          header {
-            border-bottom: 1px solid #cbd5e1 !important;
-            padding: 7px !important;
-            margin-bottom: 1.5mm !important;
-          }
-          .print-header h2 {
-            font-size: 13px !important;
-          }
-          .print-top-grid {
-            grid-template-columns: 1fr !important;
-            gap: 1.5mm !important;
-          }
-          .profile-chart {
-            width: 95px !important;
-            height: 95px !important;
-          }
-          .profile-body {
-            display: grid !important;
-            grid-template-columns: 110px 1fr !important;
-            gap: 8px !important;
-            align-items: center !important;
-          }
-          .profile-chart-wrap {
-            margin: 0 !important;
-            justify-content: center !important;
-          }
-          .profile-metrics {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 4px 8px !important;
-          }
-          .profile-metric-item {
-            background: transparent !important;
-            border: none !important;
-            border-left: 2px solid #fed7aa !important;
-            border-radius: 0 !important;
-            padding: 2px 0 2px 6px !important;
-            align-items: flex-start !important;
-            text-align: left !important;
-          }
-          .profile-metric-item .metric-title {
-            font-size: 9px !important;
-            margin-bottom: 1px !important;
-          }
-          .profile-metric-item .metric-value {
-            font-size: 10.5px !important;
-          }
-          .patient-meta-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr)) 140px !important;
-            gap: 3px !important;
-          }
-          .aq-card {
-            grid-column: 4 !important;
-            grid-row: 1 / span 2 !important;
-            min-width: 140px !important;
-            padding: 6px 8px !important;
-          }
-          .normal-compare-card {
-            grid-column: 1 / span 3 !important;
-            grid-row: 2 !important;
-          }
-          .aq-card .aq-value {
-            font-size: 20px !important;
-          }
-          .impression-content {
-            gap: 4px !important;
-          }
-          .impression-content p {
-            margin: 0 !important;
-          }
-          .print-history-list .history-row {
-            padding: 4px 6px !important;
-          }
-          .print-history-list .history-row p {
-            font-size: 9px !important;
-            line-height: 1.15 !important;
+          .profile-section {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
         .print-only {
@@ -595,7 +526,7 @@ function ResultContent() {
               </button>
               <button
                 type="button"
-                onClick={() => router.push("/select")}
+                onClick={() => router.push("/select-page/self-assessment")}
                 aria-label="홈으로 이동"
                 title="홈"
                 className="w-9 h-9 rounded-xl border border-orange-200 bg-white text-orange-700 hover:bg-orange-50 transition-colors flex items-center justify-center"

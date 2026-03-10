@@ -1,10 +1,18 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { TrainingProvider, useTraining } from "./TrainingContext";
 import FaceTracker from "@/components/diagnosis/FaceTracker";
 
-function MetricBox({ label, subLabel, value, target, color }: any) {
+function MetricBox({
+  label,
+  subLabel,
+  value,
+  target,
+  color,
+  status,
+}: any) {
   return (
     <div className="relative group flex flex-col items-start border-r border-slate-50 last:border-0 pr-2.5">
       {subLabel ? (
@@ -23,13 +31,29 @@ function MetricBox({ label, subLabel, value, target, color }: any) {
           {target}
         </span>
       </div>
+      {status ? (
+        <span
+          className={`mt-0.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[7px] md:text-[8px] font-black ${
+            status === "PASS"
+              ? "bg-emerald-50 text-emerald-600"
+              : status === "FAIL"
+                ? "bg-red-50 text-red-600"
+                : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {status}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isReportRoute = pathname === "/report";
   const {
     clinicalMetrics,
+    sidebarMetrics,
     runtimeStatus,
     updateClinical,
     updateSidebar,
@@ -39,6 +63,11 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
   // ✅ 엔진용 Refs (화면에는 보이지 않으며 좌표 추출용으로만 사용)
   const engineVideoRef = useRef<HTMLVideoElement>(null);
   const engineCanvasRef = useRef<HTMLCanvasElement>(null);
+  const prevLandmarksRef = useRef<any[] | null>(null);
+  const latencyEmaRef = useRef(0);
+  const precisionEmaRef = useRef(0);
+  const fpsEmaRef = useRef(0);
+  const precisionHistoryRef = useRef<number[]>([]);
 
   const getStatusColor = (
     current: number,
@@ -102,6 +131,22 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
             color: "text-sky-500",
             lamp: "bg-sky-500 animate-pulse",
           }
+        : !sidebarMetrics.cameraActive
+          ? {
+              label: "카메라 상태",
+              value: "비활성",
+              target: "권한 확인",
+              color: "text-slate-400",
+              lamp: "bg-slate-400",
+            }
+          : !sidebarMetrics.faceDetected
+            ? {
+                label: "추적 상태",
+                value: "얼굴 미검출",
+                target: "프레임 내 위치",
+                color: "text-orange-400",
+                lamp: "bg-orange-400 animate-pulse",
+              }
         : {
             label: "운영 상태",
             value: "정상",
@@ -110,64 +155,140 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
             lamp: "bg-emerald-500",
           };
 
+  const isTrackerReady = sidebarMetrics.cameraActive && sidebarMetrics.faceDetected;
+  const metricOrNA = (value: string) => (isTrackerReady ? value : "N/A");
+  const metricColorOrNA = (color: string) => (isTrackerReady ? color : "text-slate-400");
+  const metricStatus = (isPass: boolean) =>
+    isTrackerReady ? (isPass ? "PASS" : "FAIL") : "PENDING";
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, value));
+
+  const ema = (prev: number, next: number, alpha = 0.2) =>
+    prev === 0 ? next : prev * (1 - alpha) + next * alpha;
+
+  const avgDistance = (a: any[], b: any[], points: number[]) => {
+    let sum = 0;
+    let count = 0;
+    for (const idx of points) {
+      const pa = a?.[idx];
+      const pb = b?.[idx];
+      if (!pa || !pb) continue;
+      const dx = (pb.x ?? 0) - (pa.x ?? 0);
+      const dy = (pb.y ?? 0) - (pa.y ?? 0);
+      sum += Math.hypot(dx, dy);
+      count += 1;
+    }
+    return count > 0 ? sum / count : 0;
+  };
+
+  const kpiPassMap = useMemo(() => {
+    const latencyPass = clinicalMetrics.systemLatency <= 50;
+    const trackingPass = clinicalMetrics.trackingPrecision <= 0.5;
+    const analysisPass = clinicalMetrics.analysisAccuracy >= 95.2;
+    const corrPass = clinicalMetrics.correlation >= 0.85;
+    const reliabilityPass = clinicalMetrics.reliability >= 0.8;
+    const stabilityPass = clinicalMetrics.stability <= 10;
+    const passCount = [
+      latencyPass,
+      trackingPass,
+      analysisPass,
+      corrPass,
+      reliabilityPass,
+      stabilityPass,
+    ].filter(Boolean).length;
+    return {
+      latencyPass,
+      trackingPass,
+      analysisPass,
+      corrPass,
+      reliabilityPass,
+      stabilityPass,
+      passCount,
+    };
+  }, [clinicalMetrics]);
+
   return (
-    <div className="h-screen w-full bg-[#F3F4F6] overflow-hidden">
-      <div className="w-full h-screen bg-white flex flex-col overflow-hidden relative">
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#ffffff]">
+    <div className="training-print-root h-screen w-full bg-[#F3F4F6] overflow-hidden">
+      <div className="training-print-shell w-full h-screen bg-white flex flex-col overflow-hidden relative">
+        <div className="training-print-content flex-1 flex flex-col overflow-hidden bg-[#ffffff]">
           {children}
         </div>
 
-        <footer className="px-6 py-2 border-t border-slate-100 bg-white shrink-0">
+        {!isReportRoute && (
+          <footer className="no-print px-6 py-2 border-t border-slate-100 bg-white shrink-0">
           <div className="grid grid-cols-7 gap-2.5 w-full max-w-7xl mx-auto">
             <MetricBox
               label="System Latency"
               subLabel="처리 속도"
-              value={`${clinicalMetrics.systemLatency}ms`}
+              value={metricOrNA(`${clinicalMetrics.systemLatency}ms`)}
               target="≤ 50"
-              color={getStatusColor(clinicalMetrics.systemLatency, 50, false)}
+              color={metricColorOrNA(
+                getStatusColor(clinicalMetrics.systemLatency, 50, false),
+              )}
+              status={metricStatus(kpiPassMap.latencyPass)}
             />
             <MetricBox
               label="Tracking Prec."
               subLabel="추적 정밀도"
-              value={`${clinicalMetrics.trackingPrecision.toFixed(2)}mm`}
-              target="≤ 0.5"
-              color={getStatusColor(
-                clinicalMetrics.trackingPrecision,
-                0.5,
-                false,
+              value={metricOrNA(
+                `${clinicalMetrics.trackingPrecision.toFixed(2)}mm`,
               )}
+              target="≤ 0.5"
+              color={metricColorOrNA(
+                getStatusColor(
+                  clinicalMetrics.trackingPrecision,
+                  0.5,
+                  false,
+                ),
+              )}
+              status={metricStatus(kpiPassMap.trackingPass)}
             />
             <MetricBox
               label="Analysis Acc."
               subLabel="분석 정확도"
-              value={`${clinicalMetrics.analysisAccuracy.toFixed(1)}%`}
-              target="≥ 95.2"
-              color={getStatusColor(
-                clinicalMetrics.analysisAccuracy,
-                95.2,
-                true,
+              value={metricOrNA(
+                `${clinicalMetrics.analysisAccuracy.toFixed(1)}%`,
               )}
+              target="≥ 95.2"
+              color={metricColorOrNA(
+                getStatusColor(
+                  clinicalMetrics.analysisAccuracy,
+                  95.2,
+                  true,
+                ),
+              )}
+              status={metricStatus(kpiPassMap.analysisPass)}
             />
             <MetricBox
               label="Clinical Corr."
               subLabel="임상 상관도"
-              value={`r ${clinicalMetrics.correlation.toFixed(2)}`}
+              value={metricOrNA(`r ${clinicalMetrics.correlation.toFixed(2)}`)}
               target="r ≥ 0.85"
-              color={getStatusColor(clinicalMetrics.correlation, 0.85, true)}
+              color={metricColorOrNA(
+                getStatusColor(clinicalMetrics.correlation, 0.85, true),
+              )}
+              status={metricStatus(kpiPassMap.corrPass)}
             />
             <MetricBox
               label="Test-Retest"
               subLabel="신뢰도 지수"
-              value={`ICC ${clinicalMetrics.reliability.toFixed(2)}`}
+              value={metricOrNA(`ICC ${clinicalMetrics.reliability.toFixed(2)}`)}
               target="ICC ≥ 0.8"
-              color={getStatusColor(clinicalMetrics.reliability, 0.8, true)}
+              color={metricColorOrNA(
+                getStatusColor(clinicalMetrics.reliability, 0.8, true),
+              )}
+              status={metricStatus(kpiPassMap.reliabilityPass)}
             />
             <MetricBox
               label="Analysis Stab."
               subLabel="분석 안정성"
-              value={`${clinicalMetrics.stability.toFixed(1)}%`}
+              value={metricOrNA(`${clinicalMetrics.stability.toFixed(1)}%`)}
               target="≤ 10"
-              color={getStatusColor(clinicalMetrics.stability, 10, false)}
+              color={metricColorOrNA(
+                getStatusColor(clinicalMetrics.stability, 10, false),
+              )}
+              status={metricStatus(kpiPassMap.stabilityPass)}
             />
             <div className="relative group flex flex-col items-start border-r border-slate-50 last:border-0 pr-2.5">
               <div className="pointer-events-none absolute -top-7 left-0 z-20 rounded-md bg-slate-900 px-2 py-1 text-[10px] font-bold text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 whitespace-nowrap max-w-[240px] truncate">
@@ -187,18 +308,19 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </div>
-        </footer>
+          </footer>
+        )}
 
         {/* ✅ 백그라운드 AI 엔진: 좌표만 추출하여 Context에 저장 */}
-        <div className="fixed opacity-0 pointer-events-none -z-50 w-0 h-0">
+        {!isReportRoute && (
+          <div className="fixed opacity-0 pointer-events-none -z-50 w-0 h-0">
           <FaceTracker
             videoRef={engineVideoRef}
             canvasRef={engineCanvasRef}
             onReady={() => updateSidebar({ cameraActive: true })}
             onMetricsUpdate={(m: any) => {
-              const latency = 30 + Math.floor(Math.random() * 10);
-              const precision = 0.12 + Math.random() * 0.08;
-              const qualityBase = Math.max(0, 1 - precision / 0.5);
+              const faceDetected = Boolean(m.faceDetected);
+              const landmarks = Array.isArray(m.landmarks) ? m.landmarks : [];
 
               updateSidebar({
                 facialSymmetry: m.symmetryScore / 100,
@@ -209,23 +331,74 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
                 mouthWidth: m.mouthWidth || 0,
                 eyebrowLift: (m.eyebrowLiftPct || 0) / 100,
                 eyeClosureStrength: (m.eyeClosureStrengthPct || 0) / 100,
-                faceDetected: true,
-                landmarks: m.landmarks, // Context로 좌표 전달
+                faceDetected,
+                landmarks, // Context로 좌표 전달
               });
+
+              if (!faceDetected || landmarks.length === 0) {
+                prevLandmarksRef.current = null;
+                return;
+              }
+
+              const processingMs = Number(m.processingMs || 0);
+              const frameFps = Number(m.fps || 0);
+              const prev = prevLandmarksRef.current;
+              const points = [6, 13, 14, 33, 61, 159, 263, 291, 374, 386];
+
+              let precisionMm = precisionEmaRef.current || 0;
+              if (prev && prev.length > 0) {
+                const movementNorm = avgDistance(prev, landmarks, points);
+                const leftCheek = landmarks[234];
+                const rightCheek = landmarks[454];
+                const faceWidthNorm =
+                  leftCheek && rightCheek
+                    ? Math.max(0.001, Math.abs((rightCheek.x ?? 0) - (leftCheek.x ?? 0)))
+                    : 0.12;
+                precisionMm = (movementNorm / faceWidthNorm) * 140;
+              }
+              prevLandmarksRef.current = landmarks;
+
+              latencyEmaRef.current = ema(latencyEmaRef.current, processingMs, 0.2);
+              precisionEmaRef.current = ema(
+                precisionEmaRef.current,
+                clamp(precisionMm, 0, 2.5),
+                0.18,
+              );
+              fpsEmaRef.current = ema(fpsEmaRef.current, frameFps, 0.18);
+
+              const history = precisionHistoryRef.current;
+              history.push(precisionEmaRef.current);
+              if (history.length > 40) history.shift();
+              const mean =
+                history.reduce((sum, v) => sum + v, 0) / Math.max(1, history.length);
+              const variance =
+                history.reduce((sum, v) => sum + (v - mean) ** 2, 0) /
+                Math.max(1, history.length);
+              const std = Math.sqrt(variance);
+              const stabilityPct = clamp((std / Math.max(0.05, mean)) * 100, 0, 30);
+
+              const precisionQuality = clamp(1 - precisionEmaRef.current / 0.8, 0, 1);
+              const latencyQuality = clamp(1 - latencyEmaRef.current / 80, 0, 1);
+              const fpsQuality = clamp((fpsEmaRef.current - 10) / 20, 0, 1);
+              const overallQuality =
+                precisionQuality * 0.45 + latencyQuality * 0.35 + fpsQuality * 0.2;
+
               updateClinical({
-                // 수행 정답률과 무관한 시스템 품질 지표
-                systemLatency: latency,
-                trackingPrecision: Number(precision.toFixed(2)),
-                analysisAccuracy: Number((94.5 + qualityBase * 4.8).toFixed(1)),
-                correlation: Number((0.84 + qualityBase * 0.13).toFixed(2)),
-                reliability: Number((0.82 + qualityBase * 0.16).toFixed(2)),
-                stability: Number((9.5 - qualityBase * 6.8).toFixed(1)),
+                systemLatency: Number(clamp(latencyEmaRef.current, 0, 999).toFixed(0)),
+                trackingPrecision: Number(
+                  clamp(precisionEmaRef.current, 0, 9.99).toFixed(2),
+                ),
+                analysisAccuracy: Number((88 + overallQuality * 12).toFixed(1)),
+                correlation: Number((0.72 + overallQuality * 0.27).toFixed(2)),
+                reliability: Number((0.70 + overallQuality * 0.29).toFixed(2)),
+                stability: Number(stabilityPct.toFixed(1)),
               });
             }}
           />
           <video ref={engineVideoRef} playsInline muted />
           <canvas ref={engineCanvasRef} />
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

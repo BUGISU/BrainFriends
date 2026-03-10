@@ -65,7 +65,7 @@ function Step6Content() {
   };
   const confirmGoHome = () => {
     if (isRehabMode) {
-      router.push("/rehab");
+      router.push("/select-page/speech-rehab");
       return;
     }
     const isTrialMode =
@@ -76,7 +76,7 @@ function Step6Content() {
       return;
     }
     saveTrainingExitProgress(place, 6);
-    router.push("/select");
+    router.push("/select-page/self-assessment");
   };
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -571,7 +571,7 @@ function Step6Content() {
         params.set("targetStep", "6");
       }
       router.push(
-        `${isRehabStep6 ? "/result-rehab" : "/result"}?${params.toString()}`,
+        `${isRehabStep6 ? "/result-page/speech-rehab" : "/result-page/self-assessment"}?${params.toString()}`,
       );
     }
   };
@@ -659,7 +659,7 @@ function Step6Content() {
         params.set("targetStep", "6");
       }
       router.push(
-        `${isRehabStep6 ? "/result-rehab" : "/result"}?${params.toString()}`,
+        `${isRehabStep6 ? "/result-page/speech-rehab" : "/result-page/self-assessment"}?${params.toString()}`,
       );
     } catch (error) {
       console.error("Step6 skip failed:", error);

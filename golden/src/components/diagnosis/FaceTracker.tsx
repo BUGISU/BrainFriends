@@ -19,6 +19,10 @@ function hasNoisyTfliteMessage(value: unknown): boolean {
 // ✅ 타입을 확장해서 landmarks를 포함시킵니다.
 interface ExtendedMetrics extends LipMetrics {
   landmarks: any[];
+  faceDetected: boolean;
+  processingMs: number;
+  frameGapMs: number;
+  fps: number;
 }
 
 type Props = {
@@ -40,6 +44,7 @@ export default function FaceTracker({
   const rafRef = useRef<number | null>(null);
   const lastTickRef = useRef(0);
   const lastUpdateRef = useRef(0);
+  const lastDeliveredAtRef = useRef(0);
 
   const tick = () => {
     const now = performance.now();
@@ -56,22 +61,43 @@ export default function FaceTracker({
       videoRef.current.readyState >= 2
     ) {
       try {
+        const detectStart = performance.now();
         const results = landmarkerRef.current.detectForVideo(
           videoRef.current,
           Math.round(now),
         );
+        const detectEnd = performance.now();
+        const processingMs = detectEnd - detectStart;
         const face = results.faceLandmarks?.[0];
 
-        if (face) {
-          if (now - lastUpdateRef.current > 100) {
-            // ✅ 수치 데이터와 좌표 데이터를 합쳐서 보냅니다.
+        if (now - lastUpdateRef.current > 100) {
+          const frameGapMs = lastDeliveredAtRef.current
+            ? detectEnd - lastDeliveredAtRef.current
+            : 0;
+          const fps = frameGapMs > 0 ? 1000 / frameGapMs : 0;
+
+          if (face) {
             const metrics = calculateLipMetrics(face);
             onMetricsUpdate({
               ...metrics,
-              landmarks: face, // 👈 이게 있어야 사이드바가 그림을 그립니다.
+              landmarks: face,
+              faceDetected: true,
+              processingMs: Number(processingMs.toFixed(2)),
+              frameGapMs: Number(frameGapMs.toFixed(2)),
+              fps: Number(fps.toFixed(1)),
             });
-            lastUpdateRef.current = now;
+          } else {
+            onMetricsUpdate({
+              ...calculateLipMetrics([]),
+              landmarks: [],
+              faceDetected: false,
+              processingMs: Number(processingMs.toFixed(2)),
+              frameGapMs: Number(frameGapMs.toFixed(2)),
+              fps: Number(fps.toFixed(1)),
+            });
           }
+          lastDeliveredAtRef.current = detectEnd;
+          lastUpdateRef.current = now;
         }
         lastTickRef.current = now;
       } catch (err) {

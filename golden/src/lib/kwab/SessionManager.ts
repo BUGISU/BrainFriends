@@ -1015,32 +1015,32 @@ export class SessionManager {
 
   static getResumePath(patient: PatientProfile, place: string): string {
     if (typeof window === "undefined") {
-      return `/step-1?place=${encodeURIComponent(place)}`;
+      return `/programs/step-1?place=${encodeURIComponent(place)}`;
     }
 
     const key = SessionManager.getStorageKey(patient, place);
     const raw = localStoreAdapter.getItem(key);
-    if (!raw) return `/step-1?place=${encodeURIComponent(place)}`;
+    if (!raw) return `/programs/step-1?place=${encodeURIComponent(place)}`;
 
     try {
       const session = JSON.parse(raw) as TrainingSession;
       const s = SessionManager.buildProgressParams(session);
       const p = encodeURIComponent(place);
 
-      if (!session.step1) return `/step-1?place=${p}`;
-      if (!session.step2) return `/step-2?place=${p}&step1=${s.step1}`;
+      if (!session.step1) return `/programs/step-1?place=${p}`;
+      if (!session.step2) return `/programs/step-2?place=${p}&step1=${s.step1}`;
       if (!session.step3)
-        return `/step-3?place=${p}&step1=${s.step1}&step2=${s.step2}`;
+        return `/programs/step-3?place=${p}&step1=${s.step1}&step2=${s.step2}`;
       if (!session.step4)
-        return `/step-4?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}`;
+        return `/programs/step-4?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}`;
       if (!session.step5)
-        return `/step-5?place=${p}&step3=${s.step3}&step4=${s.step4}`;
+        return `/programs/step-5?place=${p}&step3=${s.step3}&step4=${s.step4}`;
       if (!session.step6)
-        return `/step-6?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}&step4=${s.step4}&step5=${s.step5}`;
+        return `/programs/step-6?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}&step4=${s.step4}&step5=${s.step5}`;
 
-      return `/result?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}&step4=${s.step4}&step5=${s.step5}&step6=${s.step6}`;
+      return `/result-page/self-assessment?place=${p}&step1=${s.step1}&step2=${s.step2}&step3=${s.step3}&step4=${s.step4}&step5=${s.step5}&step6=${s.step6}`;
     } catch {
-      return `/step-1?place=${encodeURIComponent(place)}`;
+      return `/programs/step-1?place=${encodeURIComponent(place)}`;
     }
   }
 

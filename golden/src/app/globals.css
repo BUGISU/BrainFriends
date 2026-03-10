@@ -84,3 +84,19 @@ body {
 .rehab-accent-scope .group:hover .group-hover\:bg-orange-100 { background-color: #e0f2fe !important; }
 .rehab-accent-scope .group:hover .group-hover\:text-orange-600 { color: #0284c7 !important; }
 .rehab-accent-scope .group:hover .group-hover\:text-white { color: #fff !important; }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .training-print-root,
+  .training-print-shell,
+  .training-print-content {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+}

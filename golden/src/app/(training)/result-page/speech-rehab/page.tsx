@@ -238,7 +238,7 @@ function ResultRehabPage() {
           </div>
           <button
             type="button"
-            onClick={() => router.push("/rehab")}
+            onClick={() => router.push("/select-page/speech-rehab")}
             aria-label="홈으로 이동"
             title="홈"
             className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors flex items-center justify-center"

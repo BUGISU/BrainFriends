@@ -138,7 +138,7 @@ export default function HomePage() {
       const hasSelfDiagnosisHistory =
         SessionManager.getHistoryFor(saved as any).length > 0;
       if (hasSelfDiagnosisHistory) {
-        router.push("/mode-select");
+        router.push("/select-page/mode");
       } else {
         setShowFirstDiagnosisModal(true);
       }
@@ -396,7 +396,7 @@ export default function HomePage() {
                   if (typeof window !== "undefined") {
                     sessionStorage.setItem("btt.trialMode", "1");
                   }
-                  router.push("/step-1?place=home");
+                  router.push("/programs/step-1?place=home");
                 }}
                 className="w-full py-3.5 rounded-2xl bg-[#0B1A3A] text-white font-black hover:bg-[#09152f] transition-all"
               >

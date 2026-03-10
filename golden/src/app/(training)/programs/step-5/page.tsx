@@ -12,7 +12,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { PlaceType } from "@/constants/trainingData";
 import { READING_TEXTS } from "@/constants/readingData";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
-import { useTraining } from "../TrainingContext";
+import { useTraining } from "../../TrainingContext";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
 import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { SessionManager } from "@/lib/kwab/SessionManager";
@@ -74,8 +74,12 @@ interface ReadingMetrics {
 }
 
 const calculateTextSimilarityPercent = (expected: string, actual: string) => {
-  const exp = String(expected || "").replace(/\s+/g, "").toLowerCase();
-  const act = String(actual || "").replace(/\s+/g, "").toLowerCase();
+  const exp = String(expected || "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  const act = String(actual || "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
   if (!exp.length && !act.length) return 100;
   if (!exp.length || !act.length) return 0;
   const matrix: number[][] = [];
@@ -101,7 +105,10 @@ const normalizeTextForLength = (text: string) =>
     .replace(/\s+/g, "")
     .replace(/[^\u3131-\u318E\uAC00-\uD7A3a-zA-Z0-9]/g, "");
 
-const calculateReadingCompletenessScore = (expected: string, transcript: string) => {
+const calculateReadingCompletenessScore = (
+  expected: string,
+  transcript: string,
+) => {
   const expectedLen = normalizeTextForLength(expected).length;
   const actualLen = normalizeTextForLength(transcript).length;
   if (expectedLen <= 0) return 0;
@@ -122,8 +129,12 @@ function Step5Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { sidebarMetrics, updateSidebar, updateRuntimeStatus, resetRuntimeStatus } =
-    useTraining();
+  const {
+    sidebarMetrics,
+    updateSidebar,
+    updateRuntimeStatus,
+    resetRuntimeStatus,
+  } = useTraining();
 
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step4Score = searchParams.get("step4") || "0";
@@ -152,10 +163,12 @@ function Step5Content() {
           step5: String(step5Value),
           step6: "0",
         });
-        router.push(`/result-rehab?${params.toString()}`);
+        router.push(`/result-page/speech-rehab?${params.toString()}`);
         return;
       }
-      router.push(`/step-6?place=${place}&step4=${step4Score}&step5=${step5Value}`);
+      router.push(
+        `/programs/step-6?place=${place}&step4=${step4Score}&step5=${step5Value}`,
+      );
     },
     [isRehabMode, place, rehabTargetStep, router, searchParams, step4Score],
   );
@@ -221,7 +234,7 @@ function Step5Content() {
   };
   const confirmGoHome = () => {
     if (isRehabMode) {
-      router.push("/rehab");
+      router.push("/select-page/speech-rehab");
       return;
     }
     const isTrialMode =
@@ -232,7 +245,7 @@ function Step5Content() {
       return;
     }
     saveTrainingExitProgress(place, 5);
-    router.push("/select");
+    router.push("/select-page/self-assessment");
   };
 
   const texts = useMemo(
@@ -328,7 +341,9 @@ function Step5Content() {
   useEffect(() => {
     if (!currentItem?.text) return;
 
-    const lipSymmetry = estimateLipSymmetryFromLandmarks(sidebarMetrics.landmarks);
+    const lipSymmetry = estimateLipSymmetryFromLandmarks(
+      sidebarMetrics.landmarks,
+    );
     const {
       consonantAccuracy,
       vowelAccuracy,
@@ -409,13 +424,15 @@ function Step5Content() {
       const saved = Array.isArray(parsed) ? parsed : [];
       if (saved.length > 0) {
         const byIndex = new Map<number, ReadingMetrics>();
-        saved.slice(-texts.length).forEach((row: any, fallbackIndex: number) => {
-          const resolvedIndex = Number.isFinite(Number(row?.index))
-            ? Number(row.index)
-            : fallbackIndex;
-          if (resolvedIndex < 0 || resolvedIndex >= texts.length) return;
-          byIndex.set(resolvedIndex, row as ReadingMetrics);
-        });
+        saved
+          .slice(-texts.length)
+          .forEach((row: any, fallbackIndex: number) => {
+            const resolvedIndex = Number.isFinite(Number(row?.index))
+              ? Number(row.index)
+              : fallbackIndex;
+            if (resolvedIndex < 0 || resolvedIndex >= texts.length) return;
+            byIndex.set(resolvedIndex, row as ReadingMetrics);
+          });
         const restored = Array.from(byIndex.entries())
           .sort((a, b) => a[0] - b[0])
           .map((entry) => entry[1]);
@@ -569,7 +586,9 @@ function Step5Content() {
       if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
       const analysis = await analyzerRef.current.stopAnalysis(currentItem.text);
       if (analysis.errorReason) {
-        const runtimeMessage = analysis.errorReason.includes("recorder_stop_failed")
+        const runtimeMessage = analysis.errorReason.includes(
+          "recorder_stop_failed",
+        )
           ? "녹음 장치 초기화에 실패했습니다. 마이크 권한/연결 상태를 확인 후 다시 시도해 주세요."
           : `음성 인식 실패(${analysis.errorReason})`;
         updateRuntimeStatus({
@@ -622,7 +641,8 @@ function Step5Content() {
           : {
               mouthOpeningPct:
                 liveArticulationRef.current.vowelDetails.mouthOpeningPct,
-              mouthWidthPct: liveArticulationRef.current.vowelDetails.mouthWidthPct,
+              mouthWidthPct:
+                liveArticulationRef.current.vowelDetails.mouthWidthPct,
               roundingPct: liveArticulationRef.current.vowelDetails.roundingPct,
               patternMatchPct:
                 liveArticulationRef.current.vowelDetails.patternMatchPct,
@@ -635,11 +655,12 @@ function Step5Content() {
         visualVowelAccuracy,
         analysis.details?.vowelAccuracy,
       );
-      const articulationWritingConsistency = calculateArticulationWritingConsistency({
-        targetText: currentItem.text,
-        consonantAccuracy,
-        vowelAccuracy,
-      }).score;
+      const articulationWritingConsistency =
+        calculateArticulationWritingConsistency({
+          targetText: currentItem.text,
+          consonantAccuracy,
+          vowelAccuracy,
+        }).score;
       const transcript = String(analysis.transcript || "").trim();
       const spokenChars = (transcript.match(/[가-힣a-zA-Z0-9]/g) || []).length;
       if (spokenChars < 2) {
@@ -680,7 +701,10 @@ function Step5Content() {
           gatedFluencyScore * 0.1
         ).toFixed(1),
       );
-      const recognitionResponseMs = Math.max(0, Math.round(finalReadingTime * 1000));
+      const recognitionResponseMs = Math.max(
+        0,
+        Math.round(finalReadingTime * 1000),
+      );
 
       updateSidebar({
         consonantAccuracy: consonantAccuracy / 100,
@@ -758,13 +782,16 @@ function Step5Content() {
               };
               const byIndex = new Map<number, any>();
               if (Array.isArray(existing)) {
-                existing.slice(-texts.length).forEach((row: any, fallbackIndex: number) => {
-                  const resolvedIndex = Number.isFinite(Number(row?.index))
-                    ? Number(row.index)
-                    : fallbackIndex;
-                  if (resolvedIndex < 0 || resolvedIndex >= texts.length) return;
-                  byIndex.set(resolvedIndex, row);
-                });
+                existing
+                  .slice(-texts.length)
+                  .forEach((row: any, fallbackIndex: number) => {
+                    const resolvedIndex = Number.isFinite(Number(row?.index))
+                      ? Number(row.index)
+                      : fallbackIndex;
+                    if (resolvedIndex < 0 || resolvedIndex >= texts.length)
+                      return;
+                    byIndex.set(resolvedIndex, row);
+                  });
               }
               byIndex.set(currentIndex, nextEntry);
               const next = Array.from(byIndex.entries())
@@ -799,7 +826,8 @@ function Step5Content() {
               saving: false,
               pageError: true,
               needsRetry: true,
-              message: "오디오 파일 처리 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
+              message:
+                "오디오 파일 처리 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
             });
             resolve(false);
           };
@@ -809,7 +837,8 @@ function Step5Content() {
         updateRuntimeStatus({
           pageError: true,
           needsRetry: true,
-          message: "오디오 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
+          message:
+            "오디오 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
         });
         saveSucceeded = false;
       }
@@ -829,8 +858,7 @@ function Step5Content() {
         saving: false,
         pageError: true,
         needsRetry: true,
-        message:
-          "분석 중 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
+        message: "분석 중 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
       });
       setCurrentResult(null);
       setPhase("ready");
@@ -872,7 +900,10 @@ function Step5Content() {
     const currentResultIndex = Number.isFinite(Number(currentResult?.index))
       ? Number(currentResult.index)
       : currentIndex;
-    byIndex.set(currentResultIndex, { ...currentResult, index: currentResultIndex });
+    byIndex.set(currentResultIndex, {
+      ...currentResult,
+      index: currentResultIndex,
+    });
     const updatedResults = Array.from(byIndex.entries())
       .sort((a, b) => a[0] - b[0])
       .map((entry) => entry[1]);
@@ -901,7 +932,9 @@ function Step5Content() {
             (sum, row) => sum + Number(row.articulationWritingConsistency || 0),
             0,
           ) / Math.max(1, updatedResults.length);
-        const correctAnswers = updatedResults.filter((row) => row.isCorrect).length;
+        const correctAnswers = updatedResults.filter(
+          (row) => row.isCorrect,
+        ).length;
         sm.saveStep5Result({
           correctAnswers,
           totalQuestions: texts.length,
@@ -937,7 +970,8 @@ function Step5Content() {
         const readingAccuracyScore = randomFloat(62, 98, 1);
         const completenessScore = randomFloat(70, 100, 1);
         const articulationClarityScore = randomFloat(58, 96, 1);
-        const speedStabilityScore = calculateSpeedStabilityScore(wordsPerMinute);
+        const speedStabilityScore =
+          calculateSpeedStabilityScore(wordsPerMinute);
         const fluencyScore = Number(
           (
             speedStabilityScore *
@@ -1021,14 +1055,18 @@ function Step5Content() {
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className={`flex flex-col h-screen bg-slate-50 overflow-y-auto lg:overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}>
+    <div
+      className={`flex flex-col h-screen bg-slate-50 overflow-y-auto lg:overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}
+    >
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
         <div
           className={`h-full ${isRehabMode ? "bg-sky-500 shadow-[0_0_10px_rgba(14,165,233,0.45)]" : "bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.45)]"}`}
           style={{ width: `${((currentIndex + 1) / texts.length) * 100}%` }}
         />
       </div>
-      <header className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}>
+      <header
+        className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
+      >
         <div className="flex items-center gap-4">
           <img
             src="/images/logo/logo.png"
@@ -1036,7 +1074,9 @@ function Step5Content() {
             className="w-10 h-10 rounded-xl object-cover"
           />
           <div>
-            <span className={`font-black text-[10px] uppercase tracking-widest leading-none block ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}>
+            <span
+              className={`font-black text-[10px] uppercase tracking-widest leading-none block ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}
+            >
               Step 05 • Reading Fluency Training
             </span>
             <h2 className="text-lg font-black text-slate-900 tracking-tight">
@@ -1052,7 +1092,9 @@ function Step5Content() {
           >
             SKIP
           </button>
-          <div className={`px-4 py-1.5 rounded-full font-black text-xs border ${isRehabMode ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>
+          <div
+            className={`px-4 py-1.5 rounded-full font-black text-xs border ${isRehabMode ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}
+          >
             {currentIndex + 1} / {texts.length}
           </div>
           <button
@@ -1242,8 +1284,10 @@ function Step5Content() {
                 (sidebarMetrics.consonantLipSymmetry || 0) * 100,
               consonantOpeningSpeed:
                 (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
-              consonantClosureHoldMs: sidebarMetrics.consonantClosureHoldMs || 0,
-              consonantOpeningSpeedMs: sidebarMetrics.consonantOpeningSpeedMs || 0,
+              consonantClosureHoldMs:
+                sidebarMetrics.consonantClosureHoldMs || 0,
+              consonantOpeningSpeedMs:
+                sidebarMetrics.consonantOpeningSpeedMs || 0,
               vowelMouthOpening: (sidebarMetrics.vowelMouthOpening || 0) * 100,
               vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
               vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
@@ -1253,7 +1297,9 @@ function Step5Content() {
             showTracking={showTracking}
             onToggleTracking={() => setShowTracking((prev) => !prev)}
             scoreLabel="현재 상태"
-            scoreValue={currentResult ? `${currentResult.readingScore.toFixed(1)}점` : "-"}
+            scoreValue={
+              currentResult ? `${currentResult.readingScore.toFixed(1)}점` : "-"
+            }
           />
         </aside>
       </div>
@@ -1279,5 +1325,3 @@ export default function Step5Page() {
     </Suspense>
   );
 }
-
-

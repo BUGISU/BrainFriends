@@ -73,16 +73,16 @@ export default function SelectPage() {
   }, []);
 
   const getStartPath = (place: string) =>
-    `/step-1?place=${encodeURIComponent(place)}`;
+    `/programs/step-1?place=${encodeURIComponent(place)}`;
 
   const getResumeLabel = (path: string) => {
-    if (path.includes("/result")) return "결과 보기";
-    if (path.includes("/step-6")) return "Step 6 이어하기";
-    if (path.includes("/step-5")) return "Step 5 이어하기";
-    if (path.includes("/step-4")) return "Step 4 이어하기";
-    if (path.includes("/step-3")) return "Step 3 이어하기";
-    if (path.includes("/step-2")) return "Step 2 이어하기";
-    if (path.includes("/step-1")) return "Step 1 이어하기";
+    if (path.includes("/result-page/self-assessment")) return "결과 보기";
+    if (path.includes("/programs/step-6")) return "Step 6 이어하기";
+    if (path.includes("/programs/step-5")) return "Step 5 이어하기";
+    if (path.includes("/programs/step-4")) return "Step 4 이어하기";
+    if (path.includes("/programs/step-3")) return "Step 3 이어하기";
+    if (path.includes("/programs/step-2")) return "Step 2 이어하기";
+    if (path.includes("/programs/step-1")) return "Step 1 이어하기";
     return "처음부터 시작";
   };
 
@@ -101,7 +101,7 @@ export default function SelectPage() {
       checkpoint.currentStep >= 1 &&
       checkpoint.currentStep <= 6
     ) {
-      const checkpointResumePath = `/step-${checkpoint.currentStep}?place=${encodeURIComponent(place)}`;
+      const checkpointResumePath = `/programs/step-${checkpoint.currentStep}?place=${encodeURIComponent(place)}`;
       setResumeModal({ open: true, place, resumePath: checkpointResumePath });
       return;
     }
@@ -109,7 +109,7 @@ export default function SelectPage() {
     const resumePath = SessionManager.getResumePath(patient as any, place);
 
     // report(=result)까지 완료된 세션은 이어하기를 띄우지 않고 처음부터 시작
-    if (resumePath.includes("/result")) {
+    if (resumePath.includes("/result-page/self-assessment")) {
       // 완료된 세션을 그대로 재사용하면 같은 sessionId가 덮어써져 이전 기록이 누적되지 않음
       SessionManager.clearSessionFor(patient as any, place);
       router.push(startPath);
@@ -159,10 +159,10 @@ export default function SelectPage() {
         <div className="flex items-center justify-end gap-2 sm:gap-3 flex-wrap">
           <button
             type="button"
-            onClick={() => router.push("/rehab")}
+            onClick={() => router.push("/select-page/mode")}
             className="h-8 sm:h-9 min-w-[90px] sm:min-w-[98px] px-3 sm:px-4 rounded-full text-[11px] sm:text-xs font-black shadow-sm border bg-gradient-to-r from-orange-600 to-orange-500 text-white border-orange-500 hover:from-orange-700 hover:to-orange-600 transition-all"
           >
-            언어재활
+            활동선택
           </button>
           <button
             type="button"
@@ -181,8 +181,8 @@ export default function SelectPage() {
         </div>
       </div>
 
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-10">
-        <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-10 sm:pt-14 pb-24 sm:pb-28 min-h-[calc(100vh-12.5rem)] flex flex-col justify-center">
+        <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 sm:mb-10">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 tracking-tight">
               정기 자가진단 선택
@@ -193,12 +193,12 @@ export default function SelectPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <section className="mt-2 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
           {PLACES.map((p) => (
             <button
               key={p.key}
               onClick={() => go(p.key)}
-              className="group relative w-full aspect-[4/3] rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
+              className="group relative w-full aspect-[16/10] sm:aspect-[4/3] lg:aspect-[5/4] 2xl:aspect-[4/3] rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
             >
               {p.imagePath && (
                 <div

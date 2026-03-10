@@ -13,7 +13,7 @@ import { PlaceType } from "@/constants/trainingData";
 import { FLUENCY_SCENARIOS } from "@/constants/fluencyData";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
-import { useTraining } from "../TrainingContext";
+import { useTraining } from "../../TrainingContext";
 import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
@@ -90,8 +90,12 @@ const STEP4_STORAGE_KEY = "step4_recorded_audios";
 function Step4Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { sidebarMetrics, updateSidebar, updateRuntimeStatus, resetRuntimeStatus } =
-    useTraining();
+  const {
+    sidebarMetrics,
+    updateSidebar,
+    updateRuntimeStatus,
+    resetRuntimeStatus,
+  } = useTraining();
   const place = (searchParams.get("place") as PlaceType) || "home";
   const step3Score = searchParams.get("step3") || "0";
   const isRehabMode =
@@ -111,9 +115,10 @@ function Step4Content() {
   const pushStep5OrRehabResult = useCallback(
     (step4Value: number) => {
       if (isRehabMode && rehabTargetStep === 4) {
-        const rehabStep4Percent = step4Value <= 10
-          ? Math.round(step4Value * 10)
-          : Math.round(step4Value);
+        const rehabStep4Percent =
+          step4Value <= 10
+            ? Math.round(step4Value * 10)
+            : Math.round(step4Value);
         const params = new URLSearchParams({
           place,
           trainMode: "rehab",
@@ -125,10 +130,12 @@ function Step4Content() {
           step5: "0",
           step6: "0",
         });
-        router.push(`/result-rehab?${params.toString()}`);
+        router.push(`/result-page/speech-rehab?${params.toString()}`);
         return;
       }
-      router.push(`/step-5?place=${place}&step3=${step3Score}&step4=${step4Value}`);
+      router.push(
+        `/programs/step-5?place=${place}&step3=${step3Score}&step4=${step4Value}`,
+      );
     },
     [isRehabMode, place, rehabTargetStep, router, searchParams, step3Score],
   );
@@ -137,7 +144,7 @@ function Step4Content() {
   };
   const confirmGoHome = () => {
     if (isRehabMode) {
-      router.push("/rehab");
+      router.push("/select-page/speech-rehab");
       return;
     }
     const isTrialMode =
@@ -148,7 +155,7 @@ function Step4Content() {
       return;
     }
     saveTrainingExitProgress(place, 4);
-    router.push("/select");
+    router.push("/select-page/self-assessment");
   };
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -224,7 +231,10 @@ function Step4Content() {
       buildStepSignature(
         "step4",
         place,
-        scenarios.map((item) => `${item.id ?? ""}|${item.situation ?? ""}|${item.prompt ?? ""}`),
+        scenarios.map(
+          (item) =>
+            `${item.id ?? ""}|${item.situation ?? ""}|${item.prompt ?? ""}`,
+        ),
       ),
     [place, scenarios],
   );
@@ -305,7 +315,9 @@ function Step4Content() {
 
   useEffect(() => {
     if (!currentScenario?.prompt) return;
-    const lipSymmetry = estimateLipSymmetryFromLandmarks(sidebarMetrics.landmarks);
+    const lipSymmetry = estimateLipSymmetryFromLandmarks(
+      sidebarMetrics.landmarks,
+    );
     const {
       consonantAccuracy,
       vowelAccuracy,
@@ -360,7 +372,8 @@ function Step4Content() {
         consonantDetails.openingSpeedMs;
       articulationAggregateRef.current.mouthOpeningSum +=
         vowelDetails.mouthOpeningPct;
-      articulationAggregateRef.current.mouthWidthSum += vowelDetails.mouthWidthPct;
+      articulationAggregateRef.current.mouthWidthSum +=
+        vowelDetails.mouthWidthPct;
       articulationAggregateRef.current.roundingSum += vowelDetails.roundingPct;
       articulationAggregateRef.current.patternMatchSum +=
         vowelDetails.patternMatchPct;
@@ -435,13 +448,18 @@ function Step4Content() {
               : [],
             relevantSentenceCount: Number(row?.relevantSentenceCount ?? 1),
             totalSentenceCount: Number(row?.totalSentenceCount ?? 1),
-            relevanceScore: Number(row?.relevanceScore ?? row?.contentComponentScore ?? 0),
+            relevanceScore: Number(
+              row?.relevanceScore ?? row?.contentComponentScore ?? 0,
+            ),
             contentComponentScore: Number(row?.contentComponentScore ?? 0),
             fluencyComponentScore: Number(row?.fluencyComponentScore ?? 0),
             clarityComponentScore: Number(row?.clarityComponentScore ?? 0),
-            responseStartComponentScore: Number(row?.responseStartComponentScore ?? 0),
+            responseStartComponentScore: Number(
+              row?.responseStartComponentScore ?? 0,
+            ),
             responseStartMs:
-              row?.responseStartMs === null || row?.responseStartMs === undefined
+              row?.responseStartMs === null ||
+              row?.responseStartMs === undefined
                 ? null
                 : Number(row.responseStartMs),
             finalScore: Number(row?.finalScore ?? 0),
@@ -457,7 +475,9 @@ function Step4Content() {
                 ? undefined
                 : Number(row.consonantAccuracy),
             vowelAccuracy:
-              row?.vowelAccuracy === undefined ? undefined : Number(row.vowelAccuracy),
+              row?.vowelAccuracy === undefined
+                ? undefined
+                : Number(row.vowelAccuracy),
             articulationWritingConsistency:
               row?.articulationWritingConsistency === undefined
                 ? undefined
@@ -619,8 +639,12 @@ function Step4Content() {
         transcript.includes(kw),
       );
       const responseStartMs =
-        recordingStartedAtRef.current !== null && promptEndedAtRef.current !== null
-          ? Math.max(0, recordingStartedAtRef.current - promptEndedAtRef.current)
+        recordingStartedAtRef.current !== null &&
+        promptEndedAtRef.current !== null
+          ? Math.max(
+              0,
+              recordingStartedAtRef.current - promptEndedAtRef.current,
+            )
           : null;
       const aggregate = articulationAggregateRef.current;
       const consonantAccuracy =
@@ -660,18 +684,21 @@ function Step4Content() {
           : {
               mouthOpeningPct:
                 liveArticulationRef.current.vowelDetails.mouthOpeningPct,
-              mouthWidthPct: liveArticulationRef.current.vowelDetails.mouthWidthPct,
+              mouthWidthPct:
+                liveArticulationRef.current.vowelDetails.mouthWidthPct,
               roundingPct: liveArticulationRef.current.vowelDetails.roundingPct,
               patternMatchPct:
                 liveArticulationRef.current.vowelDetails.patternMatchPct,
             };
-      const articulationWritingConsistency = calculateArticulationWritingConsistency({
-        targetText: currentScenario.prompt || currentScenario.situation || "",
-        consonantAccuracy,
-        vowelAccuracy,
-      }).score;
+      const articulationWritingConsistency =
+        calculateArticulationWritingConsistency({
+          targetText: currentScenario.prompt || currentScenario.situation || "",
+          consonantAccuracy,
+          vowelAccuracy,
+        }).score;
       const speechDurationSec =
-        Number.isFinite(Number(analysis.duration)) && Number(analysis.duration) > 0
+        Number.isFinite(Number(analysis.duration)) &&
+        Number(analysis.duration) > 0
           ? Number(analysis.duration) / 1000
           : recordingTime;
       const scored = scoreStep4Response({
@@ -785,7 +812,8 @@ function Step4Content() {
               const resolvedIndex = Number.isFinite(Number(row?.index))
                 ? Number(row.index)
                 : fallbackIndex;
-              if (resolvedIndex < 0 || resolvedIndex >= scenarios.length) return;
+              if (resolvedIndex < 0 || resolvedIndex >= scenarios.length)
+                return;
               byIndex.set(resolvedIndex, row);
             });
           }
@@ -830,7 +858,8 @@ function Step4Content() {
         updateRuntimeStatus({
           pageError: true,
           needsRetry: true,
-          message: "오디오 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
+          message:
+            "오디오 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
         });
       }
       if (!saveSucceeded) {
@@ -915,23 +944,23 @@ function Step4Content() {
           items: allResults.map((r) => ({
             situation: r.situation,
             prompt: r.prompt,
-          transcript: r.transcript,
-          isCorrect: Boolean(r.isCorrect ?? r.kwabScore >= 5),
-          speechDuration: r.speechDuration,
-          responseStartMs: r.responseStartMs,
-          responseTime: r.responseStartMs,
-          silenceRatio: r.silenceRatio,
-          averageAmplitude: r.averageAmplitude,
-          peakCount: r.peakCount,
-          contentComponentScore: r.contentComponentScore,
-          fluencyComponentScore: r.fluencyComponentScore,
-          clarityComponentScore: r.clarityComponentScore,
-          responseStartComponentScore: r.responseStartComponentScore,
-          finalScore: r.finalScore,
-          fluencyScore: r.kwabScore,
-          kwabScore: r.kwabScore,
-          rawScore: r.rawScore,
-          consonantAccuracy: r.consonantAccuracy,
+            transcript: r.transcript,
+            isCorrect: Boolean(r.isCorrect ?? r.kwabScore >= 5),
+            speechDuration: r.speechDuration,
+            responseStartMs: r.responseStartMs,
+            responseTime: r.responseStartMs,
+            silenceRatio: r.silenceRatio,
+            averageAmplitude: r.averageAmplitude,
+            peakCount: r.peakCount,
+            contentComponentScore: r.contentComponentScore,
+            fluencyComponentScore: r.fluencyComponentScore,
+            clarityComponentScore: r.clarityComponentScore,
+            responseStartComponentScore: r.responseStartComponentScore,
+            finalScore: r.finalScore,
+            fluencyScore: r.kwabScore,
+            kwabScore: r.kwabScore,
+            rawScore: r.rawScore,
+            consonantAccuracy: r.consonantAccuracy,
             vowelAccuracy: r.vowelAccuracy,
             articulationWritingConsistency: r.articulationWritingConsistency,
             consonantDetail: r.consonantDetail,
@@ -945,7 +974,8 @@ function Step4Content() {
           averageArticulationWritingConsistency:
             allResults.length > 0
               ? allResults.reduce(
-                  (sum, r) => sum + Number(r.articulationWritingConsistency || 0),
+                  (sum, r) =>
+                    sum + Number(r.articulationWritingConsistency || 0),
                   0,
                 ) / allResults.length
               : 0,
@@ -1047,7 +1077,8 @@ function Step4Content() {
         totalCount: demoItems.length,
         averageArticulationWritingConsistency:
           demoItems.reduce(
-            (sum, item) => sum + Number(item.articulationWritingConsistency || 0),
+            (sum, item) =>
+              sum + Number(item.articulationWritingConsistency || 0),
             0,
           ) / Math.max(1, demoItems.length),
         timestamp: Date.now(),
@@ -1062,7 +1093,9 @@ function Step4Content() {
   if (!isMounted || !currentScenario) return null;
 
   return (
-    <div className={`flex flex-col h-full bg-[#ffffff] overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}>
+    <div
+      className={`flex flex-col h-full bg-[#ffffff] overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}
+    >
       {/* 상단 진행 프로그레스 바 */}
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
         <div
@@ -1070,7 +1103,9 @@ function Step4Content() {
           style={{ width: `${((currentIndex + 1) / scenarios.length) * 100}%` }}
         />
       </div>
-      <header className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}>
+      <header
+        className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
+      >
         <div className="flex items-center gap-4">
           <img
             src="/images/logo/logo.png"
@@ -1087,7 +1122,9 @@ function Step4Content() {
           >
             SKIP
           </button>
-          <div className={`px-4 py-1.5 rounded-full font-black text-xs ${isRehabMode ? "bg-sky-50 text-sky-700 border border-sky-200" : "bg-orange-50 text-orange-700"}`}>
+          <div
+            className={`px-4 py-1.5 rounded-full font-black text-xs ${isRehabMode ? "bg-sky-50 text-sky-700 border border-sky-200" : "bg-orange-50 text-orange-700"}`}
+          >
             {currentIndex + 1} / {scenarios.length}
           </div>
           <button
@@ -1097,144 +1134,127 @@ function Step4Content() {
             title="홈"
             className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 10.5 12 3l9 7.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5.5 9.5V21h13V9.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 21v-5h4v5"
+              />
             </svg>
           </button>
         </div>
       </header>
 
       <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-hidden">
-      <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 lg:p-8 pb-6 lg:pb-8 order-1 overflow-hidden">
-        <div className="max-w-5xl w-full h-full min-h-0 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-stretch">
-          {/* 이미지 영역 */}
-          <div className="bg-white p-4 rounded-[40px] shadow-xl border border-slate-100 min-h-0">
-            <div className="aspect-square rounded-[32px] overflow-hidden bg-slate-50 relative flex items-center justify-center">
-              {isImageResolving ? (
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent" />
-              ) : (
-                <img
-                  src={resolvedImageSrc}
-                  alt="상황 이미지"
-                  className="w-full h-full object-contain"
-                />
-              )}
-              {isPromptPlaying && (
-                <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center">
-                  <div className="bg-white px-6 py-3 rounded-full flex items-center gap-3 shadow-2xl">
-                    <span className="w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
-                    <span className="font-black text-orange-600 text-sm">
-                      안내를 듣고 있습니다
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 대화 및 컨트롤 영역 */}
-          <div className="flex flex-col gap-3 sm:gap-4 min-h-0">
-            <div className="bg-white p-6 lg:p-7 rounded-[40px] shadow-sm border border-slate-100">
-              <span className="text-[11px] font-black text-orange-500 tracking-[0.3em] uppercase block mb-4">
-                Spontaneous Speech
-              </span>
-              <h1
-                className={`${headlineTextSizeClass} font-black text-slate-800 leading-tight break-keep whitespace-pre-line`}
-              >
-                {phase === "recording"
-                  ? "듣고 있습니다. \n편하게 말씀해 주세요."
-                  : "이 사진 속 상황을 자유롭게 이야기해 주세요."}
-              </h1>
-
-              <div className="mt-8">
-                {phase === "review" ? (
-                  <div className="w-full space-y-3">
-                    <div className="bg-white p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] border border-orange-100 shadow-lg grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 sm:gap-5 items-start">
-                      <div className="min-w-0">
-                        <span className="text-[10px] font-black text-slate-400 uppercase">
-                          인식된 문장
-                        </span>
-                        <p className="mt-1 font-bold text-slate-700 italic break-words leading-relaxed max-h-24 overflow-y-auto pr-1">
-                          {(currentResult?.transcript || "").trim()
-                            ? `"${currentResult?.transcript}"`
-                            : "인식 결과가 없습니다. 마이크 권한/주변 소음을 확인 후 다시 시도해 주세요."}
-                        </p>
-                        <p className="mt-1 text-[11px] font-black text-emerald-600">
-                          {saveStatusText || "저장 상태 확인 중"}
-                        </p>
-                      </div>
-                      <div className="text-center shrink-0 w-full sm:w-[110px]">
-                        <span className="text-[10px] font-black text-orange-400 uppercase">
-                          유창성 점수
-                        </span>
-                        <p className="text-2xl sm:text-3xl font-black text-orange-500 leading-none mt-1">
-                          {currentResult?.kwabScore}/10
-                        </p>
-                        <button
-                          onClick={playRecordedAudio}
-                          className={`mt-2 w-full h-9 inline-flex items-center justify-center rounded-lg border text-[12px] font-black ${
-                            isPlayingAudio
-                              ? accentSolid
-                              : accentSoft
-                          }`}
-                          aria-label="내 목소리 재생"
-                        >
-                          {isPlayingAudio ? "⏸" : "▶"}
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleNext}
-                      className={`w-full py-5 rounded-[24px] font-black text-lg ${trainingButtonStyles.navyPrimary}`}
-                    >
-                      {currentIndex < scenarios.length - 1
-                        ? "다음 상황 보기"
-                        : "결과 확인하기"}
-                    </button>
-                  </div>
-                ) : !showHint ? (
-                  <div className="flex flex-wrap gap-2 items-start">
-                    <button
-                      onClick={() => setShowHint(true)}
-                      className={`w-fit px-5 py-2.5 rounded-2xl text-xs font-black ${accentSoft}`}
-                    >
-                      💡 힌트 보기
-                    </button>
-                    <button
-                      onClick={playInstruction}
-                      disabled={
-                        isPromptPlaying ||
-                        phase === "recording" ||
-                        phase === "analyzing"
-                      }
-                        className={`w-fit px-5 py-2.5 rounded-2xl text-xs font-black border ${
-                          isPromptPlaying ||
-                          phase === "recording" ||
-                          phase === "analyzing"
-                            ? trainingButtonStyles.slateMuted
-                            : accentOutline
-                        }`}
-                    >
-                      문제 다시듣기
-                    </button>
-                  </div>
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 lg:p-8 pb-6 lg:pb-8 order-1 overflow-hidden">
+          <div className="max-w-5xl w-full h-full min-h-0 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-stretch">
+            {/* 이미지 영역 */}
+            <div className="bg-white p-4 rounded-[40px] shadow-xl border border-slate-100 min-h-0">
+              <div className="aspect-square rounded-[32px] overflow-hidden bg-slate-50 relative flex items-center justify-center">
+                {isImageResolving ? (
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent" />
                 ) : (
-                  <div className="p-5 rounded-[24px] bg-slate-50 border border-slate-100">
-                    <p className="text-sm font-bold text-slate-600 leading-relaxed break-keep">
-                      <span className="text-orange-500">상황: </span>
-                      <span className="whitespace-pre-line">
-                        {formattedPrompt}
+                  <img
+                    src={resolvedImageSrc}
+                    alt="상황 이미지"
+                    className="w-full h-full object-contain"
+                  />
+                )}
+                {isPromptPlaying && (
+                  <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center">
+                    <div className="bg-white px-6 py-3 rounded-full flex items-center gap-3 shadow-2xl">
+                      <span className="w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
+                      <span className="font-black text-orange-600 text-sm">
+                        안내를 듣고 있습니다
                       </span>
-                    </p>
-                    <p className="mt-2 text-sm font-bold text-slate-600 leading-relaxed break-keep">
-                      <span className="text-orange-500">도움말: </span>
-                      <span className="whitespace-pre-line">
-                        {formattedHint}
-                      </span>
-                    </p>
-                    <div className="mt-3">
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 대화 및 컨트롤 영역 */}
+            <div className="flex flex-col gap-3 sm:gap-4 min-h-0">
+              <div className="bg-white p-6 lg:p-7 rounded-[40px] shadow-sm border border-slate-100">
+                <span className="text-[11px] font-black text-orange-500 tracking-[0.3em] uppercase block mb-4">
+                  Spontaneous Speech
+                </span>
+                <h1
+                  className={`${headlineTextSizeClass} font-black text-slate-800 leading-tight break-keep whitespace-pre-line`}
+                >
+                  {phase === "recording"
+                    ? "듣고 있습니다. \n편하게 말씀해 주세요."
+                    : "이 사진 속 상황을 자유롭게 이야기해 주세요."}
+                </h1>
+
+                <div className="mt-8">
+                  {phase === "review" ? (
+                    <div className="w-full space-y-3">
+                      <div className="bg-white p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] border border-orange-100 shadow-lg grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 sm:gap-5 items-start">
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-black text-slate-400 uppercase">
+                            인식된 문장
+                          </span>
+                          <p className="mt-1 font-bold text-slate-700 italic break-words leading-relaxed max-h-24 overflow-y-auto pr-1">
+                            {(currentResult?.transcript || "").trim()
+                              ? `"${currentResult?.transcript}"`
+                              : "인식 결과가 없습니다. 마이크 권한/주변 소음을 확인 후 다시 시도해 주세요."}
+                          </p>
+                          <p className="mt-1 text-[11px] font-black text-emerald-600">
+                            {saveStatusText || "저장 상태 확인 중"}
+                          </p>
+                        </div>
+                        <div className="text-center shrink-0 w-full sm:w-[110px]">
+                          <span className="text-[10px] font-black text-orange-400 uppercase">
+                            유창성 점수
+                          </span>
+                          <p className="text-2xl sm:text-3xl font-black text-orange-500 leading-none mt-1">
+                            {currentResult?.kwabScore}/10
+                          </p>
+                          <button
+                            onClick={playRecordedAudio}
+                            className={`mt-2 w-full h-9 inline-flex items-center justify-center rounded-lg border text-[12px] font-black ${
+                              isPlayingAudio ? accentSolid : accentSoft
+                            }`}
+                            aria-label="내 목소리 재생"
+                          >
+                            {isPlayingAudio ? "⏸" : "▶"}
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleNext}
+                        className={`w-full py-5 rounded-[24px] font-black text-lg ${trainingButtonStyles.navyPrimary}`}
+                      >
+                        {currentIndex < scenarios.length - 1
+                          ? "다음 상황 보기"
+                          : "결과 확인하기"}
+                      </button>
+                    </div>
+                  ) : !showHint ? (
+                    <div className="flex flex-wrap gap-2 items-start">
+                      <button
+                        onClick={() => setShowHint(true)}
+                        className={`w-fit px-5 py-2.5 rounded-2xl text-xs font-black ${accentSoft}`}
+                      >
+                        💡 힌트 보기
+                      </button>
                       <button
                         onClick={playInstruction}
                         disabled={
@@ -1242,7 +1262,7 @@ function Step4Content() {
                           phase === "recording" ||
                           phase === "analyzing"
                         }
-                        className={`w-fit px-4 py-2 rounded-xl text-xs font-black border ${
+                        className={`w-fit px-5 py-2.5 rounded-2xl text-xs font-black border ${
                           isPromptPlaying ||
                           phase === "recording" ||
                           phase === "analyzing"
@@ -1253,84 +1273,123 @@ function Step4Content() {
                         문제 다시듣기
                       </button>
                     </div>
+                  ) : (
+                    <div className="p-5 rounded-[24px] bg-slate-50 border border-slate-100">
+                      <p className="text-sm font-bold text-slate-600 leading-relaxed break-keep">
+                        <span className="text-orange-500">상황: </span>
+                        <span className="whitespace-pre-line">
+                          {formattedPrompt}
+                        </span>
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-slate-600 leading-relaxed break-keep">
+                        <span className="text-orange-500">도움말: </span>
+                        <span className="whitespace-pre-line">
+                          {formattedHint}
+                        </span>
+                      </p>
+                      <div className="mt-3">
+                        <button
+                          onClick={playInstruction}
+                          disabled={
+                            isPromptPlaying ||
+                            phase === "recording" ||
+                            phase === "analyzing"
+                          }
+                          className={`w-fit px-4 py-2 rounded-xl text-xs font-black border ${
+                            isPromptPlaying ||
+                            phase === "recording" ||
+                            phase === "analyzing"
+                              ? trainingButtonStyles.slateMuted
+                              : accentOutline
+                          }`}
+                        >
+                          문제 다시듣기
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 녹음 컨트롤 */}
+              <div
+                className={`w-full py-2 ${phase === "review" ? "min-h-0" : "lg:min-h-[280px]"}`}
+              >
+                {phase !== "review" && (
+                  <div className="flex flex-col items-center">
+                    <div className="relative">
+                      {phase === "recording" && (
+                        <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping opacity-40" />
+                      )}
+                      <button
+                        onClick={
+                          phase === "recording" ? stopRecording : startRecording
+                        }
+                        disabled={!canRecord || phase === "analyzing"}
+                        className={`relative z-10 w-24 h-24 rounded-full shadow-2xl flex items-center justify-center transition-all ${
+                          phase === "recording"
+                            ? "bg-slate-900"
+                            : "bg-white border-4 border-slate-50"
+                        }`}
+                      >
+                        {phase === "recording" ? (
+                          <div className="w-7 h-7 bg-white rounded-sm animate-pulse" />
+                        ) : phase === "analyzing" ? (
+                          <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <span className="text-4xl">🎙️</span>
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-4 text-[11px] font-black uppercase tracking-widest text-slate-300">
+                      {phase === "recording"
+                        ? "Recording..."
+                        : phase === "analyzing"
+                          ? "Analyzing..."
+                          : "Tap to Speak"}
+                    </p>
                   </div>
                 )}
               </div>
             </div>
-
-            {/* 녹음 컨트롤 */}
-            <div className={`w-full py-2 ${phase === "review" ? "min-h-0" : "lg:min-h-[280px]"}`}>
-              {phase !== "review" && (
-                <div className="flex flex-col items-center">
-                  <div className="relative">
-                    {phase === "recording" && (
-                      <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping opacity-40" />
-                    )}
-                    <button
-                      onClick={
-                        phase === "recording" ? stopRecording : startRecording
-                      }
-                      disabled={!canRecord || phase === "analyzing"}
-                      className={`relative z-10 w-24 h-24 rounded-full shadow-2xl flex items-center justify-center transition-all ${
-                        phase === "recording"
-                          ? "bg-slate-900"
-                          : "bg-white border-4 border-slate-50"
-                      }`}
-                    >
-                      {phase === "recording" ? (
-                        <div className="w-7 h-7 bg-white rounded-sm animate-pulse" />
-                      ) : phase === "analyzing" ? (
-                        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <span className="text-4xl">🎙️</span>
-                      )}
-                    </button>
-                  </div>
-                  <p className="mt-4 text-[11px] font-black uppercase tracking-widest text-slate-300">
-                    {phase === "recording"
-                      ? "Recording..."
-                      : phase === "analyzing"
-                        ? "Analyzing..."
-                        : "Tap to Speak"}
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
-        </div>
-      </main>
-      <aside className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex flex-col p-3 lg:p-4 overflow-hidden order-2">
-        <AnalysisSidebar
-          videoRef={videoRef}
-          canvasRef={canvasRef}
-          isFaceReady={sidebarMetrics.faceDetected}
-          metrics={{
-            symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
-            openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
-            consonantAcc: (sidebarMetrics.consonantAccuracy || 0) * 100,
-            vowelAcc: (sidebarMetrics.vowelAccuracy || 0) * 100,
-            consonantClosureRate:
-              (sidebarMetrics.consonantClosureRate || 0) * 100,
-            consonantClosureHold:
-              (sidebarMetrics.consonantClosureHoldScore || 0) * 100,
-            consonantLipSymmetry:
-              (sidebarMetrics.consonantLipSymmetry || 0) * 100,
-            consonantOpeningSpeed:
-              (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
-            consonantClosureHoldMs: sidebarMetrics.consonantClosureHoldMs || 0,
-            consonantOpeningSpeedMs: sidebarMetrics.consonantOpeningSpeedMs || 0,
-            vowelMouthOpening: (sidebarMetrics.vowelMouthOpening || 0) * 100,
-            vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
-            vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
-            vowelPatternMatch: (sidebarMetrics.vowelPatternMatch || 0) * 100,
-            audioLevel: phase === "recording" ? Math.max(20, audioLevel) : 0,
-          }}
-          showTracking={showTracking}
-          onToggleTracking={() => setShowTracking(!showTracking)}
-          scoreLabel="유창성"
-          scoreValue={currentResult ? `${currentResult.kwabScore}/10` : undefined}
-        />
-      </aside>
+        </main>
+        <aside className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex flex-col p-3 lg:p-4 overflow-hidden order-2">
+          <AnalysisSidebar
+            videoRef={videoRef}
+            canvasRef={canvasRef}
+            isFaceReady={sidebarMetrics.faceDetected}
+            metrics={{
+              symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
+              openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
+              consonantAcc: (sidebarMetrics.consonantAccuracy || 0) * 100,
+              vowelAcc: (sidebarMetrics.vowelAccuracy || 0) * 100,
+              consonantClosureRate:
+                (sidebarMetrics.consonantClosureRate || 0) * 100,
+              consonantClosureHold:
+                (sidebarMetrics.consonantClosureHoldScore || 0) * 100,
+              consonantLipSymmetry:
+                (sidebarMetrics.consonantLipSymmetry || 0) * 100,
+              consonantOpeningSpeed:
+                (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
+              consonantClosureHoldMs:
+                sidebarMetrics.consonantClosureHoldMs || 0,
+              consonantOpeningSpeedMs:
+                sidebarMetrics.consonantOpeningSpeedMs || 0,
+              vowelMouthOpening: (sidebarMetrics.vowelMouthOpening || 0) * 100,
+              vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
+              vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
+              vowelPatternMatch: (sidebarMetrics.vowelPatternMatch || 0) * 100,
+              audioLevel: phase === "recording" ? Math.max(20, audioLevel) : 0,
+            }}
+            showTracking={showTracking}
+            onToggleTracking={() => setShowTracking(!showTracking)}
+            scoreLabel="유창성"
+            scoreValue={
+              currentResult ? `${currentResult.kwabScore}/10` : undefined
+            }
+          />
+        </aside>
       </div>
       <HomeExitModal
         open={isHomeExitModalOpen}
@@ -1354,4 +1413,3 @@ export default function Step4Page() {
     </Suspense>
   );
 }
-

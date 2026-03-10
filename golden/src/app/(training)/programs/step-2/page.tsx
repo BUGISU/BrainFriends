@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SpeechAnalyzer } from "@/lib/speech/SpeechAnalyzer";
-import { useTraining } from "../TrainingContext";
+import { useTraining } from "../../TrainingContext";
 import { SPEECH_REPETITION_PROTOCOLS } from "@/constants/speechTrainingData";
 import { PlaceType } from "@/constants/trainingData";
 import { AnalysisSidebar } from "@/components/training/AnalysisSidebar";
@@ -51,8 +51,12 @@ function Step2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { sidebarMetrics, updateSidebar, updateRuntimeStatus, resetRuntimeStatus } =
-    useTraining();
+  const {
+    sidebarMetrics,
+    updateSidebar,
+    updateRuntimeStatus,
+    resetRuntimeStatus,
+  } = useTraining();
   const place = (searchParams?.get("place") as PlaceType) || "home";
   const isRehabMode =
     searchParams.get("trainMode") === "rehab" ||
@@ -83,10 +87,12 @@ function Step2Content() {
           step5: "0",
           step6: "0",
         });
-        router.push(`/result-rehab?${params.toString()}`);
+        router.push(`/result-page/speech-rehab?${params.toString()}`);
         return;
       }
-      router.push(`/step-3?place=${place}&step1=${step1Score}&step2=${step2Score}`);
+      router.push(
+        `/programs/step-3?place=${place}&step1=${step1Score}&step2=${step2Score}`,
+      );
     },
     [isRehabMode, place, rehabTargetStep, router, searchParams],
   );
@@ -115,8 +121,12 @@ function Step2Content() {
 
   const [audioLevel, setAudioLevel] = useState(0);
   const [resultScore, setResultScore] = useState<number | null>(null);
-  const [resultConsonantAccuracy, setResultConsonantAccuracy] = useState<number | null>(null);
-  const [resultVowelAccuracy, setResultVowelAccuracy] = useState<number | null>(null);
+  const [resultConsonantAccuracy, setResultConsonantAccuracy] = useState<
+    number | null
+  >(null);
+  const [resultVowelAccuracy, setResultVowelAccuracy] = useState<number | null>(
+    null,
+  );
   const [transcript, setTranscript] = useState("");
   const [isSttExpanded, setIsSttExpanded] = useState(false);
   const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
@@ -240,7 +250,9 @@ function Step2Content() {
   useEffect(() => {
     if (!currentItem?.text) return;
 
-    const lipSymmetry = estimateLipSymmetryFromLandmarks(sidebarMetrics.landmarks);
+    const lipSymmetry = estimateLipSymmetryFromLandmarks(
+      sidebarMetrics.landmarks,
+    );
     const {
       consonantAccuracy,
       vowelAccuracy,
@@ -315,7 +327,7 @@ function Step2Content() {
   };
   const confirmGoHome = () => {
     if (isRehabMode) {
-      router.push("/rehab");
+      router.push("/select-page/speech-rehab");
       return;
     }
     const isTrialMode =
@@ -326,7 +338,7 @@ function Step2Content() {
       return;
     }
     saveTrainingExitProgress(place, 2);
-    router.push("/select");
+    router.push("/select-page/self-assessment");
   };
   const formattedCurrentText = useMemo(
     () => addSentenceLineBreaks(currentItem?.text || ""),
@@ -431,8 +443,7 @@ function Step2Content() {
 
   const playStartBeep = useCallback(async () => {
     if (typeof window === "undefined") return;
-    const AudioCtx =
-      window.AudioContext || (window as any).webkitAudioContext;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) {
       // fallback: 음성합성으로 짧은 신호 제공
       if (window.speechSynthesis) {
@@ -523,19 +534,16 @@ function Step2Content() {
     });
     try {
       if (!analyzerRef.current) analyzerRef.current = new SpeechAnalyzer();
-      await analyzerRef.current.startAnalysis(
-        (level) => {
-          setAudioLevel(level);
-          if (
-            speechOnsetMsRef.current === null &&
-            recordingStartedAtRef.current !== null &&
-            level >= 12
-          ) {
-            speechOnsetMsRef.current = Date.now() - recordingStartedAtRef.current;
-          }
-        },
-        audioInputStreamRef.current || undefined,
-      );
+      await analyzerRef.current.startAnalysis((level) => {
+        setAudioLevel(level);
+        if (
+          speechOnsetMsRef.current === null &&
+          recordingStartedAtRef.current !== null &&
+          level >= 12
+        ) {
+          speechOnsetMsRef.current = Date.now() - recordingStartedAtRef.current;
+        }
+      }, audioInputStreamRef.current || undefined);
       setIsRecorderReady(true);
     } catch (err) {
       console.error("❌ 녹음 시작 실패:", err);
@@ -647,13 +655,15 @@ function Step2Content() {
       const saved = Array.isArray(parsed) ? parsed : [];
       if (saved.length > 0) {
         const byIndex = new Map<number, any>();
-        saved.slice(-protocol.length).forEach((row: any, fallbackIndex: number) => {
-          const resolvedIndex = Number.isFinite(Number(row?.index))
-            ? Number(row.index)
-            : fallbackIndex;
-          if (resolvedIndex < 0 || resolvedIndex >= protocol.length) return;
-          byIndex.set(resolvedIndex, row);
-        });
+        saved
+          .slice(-protocol.length)
+          .forEach((row: any, fallbackIndex: number) => {
+            const resolvedIndex = Number.isFinite(Number(row?.index))
+              ? Number(row.index)
+              : fallbackIndex;
+            if (resolvedIndex < 0 || resolvedIndex >= protocol.length) return;
+            byIndex.set(resolvedIndex, row);
+          });
         const restored = Array.from(byIndex.entries())
           .sort((a, b) => a[0] - b[0])
           .map((entry) => entry[1]);
@@ -752,8 +762,10 @@ function Step2Content() {
             : 0;
         const avgConsonantAccuracy =
           analysisResults.length > 0
-            ? analysisResults.reduce((a, b) => a + (b.consonantAccuracy || 0), 0) /
-              analysisResults.length
+            ? analysisResults.reduce(
+                (a, b) => a + (b.consonantAccuracy || 0),
+                0,
+              ) / analysisResults.length
             : 0;
         const avgVowelAccuracy =
           analysisResults.length > 0
@@ -773,10 +785,16 @@ function Step2Content() {
             vowelAccuracy: Number(row.vowelAccuracy ?? 0),
             consonantDetail: row.consonantDetail
               ? {
-                  closureRatePct: Number(row.consonantDetail.closureRatePct ?? 0),
+                  closureRatePct: Number(
+                    row.consonantDetail.closureRatePct ?? 0,
+                  ),
                   closureHoldMs: Number(row.consonantDetail.closureHoldMs ?? 0),
-                  lipSymmetryPct: Number(row.consonantDetail.lipSymmetryPct ?? 0),
-                  openingSpeedMs: Number(row.consonantDetail.openingSpeedMs ?? 0),
+                  lipSymmetryPct: Number(
+                    row.consonantDetail.lipSymmetryPct ?? 0,
+                  ),
+                  openingSpeedMs: Number(
+                    row.consonantDetail.openingSpeedMs ?? 0,
+                  ),
                 }
               : undefined,
             vowelDetail: row.vowelDetail
@@ -831,27 +849,27 @@ function Step2Content() {
       const demoItems = protocol
         .slice(0, STEP2_MAX_STORED_AUDIO_ITEMS)
         .map((item, index) => {
-        const speechScore = randomFloat(62, 95);
-        const faceScore = randomFloat(60, 94);
-        const consonantAccuracy = randomFloat(58, 96);
-        const vowelAccuracy = randomFloat(58, 96);
-        const finalScore = Number(
-          ((consonantAccuracy + vowelAccuracy) / 2).toFixed(1),
-        );
-        return {
-          index,
-          text: item.text,
-          finalScore,
-          speechScore,
-          faceScore,
-          consonantAccuracy,
-          vowelAccuracy,
-          responseTime: randomFloat(900, 2200),
-          dataSource: "demo",
-          isCorrect: finalScore >= 60,
-          timestamp: new Date().toLocaleTimeString(),
-        };
-      });
+          const speechScore = randomFloat(62, 95);
+          const faceScore = randomFloat(60, 94);
+          const consonantAccuracy = randomFloat(58, 96);
+          const vowelAccuracy = randomFloat(58, 96);
+          const finalScore = Number(
+            ((consonantAccuracy + vowelAccuracy) / 2).toFixed(1),
+          );
+          return {
+            index,
+            text: item.text,
+            finalScore,
+            speechScore,
+            faceScore,
+            consonantAccuracy,
+            vowelAccuracy,
+            responseTime: randomFloat(900, 2200),
+            dataSource: "demo",
+            isCorrect: finalScore >= 60,
+            timestamp: new Date().toLocaleTimeString(),
+          };
+        });
 
       localStorage.setItem(STEP2_AUDIO_STORAGE_KEY, JSON.stringify(demoItems));
       saveResumeMeta(STEP2_AUDIO_STORAGE_KEY, stepSignature, demoItems.length);
@@ -903,7 +921,13 @@ function Step2Content() {
     } catch (error) {
       console.error("Step2 skip failed:", error);
     }
-  }, [place, protocol, pushStep3OrRehabResult, resetRuntimeStatus, stepSignature]);
+  }, [
+    place,
+    protocol,
+    pushStep3OrRehabResult,
+    resetRuntimeStatus,
+    stepSignature,
+  ]);
 
   const handleToggleRecording = async () => {
     if (!isRecording && (!canRecord || isPromptPlaying)) return;
@@ -986,11 +1010,14 @@ function Step2Content() {
                   liveArticulationRef.current.vowelDetails.mouthOpeningPct,
                 mouthWidthPct:
                   liveArticulationRef.current.vowelDetails.mouthWidthPct,
-                roundingPct: liveArticulationRef.current.vowelDetails.roundingPct,
+                roundingPct:
+                  liveArticulationRef.current.vowelDetails.roundingPct,
                 patternMatchPct:
                   liveArticulationRef.current.vowelDetails.patternMatchPct,
               };
-        const speechConsonantAccuracy = Number(result.details?.consonantAccuracy);
+        const speechConsonantAccuracy = Number(
+          result.details?.consonantAccuracy,
+        );
         const speechVowelAccuracy = Number(result.details?.vowelAccuracy);
         const responseTimeMs = speechOnsetMsRef.current;
 
@@ -1000,7 +1027,9 @@ function Step2Content() {
         const vowelAccuracy = Number.isFinite(speechVowelAccuracy)
           ? Math.max(0, Math.min(100, speechVowelAccuracy))
           : blendArticulationAccuracy(visualVowelAccuracy);
-        const finalScore = Number(((consonantAccuracy + vowelAccuracy) / 2).toFixed(1));
+        const finalScore = Number(
+          ((consonantAccuracy + vowelAccuracy) / 2).toFixed(1),
+        );
 
         updateSidebar({
           consonantAccuracy: consonantAccuracy / 100,
@@ -1067,7 +1096,8 @@ function Step2Content() {
                 const base64Audio = reader.result as string;
                 let existing: any[] = [];
                 try {
-                  const raw = localStorage.getItem(STEP2_AUDIO_STORAGE_KEY) || "[]";
+                  const raw =
+                    localStorage.getItem(STEP2_AUDIO_STORAGE_KEY) || "[]";
                   const parsed = JSON.parse(raw);
                   existing = Array.isArray(parsed) ? parsed : [];
                 } catch {
@@ -1084,18 +1114,23 @@ function Step2Content() {
                 };
 
                 const byIndex = new Map<number, any>();
-                existing.slice(-protocol.length).forEach((row: any, fallbackIndex: number) => {
-                  const resolvedIndex = Number.isFinite(Number(row?.index))
-                    ? Number(row.index)
-                    : fallbackIndex;
-                  if (resolvedIndex < 0 || resolvedIndex >= protocol.length) return;
-                  byIndex.set(resolvedIndex, row);
-                });
+                existing
+                  .slice(-protocol.length)
+                  .forEach((row: any, fallbackIndex: number) => {
+                    const resolvedIndex = Number.isFinite(Number(row?.index))
+                      ? Number(row.index)
+                      : fallbackIndex;
+                    if (resolvedIndex < 0 || resolvedIndex >= protocol.length)
+                      return;
+                    byIndex.set(resolvedIndex, row);
+                  });
                 byIndex.set(currentIndex, nextEntry);
                 let candidate = Array.from(byIndex.entries())
                   .sort((a, b) => a[0] - b[0])
                   .map((entry) => entry[1])
-                  .slice(-Math.min(STEP2_MAX_STORED_AUDIO_ITEMS, protocol.length));
+                  .slice(
+                    -Math.min(STEP2_MAX_STORED_AUDIO_ITEMS, protocol.length),
+                  );
                 let saved = false;
                 let droppedByQuota = 0;
                 let strippedAudioCount = 0;
@@ -1117,8 +1152,8 @@ function Step2Content() {
                       throw saveError;
                     }
 
-                    const oldestAudioIndex = candidate.findIndex(
-                      (item) => Boolean(item?.audioUrl),
+                    const oldestAudioIndex = candidate.findIndex((item) =>
+                      Boolean(item?.audioUrl),
                     );
                     if (oldestAudioIndex >= 0) {
                       candidate[oldestAudioIndex] = {
@@ -1141,12 +1176,18 @@ function Step2Content() {
                   }
                 }
 
-                if (!nextEntry.audioUrl || strippedAudioCount > 0 || droppedByQuota > 0) {
+                if (
+                  !nextEntry.audioUrl ||
+                  strippedAudioCount > 0 ||
+                  droppedByQuota > 0
+                ) {
                   console.warn("[Step2] save:reduced", {
                     strippedAudioCount,
                     droppedByQuota,
                     savedCount: candidate.length,
-                    hasAudio: Boolean(candidate[candidate.length - 1]?.audioUrl),
+                    hasAudio: Boolean(
+                      candidate[candidate.length - 1]?.audioUrl,
+                    ),
                   });
                 }
                 console.debug("[Step2] save:success", {
@@ -1186,7 +1227,8 @@ function Step2Content() {
                 saving: false,
                 pageError: true,
                 needsRetry: true,
-                message: "오디오 파일 처리 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
+                message:
+                  "오디오 파일 처리 오류가 발생했습니다. 해당 문항을 다시 녹음해 주세요.",
               });
               resolve(false);
             };
@@ -1202,7 +1244,8 @@ function Step2Content() {
             saving: false,
             pageError: true,
             needsRetry: true,
-            message: "오디오 저장 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
+            message:
+              "오디오 저장 데이터가 생성되지 않았습니다. 해당 문항을 다시 녹음해 주세요.",
           });
           saveSucceeded = false;
         }
@@ -1261,7 +1304,9 @@ function Step2Content() {
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className={`flex flex-col h-full bg-[#ffffff] overflow-hidden text-slate-900 font-sans relative ${isRehabMode ? "rehab-accent-scope" : ""}`}>
+    <div
+      className={`flex flex-col h-full bg-[#ffffff] overflow-hidden text-slate-900 font-sans relative ${isRehabMode ? "rehab-accent-scope" : ""}`}
+    >
       {/* 상단 진행 프로그레스 바 */}
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
         <div
@@ -1282,7 +1327,9 @@ function Step2Content() {
             className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
           />
           <div className="min-w-0">
-            <span className={`font-black text-[10px] uppercase tracking-widest block leading-none ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}>
+            <span
+              className={`font-black text-[10px] uppercase tracking-widest block leading-none ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}
+            >
               Repetition Training
             </span>
             <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
@@ -1298,7 +1345,9 @@ function Step2Content() {
           >
             SKIP
           </button>
-          <div className={`px-4 py-1.5 rounded-full font-black text-xs border ${isRehabMode ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>
+          <div
+            className={`px-4 py-1.5 rounded-full font-black text-xs border ${isRehabMode ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}
+          >
             {currentIndex + 1} / {protocol.length} 문항
           </div>
           <button
@@ -1308,10 +1357,28 @@ function Step2Content() {
             title="홈"
             className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 10.5 12 3l9 7.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5.5 9.5V21h13V9.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 21v-5h4v5"
+              />
             </svg>
           </button>
         </div>
@@ -1424,7 +1491,9 @@ function Step2Content() {
                     )}
                     <div
                       className={`mt-2 pt-2 border-t ${
-                        isRehabMode ? "border-sky-100/70" : "border-orange-100/70"
+                        isRehabMode
+                          ? "border-sky-100/70"
+                          : "border-orange-100/70"
                       }`}
                     >
                       <p className="text-[10px] font-black text-slate-400 uppercase mb-1">
@@ -1459,42 +1528,40 @@ function Step2Content() {
                   </div>
                 </div>
 
-                  <div className="mt-5 flex flex-col gap-3 relative z-[1]">
-                    <button
-                      onClick={() => {
-                        if (reviewAudioUrl && !isPlayingAudio) {
-                          if (audioPlayerRef.current) {
-                            audioPlayerRef.current.pause();
-                            audioPlayerRef.current.currentTime = 0;
-                            audioPlayerRef.current.onended = null;
-                          }
-                          const a = new Audio(reviewAudioUrl);
-                          audioPlayerRef.current = a;
-                          setIsPlayingAudio(true);
-                          a.onended = () => setIsPlayingAudio(false);
-                          a.play().catch(() => setIsPlayingAudio(false));
+                <div className="mt-5 flex flex-col gap-3 relative z-[1]">
+                  <button
+                    onClick={() => {
+                      if (reviewAudioUrl && !isPlayingAudio) {
+                        if (audioPlayerRef.current) {
+                          audioPlayerRef.current.pause();
+                          audioPlayerRef.current.currentTime = 0;
+                          audioPlayerRef.current.onended = null;
                         }
-                      }}
-                      className={`w-full py-4 rounded-2xl font-black text-sm ${
-                        isPlayingAudio
-                          ? accentSolid
-                          : accentSoft
-                      }`}
-                    >
-                      {isPlayingAudio ? "🔊 재생 중..." : "▶ 내 목소리 듣기"}
-                    </button>
-                    <button
-                      onClick={handleNext}
-                      disabled={isSaving}
-                      className={`w-full py-4 rounded-2xl font-black text-base ${
-                        isSaving
-                          ? trainingButtonStyles.navyPrimaryMuted
-                          : trainingButtonStyles.navyPrimary
-                      }`}
-                    >
-                      {isSaving ? "저장 중..." : "다음 문항으로"}
-                    </button>
-                  </div>
+                        const a = new Audio(reviewAudioUrl);
+                        audioPlayerRef.current = a;
+                        setIsPlayingAudio(true);
+                        a.onended = () => setIsPlayingAudio(false);
+                        a.play().catch(() => setIsPlayingAudio(false));
+                      }
+                    }}
+                    className={`w-full py-4 rounded-2xl font-black text-sm ${
+                      isPlayingAudio ? accentSolid : accentSoft
+                    }`}
+                  >
+                    {isPlayingAudio ? "🔊 재생 중..." : "▶ 내 목소리 듣기"}
+                  </button>
+                  <button
+                    onClick={handleNext}
+                    disabled={isSaving}
+                    className={`w-full py-4 rounded-2xl font-black text-base ${
+                      isSaving
+                        ? trainingButtonStyles.navyPrimaryMuted
+                        : trainingButtonStyles.navyPrimary
+                    }`}
+                  >
+                    {isSaving ? "저장 중..." : "다음 문항으로"}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1507,9 +1574,7 @@ function Step2Content() {
                     onClick={async () => {
                       await runReplaySequenceImmediate();
                     }}
-                    disabled={
-                      replayCount >= 1 || isPromptPlaying || isSaving
-                    }
+                    disabled={replayCount >= 1 || isPromptPlaying || isSaving}
                     className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black border ${
                       replayCount >= 1 || isPromptPlaying || isSaving
                         ? trainingButtonStyles.slateMuted
@@ -1537,7 +1602,7 @@ function Step2Content() {
                       </>
                     )}
 
-                                        <button
+                    <button
                       onClick={handleToggleRecording}
                       disabled={
                         !isRecording &&
@@ -1565,9 +1630,13 @@ function Step2Content() {
                           <div className="w-8 h-8 border-4 border-[#0B1A3A] border-t-transparent rounded-full animate-spin" />
                         </div>
                       ) : (
-                        <div className={`w-12 h-12 lg:w-14 lg:h-14 bg-white rounded-full flex items-center justify-center transition-colors ${
-                          isRehabMode ? "group-hover:bg-sky-100" : "group-hover:bg-orange-100"
-                        }`}>
+                        <div
+                          className={`w-12 h-12 lg:w-14 lg:h-14 bg-white rounded-full flex items-center justify-center transition-colors ${
+                            isRehabMode
+                              ? "group-hover:bg-sky-100"
+                              : "group-hover:bg-orange-100"
+                          }`}
+                        >
                           <svg
                             viewBox="0 0 24 24"
                             className={`w-6 h-6 lg:w-7 lg:h-7 text-[#0B1A3A] ${isRehabMode ? "group-hover:text-sky-600" : "group-hover:text-orange-600"}`}
@@ -1618,8 +1687,10 @@ function Step2Content() {
                 (sidebarMetrics.consonantLipSymmetry || 0) * 100,
               consonantOpeningSpeed:
                 (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
-              consonantClosureHoldMs: sidebarMetrics.consonantClosureHoldMs || 0,
-              consonantOpeningSpeedMs: sidebarMetrics.consonantOpeningSpeedMs || 0,
+              consonantClosureHoldMs:
+                sidebarMetrics.consonantClosureHoldMs || 0,
+              consonantOpeningSpeedMs:
+                sidebarMetrics.consonantOpeningSpeedMs || 0,
               vowelMouthOpening: (sidebarMetrics.vowelMouthOpening || 0) * 100,
               vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
               vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
@@ -1655,4 +1726,3 @@ export default function Step2Page() {
     </Suspense>
   );
 }
-

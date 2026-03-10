@@ -14,7 +14,7 @@ import {
   VISUAL_MATCHING_PROTOCOLS,
   VISUAL_MATCHING_RECOMMENDED_COUNT,
 } from "@/constants/visualTrainingData";
-import { useTraining } from "../TrainingContext";
+import { useTraining } from "../../TrainingContext";
 import { HomeExitModal } from "@/components/training/HomeExitModal";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 import { loadPatientProfile } from "@/lib/patientStorage";
@@ -62,8 +62,16 @@ function calculateCompositeScore(
   ).length;
   const accuracyScore = (correctCount / total) * 100;
   const speedBonus = (fastCorrectCount / total) * 100;
-  const compositeScore = Number((accuracyScore * 0.8 + speedBonus * 0.2).toFixed(1));
-  return { correctCount, fastCorrectCount, accuracyScore, speedBonus, compositeScore };
+  const compositeScore = Number(
+    (accuracyScore * 0.8 + speedBonus * 0.2).toFixed(1),
+  );
+  return {
+    correctCount,
+    fastCorrectCount,
+    accuracyScore,
+    speedBonus,
+    compositeScore,
+  };
 }
 
 let GLOBAL_SPEECH_LOCK: Record<number, boolean> = {};
@@ -104,11 +112,11 @@ function Step3Content() {
           step5: "0",
           step6: "0",
         });
-        router.push(`/result-rehab?${params.toString()}`);
+        router.push(`/result-page/speech-rehab?${params.toString()}`);
         return;
       }
       router.push(
-        `/step-4?place=${place}&step1=${step1Score}&step2=${step2Score}&step3=${step3Score}`,
+        `/programs/step-4?place=${place}&step1=${step1Score}&step2=${step2Score}&step3=${step3Score}`,
       );
     },
     [isRehabMode, place, rehabTargetStep, router, searchParams],
@@ -118,7 +126,7 @@ function Step3Content() {
   };
   const confirmGoHome = () => {
     if (isRehabMode) {
-      router.push("/rehab");
+      router.push("/select-page/speech-rehab");
       return;
     }
     const isTrialMode =
@@ -129,7 +137,7 @@ function Step3Content() {
       return;
     }
     saveTrainingExitProgress(place, 3);
-    router.push("/select");
+    router.push("/select-page/self-assessment");
   };
 
   const [isMounted, setIsMounted] = useState(false);
@@ -303,7 +311,9 @@ function Step3Content() {
   useEffect(() => {
     if (!currentItem?.targetWord) return;
 
-    const lipSymmetry = estimateLipSymmetryFromLandmarks(sidebarMetrics.landmarks);
+    const lipSymmetry = estimateLipSymmetryFromLandmarks(
+      sidebarMetrics.landmarks,
+    );
     const {
       consonantAccuracy,
       vowelAccuracy,
@@ -356,9 +366,11 @@ function Step3Content() {
       consonantDetails.openingSpeedMs;
     articulationAggregateRef.current.mouthOpeningSum +=
       vowelDetails.mouthOpeningPct;
-    articulationAggregateRef.current.mouthWidthSum += vowelDetails.mouthWidthPct;
+    articulationAggregateRef.current.mouthWidthSum +=
+      vowelDetails.mouthWidthPct;
     articulationAggregateRef.current.roundingSum += vowelDetails.roundingPct;
-    articulationAggregateRef.current.patternMatchSum += vowelDetails.patternMatchPct;
+    articulationAggregateRef.current.patternMatchSum +=
+      vowelDetails.patternMatchPct;
     articulationAggregateRef.current.count += 1;
   }, [
     currentItem?.targetWord,
@@ -396,7 +408,9 @@ function Step3Content() {
 
       setAnalysisResults(parsed);
       setCurrentIndex(Math.min(parsed.length, protocol.length - 1));
-      console.log(`↩️ Step 3 이어하기 복원: ${parsed.length}/${protocol.length}`);
+      console.log(
+        `↩️ Step 3 이어하기 복원: ${parsed.length}/${protocol.length}`,
+      );
     } catch (error) {
       console.error("Step 3 이어하기 복원 실패:", error);
     }
@@ -494,7 +508,11 @@ function Step3Content() {
     }
   };
   const replayEnabled =
-    playCount < 1 && !isSpeaking && !isAnswered && canAnswer && !isPreloadingImages;
+    playCount < 1 &&
+    !isSpeaking &&
+    !isAnswered &&
+    canAnswer &&
+    !isPreloadingImages;
 
   const handleOptionClick = (id: string) => {
     if (!canAnswer || isPreloadingImages || selectedId || isAnswered) return;
@@ -538,69 +556,61 @@ function Step3Content() {
       ),
       consonantDetail: {
         closureRatePct: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.closureRateSum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.consonantDetails.closureRatePct
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.closureRateSum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.consonantDetails.closureRatePct
           ).toFixed(1),
         ),
         closureHoldMs: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.closureHoldMsSum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.consonantDetails.closureHoldMs
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.closureHoldMsSum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.consonantDetails.closureHoldMs
           ).toFixed(1),
         ),
         lipSymmetryPct: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.lipSymmetrySum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.consonantDetails.lipSymmetryPct
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.lipSymmetrySum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.consonantDetails.lipSymmetryPct
           ).toFixed(1),
         ),
         openingSpeedMs: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.openingSpeedMsSum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.consonantDetails.openingSpeedMs
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.openingSpeedMsSum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.consonantDetails.openingSpeedMs
           ).toFixed(1),
         ),
       },
       vowelDetail: {
         mouthOpeningPct: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.mouthOpeningSum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.vowelDetails.mouthOpeningPct
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.mouthOpeningSum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.vowelDetails.mouthOpeningPct
           ).toFixed(1),
         ),
         mouthWidthPct: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.mouthWidthSum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.vowelDetails.mouthWidthPct
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.mouthWidthSum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.vowelDetails.mouthWidthPct
           ).toFixed(1),
         ),
         roundingPct: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.roundingSum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.vowelDetails.roundingPct
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.roundingSum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.vowelDetails.roundingPct
           ).toFixed(1),
         ),
         patternMatchPct: Number(
-          (
-            articulationAggregateRef.current.count > 0
-              ? articulationAggregateRef.current.patternMatchSum /
-                articulationAggregateRef.current.count
-              : liveArticulationRef.current.vowelDetails.patternMatchPct
+          (articulationAggregateRef.current.count > 0
+            ? articulationAggregateRef.current.patternMatchSum /
+              articulationAggregateRef.current.count
+            : liveArticulationRef.current.vowelDetails.patternMatchPct
           ).toFixed(1),
         ),
       },
@@ -685,11 +695,15 @@ function Step3Content() {
       const demoResults = protocol.map((item) => {
         const isCorrect = Math.random() < 0.72;
         const responseTime = Number((Math.random() * 5000 + 500).toFixed(0));
-        const wrongOption = item.options.find((opt) => opt.id !== item.answerId);
+        const wrongOption = item.options.find(
+          (opt) => opt.id !== item.answerId,
+        );
         return {
           text: item.targetWord,
           userAnswer: isCorrect ? item.answerId : "skip",
-          userAnswerLabel: isCorrect ? item.targetWord : wrongOption?.label || "오답 선택",
+          userAnswerLabel: isCorrect
+            ? item.targetWord
+            : wrongOption?.label || "오답 선택",
           correctAnswerId: item.answerId,
           correctAnswerLabel: item.targetWord,
           isCorrect,
@@ -746,7 +760,9 @@ function Step3Content() {
   if (!isMounted || !currentItem) return null;
 
   return (
-    <div className={`flex flex-col h-full bg-[#ffffff] overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}>
+    <div
+      className={`flex flex-col h-full bg-[#ffffff] overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}
+    >
       {/* 상단 진행 프로그레스 바 */}
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
         <div
@@ -754,7 +770,9 @@ function Step3Content() {
           style={{ width: `${((currentIndex + 1) / protocol.length) * 100}%` }}
         />
       </div>
-      <header className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}>
+      <header
+        className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
+      >
         <div className="flex items-center gap-4">
           <img
             src="/images/logo/logo.png"
@@ -762,7 +780,9 @@ function Step3Content() {
             className="w-10 h-10 rounded-xl object-cover"
           />
           <div>
-            <span className={`font-black text-[10px] uppercase tracking-widest leading-none block ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}>
+            <span
+              className={`font-black text-[10px] uppercase tracking-widest leading-none block ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}
+            >
               Step 03 • Visual-Auditory Association
             </span>
             <h2 className="text-lg font-black text-slate-900 tracking-tight">
@@ -778,7 +798,9 @@ function Step3Content() {
           >
             SKIP
           </button>
-          <div className={`px-4 py-1.5 rounded-full font-black text-xs border ${isRehabMode ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>
+          <div
+            className={`px-4 py-1.5 rounded-full font-black text-xs border ${isRehabMode ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}
+          >
             {currentIndex + 1} / {protocol.length}
           </div>
           <button
@@ -788,115 +810,152 @@ function Step3Content() {
             title="홈"
             className={`w-9 h-9 ${trainingButtonStyles.homeIcon}`}
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 9.5V21h13V9.5" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 21v-5h4v5" />
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 10.5 12 3l9 7.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5.5 9.5V21h13V9.5"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 21v-5h4v5"
+              />
             </svg>
           </button>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 bg-[#ffffff] pb-8 lg:pb-0 overflow-y-auto">
-          <div className="w-full max-w-5xl mx-auto px-6 py-4 flex flex-col h-full min-h-0 gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 border-b border-slate-100 pb-3 shrink-0">
-              <div className="space-y-1">
-                <div className={`inline-flex items-center gap-2 px-2 py-0.5 rounded-md ${isRehabMode ? "bg-sky-50" : "bg-orange-50"}`}>
-                  <span className={`w-1 h-1 rounded-full ${isRehabMode ? "bg-sky-500" : "bg-orange-500"}`} />
-                  <p className={`font-bold text-[9px] uppercase tracking-wider ${isRehabMode ? "text-sky-600" : "text-orange-600"}`}>
-                    Step 03
-                  </p>
-                </div>
-                <h1 className="text-xl lg:text-2xl font-black text-slate-800 break-keep">
-                  {isSpeaking
-                    ? "문제를 잘 들어보세요"
-                    : "알맞은 그림을 선택하세요"}
-                </h1>
+        <div className="w-full max-w-5xl mx-auto px-6 py-4 flex flex-col h-full min-h-0 gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 border-b border-slate-100 pb-3 shrink-0">
+            <div className="space-y-1">
+              <div
+                className={`inline-flex items-center gap-2 px-2 py-0.5 rounded-md ${isRehabMode ? "bg-sky-50" : "bg-orange-50"}`}
+              >
+                <span
+                  className={`w-1 h-1 rounded-full ${isRehabMode ? "bg-sky-500" : "bg-orange-500"}`}
+                />
+                <p
+                  className={`font-bold text-[9px] uppercase tracking-wider ${isRehabMode ? "text-sky-600" : "text-orange-600"}`}
+                >
+                  Step 03
+                </p>
               </div>
+              <h1 className="text-xl lg:text-2xl font-black text-slate-800 break-keep">
+                {isSpeaking
+                  ? "문제를 잘 들어보세요"
+                  : "알맞은 그림을 선택하세요"}
+              </h1>
+            </div>
 
-              <button
-                onClick={handleReplay}
-                disabled={!replayEnabled}
-                className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm active:scale-95 shrink-0 mb-1 pointer-events-auto ${
+            <button
+              onClick={handleReplay}
+              disabled={!replayEnabled}
+              className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm active:scale-95 shrink-0 mb-1 pointer-events-auto ${
+                replayEnabled
+                  ? accentSoft
+                  : `${trainingButtonStyles.slateOutline} opacity-60`
+              }`}
+            >
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center ${
                   replayEnabled
-                    ? accentSoft
-                    : `${trainingButtonStyles.slateOutline} opacity-60`
+                    ? isRehabMode
+                      ? "bg-sky-500"
+                      : "bg-orange-500"
+                    : "bg-slate-300"
                 }`}
               >
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    replayEnabled ? (isRehabMode ? "bg-sky-500" : "bg-orange-500") : "bg-slate-300"
-                  }`}
+                <svg
+                  className="w-3 h-3 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
                 >
-                  <svg
-                    className="w-3 h-3 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={3}
-                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                    />
-                  </svg>
-                </div>
-                <span
-                  className={`text-xs font-black ${
-                    replayEnabled ? (isRehabMode ? "text-sky-700" : "text-orange-700") : "text-slate-400"
-                  }`}
-                >
-                  다시 듣기
-                </span>
-              </button>
-            </div>
-
-            <div className="flex-1 min-h-0 flex items-start justify-start lg:items-center lg:justify-center pb-6">
-              <div className="grid grid-cols-3 gap-3 lg:gap-4 w-full lg:h-full lg:max-h-[60vh]">
-                {currentItem.options.map((option: VisualOption) => {
-                  return (
-                    <button
-                      key={option.id}
-                      onClick={() => handleOptionClick(option.id)}
-                      disabled={isSpeaking || isAnswered || !canAnswer || isPreloadingImages}
-                      className={`relative z-20 w-full aspect-[4/5] sm:aspect-square lg:h-full rounded-[24px] flex items-center justify-center transition-all border shadow-sm bg-white overflow-hidden pointer-events-auto
-                    ${selectedId === option.id ? (showResult ? "border-emerald-500 ring-4 ring-emerald-50 scale-105" : "border-slate-800 opacity-60 scale-95") : isRehabMode ? "border-slate-100 hover:border-sky-100 hover:shadow-md" : "border-slate-100 hover:border-orange-100 hover:shadow-md"}`}
-                    >
-                      <div className="w-full h-full p-4 flex items-center justify-center pointer-events-none">
-                        {isPreloadingImages ? (
-                          <div className="w-20 h-20 lg:w-28 lg:h-28 rounded-2xl bg-slate-100 animate-pulse" />
-                        ) : resolvedImageMap[option.id] ? (
-                          <>
-                            <img
-                              src={resolvedImageMap[option.id]}
-                              alt={option.label}
-                              className="w-24 h-24 lg:w-32 lg:h-32 object-contain"
-                              loading="eager"
-                              decoding="async"
-                            />
-                          </>
-                        ) : (
-                          <span className="text-4xl lg:text-5xl">
-                            {option.emoji || "🖼️"}
-                          </span>
-                        )}
-                      </div>
-                      {selectedId === option.id && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm animate-in fade-in zoom-in pointer-events-none">
-                          <span
-                            className={`text-6xl font-black ${showResult ? "text-emerald-500" : "text-slate-800"}`}
-                          >
-                            {showResult ? "O" : "X"}
-                          </span>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                  />
+                </svg>
               </div>
+              <span
+                className={`text-xs font-black ${
+                  replayEnabled
+                    ? isRehabMode
+                      ? "text-sky-700"
+                      : "text-orange-700"
+                    : "text-slate-400"
+                }`}
+              >
+                다시 듣기
+              </span>
+            </button>
+          </div>
+
+          <div className="flex-1 min-h-0 flex items-start justify-start lg:items-center lg:justify-center pb-6">
+            <div className="grid grid-cols-3 gap-3 lg:gap-4 w-full lg:h-full lg:max-h-[60vh]">
+              {currentItem.options.map((option: VisualOption) => {
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => handleOptionClick(option.id)}
+                    disabled={
+                      isSpeaking ||
+                      isAnswered ||
+                      !canAnswer ||
+                      isPreloadingImages
+                    }
+                    className={`relative z-20 w-full aspect-[4/5] sm:aspect-square lg:h-full rounded-[24px] flex items-center justify-center transition-all border shadow-sm bg-white overflow-hidden pointer-events-auto
+                    ${selectedId === option.id ? (showResult ? "border-emerald-500 ring-4 ring-emerald-50 scale-105" : "border-slate-800 opacity-60 scale-95") : isRehabMode ? "border-slate-100 hover:border-sky-100 hover:shadow-md" : "border-slate-100 hover:border-orange-100 hover:shadow-md"}`}
+                  >
+                    <div className="w-full h-full p-4 flex items-center justify-center pointer-events-none">
+                      {isPreloadingImages ? (
+                        <div className="w-20 h-20 lg:w-28 lg:h-28 rounded-2xl bg-slate-100 animate-pulse" />
+                      ) : resolvedImageMap[option.id] ? (
+                        <>
+                          <img
+                            src={resolvedImageMap[option.id]}
+                            alt={option.label}
+                            className="w-24 h-24 lg:w-32 lg:h-32 object-contain"
+                            loading="eager"
+                            decoding="async"
+                          />
+                        </>
+                      ) : (
+                        <span className="text-4xl lg:text-5xl">
+                          {option.emoji || "🖼️"}
+                        </span>
+                      )}
+                    </div>
+                    {selectedId === option.id && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm animate-in fade-in zoom-in pointer-events-none">
+                        <span
+                          className={`text-6xl font-black ${showResult ? "text-emerald-500" : "text-slate-800"}`}
+                        >
+                          {showResult ? "O" : "X"}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
+        </div>
       </main>
       <HomeExitModal
         open={isHomeExitModalOpen}
@@ -920,4 +979,3 @@ export default function Step3Page() {
     </Suspense>
   );
 }
-

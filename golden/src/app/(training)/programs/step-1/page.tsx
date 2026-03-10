@@ -75,7 +75,7 @@ function Step1Content() {
         step5: "0",
         step6: "0",
       });
-      router.push(`/result-rehab?${params.toString()}`);
+      router.push(`/result-page/speech-rehab?${params.toString()}`);
     },
     [placeParam, rehabTargetStep, router],
   );
@@ -165,7 +165,7 @@ function Step1Content() {
   };
   const confirmGoHome = () => {
     if (isRehabMode) {
-      router.push("/rehab");
+      router.push("/select-page/speech-rehab");
       return;
     }
     const isTrialMode =
@@ -176,7 +176,7 @@ function Step1Content() {
       return;
     }
     saveTrainingExitProgress(placeParam, 1);
-    router.push("/select");
+    router.push("/select-page/self-assessment");
   };
 
   const speakWord = useCallback(
@@ -308,7 +308,7 @@ function Step1Content() {
       if (isRehabMode && rehabTargetStep === 1) {
         pushRehabResult(scoring.compositeScore);
       } else {
-        router.push(`/step-2?step1=${finalScore}&place=${placeParam}`);
+        router.push(`/programs/step-2?step1=${finalScore}&place=${placeParam}`);
       }
     } catch (error) {
       console.error("Step1 skip failed:", error);
@@ -400,7 +400,7 @@ function Step1Content() {
             );
             pushRehabResult(scoring.compositeScore);
           } else {
-            router.push(`/step-2?step1=${finalScore}&place=${placeParam}`);
+            router.push(`/programs/step-2?step1=${finalScore}&place=${placeParam}`);
           }
         }
       }, 800);
