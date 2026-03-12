@@ -721,58 +721,6 @@ function ReportContent() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center">
-                      <Activity className="w-4 h-4 text-sky-600" />
-                    </span>
-                    검증 KPI (추정)
-                  </h3>
-                  <span className="text-xs font-bold text-slate-500">
-                    PASS {estimatedKpiSummary.passCount} · FAIL {estimatedKpiSummary.failCount} · PENDING {estimatedKpiSummary.pendingCount}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {estimatedKpiMetrics.map((metric) => {
-                    const tone =
-                      metric.status === "PASS"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : metric.status === "FAIL"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                          : "bg-slate-100 text-slate-600 border-slate-200";
-                    return (
-                      <div
-                        key={metric.key}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
-                      >
-                        <p className="text-xs font-black text-slate-500">
-                          {metric.label}
-                        </p>
-                        <p className="text-2xl font-black text-slate-900 mt-1">
-                          {metric.value === null
-                            ? "N/A"
-                            : `${metric.value}${metric.unit}`}
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-500 mt-1">
-                          {metric.thresholdLabel}
-                        </p>
-                        <div
-                          className={`inline-flex mt-2 rounded-full border px-2 py-0.5 text-[10px] font-black ${tone}`}
-                        >
-                          {metric.status}
-                        </div>
-                        {metric.note ? (
-                          <p className="text-[11px] text-slate-500 mt-1.5">
-                            {metric.note}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
               <RehabDetailBlocks
                 safeStep={rehabPrimaryStep.stepId}
                 detailComparisons={rehabDetailComparisons}
@@ -983,58 +931,6 @@ function ReportContent() {
                       ? "-"
                       : `${selfScoreDelta > 0 ? "+" : ""}${selfScoreDelta.toFixed(1)}점`}
                   </p>
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center">
-                      <Activity className="w-4 h-4 text-orange-600" />
-                    </span>
-                    검증 KPI (추정)
-                  </h3>
-                  <span className="text-xs font-bold text-slate-500">
-                    PASS {estimatedKpiSummary.passCount} · FAIL {estimatedKpiSummary.failCount} · PENDING {estimatedKpiSummary.pendingCount}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {estimatedKpiMetrics.map((metric) => {
-                    const tone =
-                      metric.status === "PASS"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : metric.status === "FAIL"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                          : "bg-slate-100 text-slate-600 border-slate-200";
-                    return (
-                      <div
-                        key={metric.key}
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
-                      >
-                        <p className="text-xs font-black text-slate-500">
-                          {metric.label}
-                        </p>
-                        <p className="text-2xl font-black text-slate-900 mt-1">
-                          {metric.value === null
-                            ? "N/A"
-                            : `${metric.value}${metric.unit}`}
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-500 mt-1">
-                          {metric.thresholdLabel}
-                        </p>
-                        <div
-                          className={`inline-flex mt-2 rounded-full border px-2 py-0.5 text-[10px] font-black ${tone}`}
-                        >
-                          {metric.status}
-                        </div>
-                        {metric.note ? (
-                          <p className="text-[11px] text-slate-500 mt-1.5">
-                            {metric.note}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
                 </div>
               </section>
 

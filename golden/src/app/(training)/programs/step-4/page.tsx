@@ -399,22 +399,36 @@ function Step4Content() {
       return;
     }
     setIsImageResolving(true);
-    const img = new Image();
-    const url = `${STEP4_IMAGE_BASE_URL}/${place}/${currentScenario.id}.png`;
-    img.onload = () => {
-      if (active) {
+    const candidates = [
+      `${STEP4_IMAGE_BASE_URL}/${place}/${currentScenario.id}.png`,
+      `${STEP4_IMAGE_RAW_BASE_URL}/${place}/${currentScenario.id}.png`,
+      `/images/places/${place}.png`,
+    ];
+
+    const tryLoadImage = (index: number) => {
+      if (!active || index >= candidates.length) {
+        if (active) {
+          setResolvedImageSrc("");
+          setIsImageResolving(false);
+        }
+        return;
+      }
+
+      const url = candidates[index];
+      const img = new Image();
+      img.onload = () => {
+        if (!active) return;
         setResolvedImageSrc(url);
         imageCacheRef.current[cacheKey] = url;
         setIsImageResolving(false);
-      }
+      };
+      img.onerror = () => {
+        tryLoadImage(index + 1);
+      };
+      img.src = url;
     };
-    img.onerror = () => {
-      if (active) {
-        setResolvedImageSrc("/images/placeholder.png");
-        setIsImageResolving(false);
-      }
-    };
-    img.src = url;
+
+    tryLoadImage(0);
     return () => {
       active = false;
     };

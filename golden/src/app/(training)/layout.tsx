@@ -51,6 +51,8 @@ function MetricBox({
 function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isReportRoute = pathname === "/report";
+  const isProgramRoute = pathname.startsWith("/programs/");
+  const showLiveTrainingChrome = isProgramRoute && !isReportRoute;
   const {
     clinicalMetrics,
     sidebarMetrics,
@@ -106,6 +108,51 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
       window.removeEventListener("unhandledrejection", onRejection);
     };
   }, [updateRuntimeStatus]);
+
+  useEffect(() => {
+    if (showLiveTrainingChrome) return;
+
+    prevLandmarksRef.current = null;
+    latencyEmaRef.current = 0;
+    precisionEmaRef.current = 0;
+    fpsEmaRef.current = 0;
+    precisionHistoryRef.current = [];
+
+    updateClinical({
+      systemLatency: 0,
+      trackingPrecision: 0,
+      analysisAccuracy: 95.2,
+      correlation: 0.85,
+      reliability: 0.8,
+      stability: 0,
+    });
+
+    updateSidebar({
+      facialSymmetry: 0,
+      staticFacialSymmetry: 0,
+      dynamicFacialSymmetry: 0,
+      mouthOpening: 0,
+      mouthWidth: 0,
+      eyebrowLift: 0,
+      eyeClosureStrength: 0,
+      faceDetected: false,
+      cameraActive: false,
+      landmarks: [],
+    });
+
+    updateRuntimeStatus({
+      recording: false,
+      saving: false,
+      pageError: false,
+      needsRetry: false,
+      message: "",
+    });
+  }, [
+    showLiveTrainingChrome,
+    updateClinical,
+    updateSidebar,
+    updateRuntimeStatus,
+  ]);
 
   const runtimeIndicator = runtimeStatus.pageError
     ? {
@@ -215,7 +262,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
           {children}
         </div>
 
-        {!isReportRoute && (
+        {showLiveTrainingChrome && (
           <footer className="no-print px-6 py-2 border-t border-slate-100 bg-white shrink-0">
           <div className="grid grid-cols-7 gap-2.5 w-full max-w-7xl mx-auto">
             <MetricBox
@@ -312,7 +359,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
         )}
 
         {/* ✅ 백그라운드 AI 엔진: 좌표만 추출하여 Context에 저장 */}
-        {!isReportRoute && (
+        {showLiveTrainingChrome && (
           <div className="fixed opacity-0 pointer-events-none -z-50 w-0 h-0">
           <FaceTracker
             videoRef={engineVideoRef}

@@ -1,64 +1,22 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Camera,
+  ChevronRight,
+  Clock3,
+  Mic,
+  Music,
+  Printer,
+  RotateCcw,
+  Trophy,
+} from "lucide-react";
+import { SONG_KEYS, SONGS } from "@/features/sing-training/data/songs";
+import { SongKey, SyllableCue } from "@/features/sing-training/types";
 import { useTrainingSession } from "@/hooks/useTrainingSession";
 
-type Gender = "남성" | "여성";
-type SongKey = "아리랑" | "애국가" | "내 나이가 어때서" | "무조건";
-
-type LyricLine = {
-  t: number;
-  d: number;
-  txt: string;
-};
-
-const SONGS: Record<SongKey, LyricLine[]> = {
-  아리랑: [
-    { t: 0, d: 4, txt: "아리랑 아리랑" },
-    { t: 4, d: 4, txt: "아라리요~" },
-    { t: 8, d: 4, txt: "아리랑 고개를" },
-    { t: 12, d: 4, txt: "넘어간다~" },
-    { t: 16, d: 4, txt: "나를 버리고" },
-    { t: 20, d: 4, txt: "가시는 님은" },
-    { t: 24, d: 4, txt: "십리도 못가서" },
-    { t: 28, d: 2, txt: "발병난다" },
-  ],
-  애국가: [
-    { t: 0, d: 5, txt: "동해물과 백두산이" },
-    { t: 5, d: 5, txt: "마르고 닳도록" },
-    { t: 10, d: 5, txt: "하느님이 보우하사" },
-    { t: 15, d: 5, txt: "우리나라 만세" },
-    { t: 20, d: 5, txt: "무궁화 삼천리" },
-    { t: 25, d: 5, txt: "화려강산" },
-  ],
-  "내 나이가 어때서": [
-    { t: 0, d: 4, txt: "야야야 내 나이가 어때서" },
-    { t: 4, d: 4, txt: "사랑에 나이가 있나요" },
-    { t: 8, d: 4, txt: "마음은 하나요" },
-    { t: 12, d: 4, txt: "느낌도 하나요" },
-    { t: 16, d: 4, txt: "그대만이 정말" },
-    { t: 20, d: 4, txt: "내 사랑인데" },
-    { t: 24, d: 6, txt: "내 나이가 어때서~" },
-  ],
-  무조건: [
-    { t: 0, d: 2.4, txt: "내가 필요할 땐" },
-    { t: 2.4, d: 2.4, txt: "나를 불러줘" },
-    { t: 4.8, d: 2.4, txt: "언제든지 달려갈게" },
-    { t: 7.2, d: 2.4, txt: "무조건 달려갈게" },
-    { t: 9.6, d: 1.8, txt: "짜짜라 짜라짜라" },
-    { t: 11.4, d: 1.8, txt: "짠짠짠!" },
-    { t: 13.2, d: 1.8, txt: "태평양을 건너" },
-    { t: 15.0, d: 1.8, txt: "인도양을 건너" },
-    { t: 16.8, d: 3.0, txt: "대서양을 건너서라도" },
-    { t: 19.8, d: 2.0, txt: "나를 불러주면" },
-    { t: 21.8, d: 2.5, txt: "무조건 달려갈게" },
-    { t: 24.3, d: 2.5, txt: "무조건 무조건이야~" },
-    { t: 26.8, d: 3.2, txt: "짜자라 짜라짜라 짠짠짠" },
-  ],
-};
-
-type Phase = "intro" | "select" | "guide" | "countdown" | "singing" | "result";
+type Phase = "select" | "ready" | "countdown" | "singing" | "result";
 
 type RankRow = {
   name: string;
@@ -67,463 +25,726 @@ type RankRow = {
   me?: boolean;
 };
 
-const SONG_KEYS: SongKey[] = ["아리랑", "애국가", "내 나이가 어때서", "무조건"];
+const LYRIC_LEAD_OFFSET_SEC = 0.28;
 
-export default function BrainSingPage() {
+function renderProgressLyric(
+  text: string,
+  progressPct: number,
+  cues?: SyllableCue[] | null,
+  elapsedInLine?: number,
+) {
+  if (cues && cues.length > 0 && typeof elapsedInLine === "number") {
+    return cues.map((cue, index) => {
+      const isDone = elapsedInLine >= cue.end;
+      const isActive = elapsedInLine >= cue.start && elapsedInLine < cue.end;
+      const activeProgress = isActive
+        ? Math.min(
+            1,
+            Math.max(0, (elapsedInLine - cue.start) / (cue.end - cue.start)),
+          )
+        : 0;
+      const fillWidth = isDone ? "100%" : `${activeProgress * 100}%`;
+
+      if (cue.syllable.trim().length === 0) {
+        return (
+          <span
+            key={`${cue.syllable}-${index}`}
+            className="inline-block w-[0.38em] text-transparent"
+          >
+            {"\u00A0"}
+          </span>
+        );
+      }
+
+      return (
+        <span key={`${cue.syllable}-${index}`} className="relative inline-block">
+          <span className="text-white/32">{cue.syllable}</span>
+          <span
+            className="absolute inset-y-0 left-0 overflow-hidden text-emerald-300 drop-shadow-[0_0_18px_rgba(110,231,183,0.5)]"
+            style={{ width: fillWidth }}
+          >
+            {cue.syllable}
+          </span>
+        </span>
+      );
+    });
+  }
+
+  const chars = Array.from(text);
+  const activeCount = Math.round((chars.length * progressPct) / 100);
+
+  return chars.map((char, index) => (
+    <span
+      key={`${char}-${index}`}
+      className={
+        index < activeCount
+          ? "text-white drop-shadow-[0_0_14px_rgba(255,255,255,0.18)]"
+          : "text-white/32"
+      }
+    >
+      {char === " " ? "\u00A0" : char}
+    </span>
+  ));
+}
+
+
+function BrainSingPageContent() {
   const router = useRouter();
-  const { patient } = useTrainingSession();
+  const searchParams = useSearchParams();
+  const { patient, ageGroup } = useTrainingSession();
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const sideVideoRef = useRef<HTMLVideoElement | null>(null);
+  const songAudioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const clockTimerRef = useRef<number | null>(null);
   const countdownTimerRef = useRef<number | null>(null);
   const singingTimerRef = useRef<number | null>(null);
+  const finishTimerRef = useRef<number | null>(null);
+  const finishGuardRef = useRef(false);
+  const audioEndedRef = useRef(false);
 
-  const [phase, setPhase] = useState<Phase>("intro");
+  const requestedSong = useMemo(() => {
+    const raw = searchParams.get("song");
+    return SONG_KEYS.find((item) => item === raw) ?? null;
+  }, [searchParams]);
+
+  const [phase, setPhase] = useState<Phase>(requestedSong ? "ready" : "select");
+  const [song, setSong] = useState<SongKey>(requestedSong ?? "나비야");
   const [clockText, setClockText] = useState("");
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("");
-  const [gender, setGender] = useState<Gender>("여성");
-
-  const [song, setSong] = useState<SongKey>("아리랑");
   const [countdown, setCountdown] = useState(3);
   const [remaining, setRemaining] = useState("30.0");
-  const [scanStatus, setScanStatus] = useState("WAITING");
-
+  const [scanStatus, setScanStatus] = useState("READY");
   const [lyricBase, setLyricBase] = useState("시스템 준비 중...");
+  const [nextLyricBase, setNextLyricBase] = useState("");
   const [lyricFillPct, setLyricFillPct] = useState(0);
-
+  const [lyricElapsedSec, setLyricElapsedSec] = useState(0);
+  const [currentLyricCues, setCurrentLyricCues] = useState<SyllableCue[] | null>(
+    null,
+  );
   const [rtJitter, setRtJitter] = useState("0.00%");
   const [rtSi, setRtSi] = useState("0.0");
-  const [rtLatency, setRtLatency] = useState("0 ms");
-
+  const [rtLatency, setRtLatency] = useState("-- ms");
   const [jitterHistory, setJitterHistory] = useState<number[]>([]);
   const [siHistory, setSiHistory] = useState<number[]>([]);
-
   const [finalScore, setFinalScore] = useState(0);
   const [finalJitter, setFinalJitter] = useState("0.00");
   const [finalSi, setFinalSi] = useState("0.0");
   const [comment, setComment] = useState("");
   const [rankings, setRankings] = useState<RankRow[]>([]);
-  const [preselectedSong, setPreselectedSong] = useState<SongKey | null>(null);
+  const [audioReady, setAudioReady] = useState(false);
+  const [songDurationSec, setSongDurationSec] = useState(30);
 
-  const userName = useMemo(() => name || patient?.name || "사용자", [name, patient?.name]);
+  const currentSong = SONGS[song];
+  const lyricLeadOffsetSec =
+    currentSong.lyricLeadOffsetSec ?? LYRIC_LEAD_OFFSET_SEC;
+  const userName = patient?.name || "사용자";
+  const lyricTimelineEndSec = useMemo(() => {
+    const lastLine = currentSong.lyrics[currentSong.lyrics.length - 1];
+    return lastLine ? lastLine.t + lastLine.d : 30;
+  }, [currentSong.lyrics]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = new URLSearchParams(window.location.search).get("song");
-    if (!raw) return;
-    const selected = SONG_KEYS.find((item) => item === raw) ?? null;
-    setPreselectedSong(selected);
-  }, []);
+    const audio = new Audio(currentSong.audioSrc);
+    audio.preload = "auto";
+    setAudioReady(false);
+    setSongDurationSec(currentSong.durationSec ?? 30);
+    const handleReady = () => setAudioReady(true);
+    const handleError = () => setAudioReady(false);
+    const handleMetadata = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setSongDurationSec(audio.duration);
+      }
+    };
 
-  useEffect(() => {
-    if (preselectedSong) {
-      setSong(preselectedSong);
+    audio.addEventListener("canplaythrough", handleReady);
+    audio.addEventListener("loadeddata", handleReady);
+    audio.addEventListener("error", handleError);
+    audio.addEventListener("loadedmetadata", handleMetadata);
+    audio.addEventListener("durationchange", handleMetadata);
+    songAudioRef.current = audio;
+
+    return () => {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.removeEventListener("canplaythrough", handleReady);
+      audio.removeEventListener("loadeddata", handleReady);
+      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("loadedmetadata", handleMetadata);
+      audio.removeEventListener("durationchange", handleMetadata);
+      if (songAudioRef.current === audio) {
+        songAudioRef.current = null;
+      }
+    };
+  }, [currentSong.audioSrc]);
+
+  const stopActiveSession = () => {
+    if (clockTimerRef.current !== null) {
+      window.clearInterval(clockTimerRef.current);
+      clockTimerRef.current = null;
     }
-  }, [preselectedSong]);
+    if (countdownTimerRef.current !== null) {
+      window.clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    if (singingTimerRef.current !== null) {
+      window.clearInterval(singingTimerRef.current);
+      singingTimerRef.current = null;
+    }
+    if (finishTimerRef.current !== null) {
+      window.clearTimeout(finishTimerRef.current);
+      finishTimerRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    if (sideVideoRef.current) {
+      sideVideoRef.current.srcObject = null;
+    }
+    if (songAudioRef.current) {
+      songAudioRef.current.onended = null;
+      songAudioRef.current.pause();
+      songAudioRef.current.currentTime = 0;
+    }
+    audioEndedRef.current = false;
+  };
 
-  useEffect(() => {
-    if (!name && patient?.name) setName(patient.name);
-    if (!age && patient?.age) setAge(String(patient.age));
-  }, [age, name, patient]);
+  const stopAnalysisLoopKeepingCamera = () => {
+    if (countdownTimerRef.current !== null) {
+      window.clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    if (singingTimerRef.current !== null) {
+      window.clearInterval(singingTimerRef.current);
+      singingTimerRef.current = null;
+    }
+    if (finishTimerRef.current !== null) {
+      window.clearTimeout(finishTimerRef.current);
+      finishTimerRef.current = null;
+    }
+    if (songAudioRef.current) {
+      songAudioRef.current.onended = null;
+      songAudioRef.current.pause();
+    }
+  };
 
   useEffect(() => {
     const tick = () => setClockText(new Date().toLocaleTimeString());
     tick();
     clockTimerRef.current = window.setInterval(tick, 1000);
     return () => {
-      if (clockTimerRef.current !== null) window.clearInterval(clockTimerRef.current);
+      if (clockTimerRef.current !== null)
+        window.clearInterval(clockTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
     return () => {
-      if (countdownTimerRef.current !== null) window.clearInterval(countdownTimerRef.current);
-      if (singingTimerRef.current !== null) window.clearInterval(singingTimerRef.current);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+      stopActiveSession();
     };
   }, []);
 
-  const registerUser = () => {
-    if (!name.trim() || !age.trim()) {
-      window.alert("이름과 나이를 입력해주세요.");
-      return;
-    }
-    setPhase(preselectedSong ? "guide" : "select");
-  };
+  useEffect(() => {
+    if (!requestedSong) return;
+    setSong(requestedSong);
+    setPhase("ready");
+  }, [requestedSong]);
 
   const prepareSong = (selected: SongKey) => {
     setSong(selected);
-    setPhase("guide");
+    setPhase("ready");
+    setRemaining("30.0");
+    setLyricBase("시스템 준비 중...");
+    setLyricFillPct(0);
+    setLyricElapsedSec(0);
+    setCurrentLyricCues(null);
+    setRtJitter("0.00%");
+    setRtSi("0.0");
+    setRtLatency("-- ms");
+    setScanStatus("READY");
   };
 
   const startCountdown = async () => {
     try {
+      if (songAudioRef.current) {
+        try {
+          songAudioRef.current.currentTime = 0;
+          await songAudioRef.current.play();
+          songAudioRef.current.pause();
+          songAudioRef.current.currentTime = 0;
+        } catch {
+          console.warn(`[brain-sing] audio prime failed: ${currentSong.audioSrc}`);
+        }
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: { echoCancellation: true, noiseSuppression: true },
       });
       streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      if (sideVideoRef.current) {
+        sideVideoRef.current.srcObject = stream;
+      }
 
       setCountdown(3);
       setPhase("countdown");
+      setScanStatus("CALIBRATING");
 
       countdownTimerRef.current = window.setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
             if (countdownTimerRef.current !== null) {
               window.clearInterval(countdownTimerRef.current);
+              countdownTimerRef.current = null;
             }
-            startSinging();
+            window.setTimeout(() => {
+              startSinging();
+            }, 450);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
-    } catch (error) {
-      console.error("camera/mic error:", error);
-      window.alert("카메라/마이크 권한이 필요합니다.");
-      setPhase("guide");
+    } catch {
+      window.alert("카메라 및 마이크 권한이 필요합니다.");
     }
   };
 
-  const startSinging = () => {
-    const startedAt = Date.now();
-    setPhase("singing");
-    setScanStatus("LIVE SCANNING");
-    setJitterHistory([]);
-    setSiHistory([]);
-    setLyricBase("시스템 준비 중...");
-    setLyricFillPct(0);
+  const finishSinging = (jitterData: number[], siData: number[]) => {
+    stopAnalysisLoopKeepingCamera();
 
-    singingTimerRef.current = window.setInterval(() => {
-      const elapsed = (Date.now() - startedAt) / 1000;
-      const remain = Math.max(0, 30 - elapsed).toFixed(1);
-      setRemaining(remain);
+    const avgJ =
+      jitterData.length > 0
+        ? jitterData.reduce((sum, value) => sum + value, 0) / jitterData.length
+        : 0.32;
+    const avgS =
+      siData.length > 0
+        ? siData.reduce((sum, value) => sum + value, 0) / siData.length
+        : 96.2;
+    const score = Math.round(avgS * 0.52 + (100 - avgJ * 12) * 0.48);
 
-      const songLyrics = SONGS[song];
-      const currentLine = songLyrics.find(
-        (line) => elapsed >= line.t && elapsed < line.t + line.d,
-      );
-
-      if (currentLine) {
-        setLyricBase(currentLine.txt);
-        const progress = Math.min(100, ((elapsed - currentLine.t) / currentLine.d) * 100);
-        setLyricFillPct(progress);
-      } else {
-        setLyricFillPct(0);
-      }
-
-      const jitter = Number((0.23 + Math.random() * 0.18).toFixed(2));
-      const si = Number((94.8 + Math.random() * 3.5).toFixed(1));
-      setJitterHistory((prev) => [...prev, jitter]);
-      setSiHistory((prev) => [...prev, si]);
-      setRtJitter(`${jitter.toFixed(2)}%`);
-      setRtSi(si.toFixed(1));
-      setRtLatency(`${(115 + Math.random() * 12).toFixed(0)} ms`);
-
-      if (elapsed >= 30) {
-        if (singingTimerRef.current !== null) {
-          window.clearInterval(singingTimerRef.current);
-        }
-        finishSinging();
-      }
-    }, 100);
-  };
-
-  const finishSinging = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    const avgJ = jitterHistory.length
-      ? jitterHistory.reduce((a, b) => a + b, 0) / jitterHistory.length
-      : 0.3;
-    const avgS = siHistory.length
-      ? siHistory.reduce((a, b) => a + b, 0) / siHistory.length
-      : 95;
-    const score = Math.floor(avgS * 0.5 + (100 - avgJ * 10) * 0.5);
+    const finalJitterText = avgJ.toFixed(2);
+    const finalSiText = avgS.toFixed(1);
+    const finalComment = `가창 분석 결과 성대 안정성은 ${avgJ.toFixed(2)}% 수준으로 유지되었고, 안면 대칭 지수는 ${avgS.toFixed(1)}점으로 비교적 안정적인 신경 협응 흐름을 보였습니다.`;
 
     setFinalScore(score);
-    setFinalJitter(avgJ.toFixed(2));
-    setFinalSi(avgS.toFixed(1));
-    setComment(
-      `안면 추적 분석 결과, 성대 미세 떨림 수치가 ${avgJ.toFixed(2)}%로 안정적이며 ` +
-        `안면 대칭 지수 ${avgS.toFixed(1)}점으로 신경 협응 상태가 양호합니다.`,
-    );
+    setFinalJitter(finalJitterText);
+    setFinalSi(finalSiText);
+    setComment(finalComment);
 
-    const meMaskedName =
+    const masked =
       userName.length >= 2
         ? `${userName[0]}*${userName[userName.length - 1]}`
         : `${userName}*`;
     const rows: RankRow[] = [
       { name: "박*자", score: 98, region: "전남" },
       { name: "김*식", score: 95, region: "서울" },
-      { name: meMaskedName, score, region: "본인", me: true },
+      { name: masked, score, region: "본인", me: true },
       { name: "이*순", score: 89, region: "경기" },
-      { name: "최*남", score: 86, region: "경남" },
+      { name: "최*남", score: 87, region: "경남" },
     ].sort((a, b) => b.score - a.score);
     setRankings(rows);
-    setPhase("result");
+    setScanStatus("COMPLETE");
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(
+        "brain-sing-result",
+        JSON.stringify({
+          song,
+          userName,
+          score,
+          finalJitter: finalJitterText,
+          finalSi: finalSiText,
+          rtLatency,
+          comment: finalComment,
+          rankings: rows,
+          completedAt: Date.now(),
+        }),
+      );
+    }
+
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        window.location.replace("/result-page/sing-training");
+      }, 2000);
+    }
+  };
+
+  const startSinging = () => {
+    const startedAt = performance.now();
+    const jitterData: number[] = [];
+    const siData: number[] = [];
+    finishGuardRef.current = false;
+    audioEndedRef.current = false;
+
+    setPhase("singing");
+    setScanStatus("LIVE");
+    setJitterHistory([]);
+    setSiHistory([]);
+    setLyricFillPct(0);
+
+    const hasReliableAudioDuration = audioReady && songDurationSec > 0;
+    const finishAtSec = hasReliableAudioDuration
+      ? songDurationSec
+      : Math.max(30, lyricTimelineEndSec - lyricLeadOffsetSec);
+    const fallbackFinishAtSec = hasReliableAudioDuration
+      ? Math.max(songDurationSec + 8, lyricTimelineEndSec - lyricLeadOffsetSec + 2)
+      : finishAtSec;
+
+    const finalizeIfNeeded = () => {
+      if (finishGuardRef.current) {
+        return;
+      }
+      finishGuardRef.current = true;
+      if (singingTimerRef.current !== null) {
+        window.clearInterval(singingTimerRef.current);
+        singingTimerRef.current = null;
+      }
+      if (finishTimerRef.current !== null) {
+        window.clearTimeout(finishTimerRef.current);
+        finishTimerRef.current = null;
+      }
+      finishSinging(jitterData, siData);
+    };
+
+    finishTimerRef.current = window.setTimeout(
+      finalizeIfNeeded,
+      Math.max(0, fallbackFinishAtSec * 1000 + 120),
+    );
+
+    if (songAudioRef.current) {
+      songAudioRef.current.currentTime = 0;
+      songAudioRef.current.onended = () => {
+        audioEndedRef.current = true;
+      };
+      songAudioRef.current.play().catch(() => {
+        console.warn(`[brain-sing] audio playback failed: ${currentSong.audioSrc}`);
+      });
+    }
+
+    singingTimerRef.current = window.setInterval(() => {
+      const audioElapsed = songAudioRef.current?.currentTime ?? 0;
+      const fallbackElapsed = (performance.now() - startedAt) / 1000;
+      const elapsed =
+        audioReady && audioElapsed > 0.01 ? audioElapsed : fallbackElapsed;
+      const lyricElapsed = Math.max(0, elapsed + lyricLeadOffsetSec);
+      const effectiveDuration = finishAtSec;
+      const remain = Math.max(0, effectiveDuration - elapsed).toFixed(1);
+      setRemaining(remain);
+
+      const firstLine = currentSong.lyrics[0] ?? null;
+      const lastStartedIndex = currentSong.lyrics.reduce((foundIndex, line, index) => {
+        if (lyricElapsed >= line.t) {
+          return index;
+        }
+        return foundIndex;
+      }, -1);
+
+      if (firstLine && lastStartedIndex < 0) {
+        setLyricBase("전주 진행 중...");
+        setNextLyricBase(firstLine.txt);
+        setCurrentLyricCues(null);
+        setLyricElapsedSec(0);
+        setLyricFillPct(0);
+      } else if (lastStartedIndex >= 0) {
+        const activeLine = currentSong.lyrics[lastStartedIndex];
+        const nextLine = currentSong.lyrics[lastStartedIndex + 1] ?? null;
+        const elapsedInLine = Math.max(0, lyricElapsed - activeLine.t);
+
+        setLyricBase(activeLine.txt);
+        setNextLyricBase(nextLine?.txt ?? "");
+        setCurrentLyricCues(activeLine.cues ?? null);
+        setLyricElapsedSec(elapsedInLine);
+        setLyricFillPct(
+          Math.min(100, (elapsedInLine / activeLine.d) * 100),
+        );
+      } else {
+        setLyricBase("시스템 준비 중...");
+        setNextLyricBase("");
+        setCurrentLyricCues(null);
+        setLyricElapsedSec(0);
+        setLyricFillPct(0);
+      }
+
+      const jitter = Number((0.22 + Math.random() * 0.16).toFixed(2));
+      const si = Number((94.5 + Math.random() * 3.8).toFixed(1));
+      jitterData.push(jitter);
+      siData.push(si);
+      setJitterHistory([...jitterData]);
+      setSiHistory([...siData]);
+      setRtJitter(`${jitter.toFixed(2)}%`);
+      setRtSi(si.toFixed(1));
+      setRtLatency(`${(110 + Math.random() * 18).toFixed(0)} ms`);
+
+      if (audioEndedRef.current) {
+        finalizeIfNeeded();
+        return;
+      }
+
+      if (!hasReliableAudioDuration && elapsed >= effectiveDuration) {
+        finalizeIfNeeded();
+      }
+    }, 100);
   };
 
   const resetAll = () => {
-    if (countdownTimerRef.current !== null) window.clearInterval(countdownTimerRef.current);
-    if (singingTimerRef.current !== null) window.clearInterval(singingTimerRef.current);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
+    stopActiveSession();
+    setSong(requestedSong ?? "나비야");
+    setPhase(requestedSong ? "ready" : "select");
+    setCountdown(3);
     setRemaining("30.0");
+    finishGuardRef.current = false;
+    setScanStatus("READY");
     setLyricBase("시스템 준비 중...");
+    setNextLyricBase("");
     setLyricFillPct(0);
+    setLyricElapsedSec(0);
+    setCurrentLyricCues(null);
     setRtJitter("0.00%");
     setRtSi("0.0");
-    setRtLatency("0 ms");
+    setRtLatency("-- ms");
     setJitterHistory([]);
     setSiHistory([]);
-    setPhase("intro");
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-[#fffbf0] text-[#2b1a0f]">
-      <header className="px-6 py-3 bg-white border-b-2 border-[#c48a2c] flex items-center justify-between shadow-sm">
-        <h1 className="text-xl font-black text-[#9b6a1f]">브레인 노래방</h1>
-        <p className="text-[11px] font-mono text-[#7f6d5f]">{clockText}</p>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7faf8] text-slate-900">
+      <header className="shrink-0 border-b border-emerald-100 bg-white/95 px-4 sm:px-6 py-3 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src="/images/logo/logo.png"
+              alt="GOLDEN logo"
+              className="h-10 w-10 rounded-xl object-cover"
+            />
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600 leading-none">
+                Active Patient Profile
+              </p>
+              <div className="mt-1 flex items-center gap-2 text-sm sm:text-lg font-black text-slate-900">
+                <span className="truncate">{patient?.name ?? "정보 없음"}</span>
+                <span className="text-xs sm:text-sm font-bold text-slate-500">
+                  {patient?.age ?? "-"}세
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black text-slate-600">
+                  {ageGroup === "Senior" ? "실버 규준 적용" : "일반 규준 적용"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/select-page/sing-training")}
+              className="rounded-full border border-emerald-500 bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-2 text-[11px] sm:text-xs font-black text-white shadow-sm"
+            >
+              곡선택
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/select-page/mode")}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] sm:text-xs font-black text-slate-700 shadow-sm"
+            >
+              활동선택
+            </button>
+          </div>
+        </div>
       </header>
 
-      <main className="p-4 h-[calc(100vh-9.5rem)] min-h-[620px]">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 h-full">
-          <section className="rounded-3xl overflow-hidden border border-[#f1e6d0] bg-white shadow-sm flex flex-col">
-            <div className="px-5 py-3 bg-[#fffdf9] border-b border-[#f1e6d0] flex items-center justify-between">
-              <p className="text-sm font-bold text-[#9b6a1f]">가창 분석 엔진</p>
-              <span className="text-[11px] font-mono text-[#7f6d5f]">{scanStatus}</span>
+      <main className="flex-1 min-h-0 overflow-hidden px-4 sm:px-6 py-4">
+        <div className="flex h-full min-h-0 items-center justify-center">
+          <section className="relative h-full w-full overflow-hidden rounded-[28px] border border-emerald-100 bg-white shadow-[0_10px_30px_rgba(16,185,129,0.05)]">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 h-full w-full object-contain scale-x-[-1] bg-black"
+            />
+
+            <div
+              className={`absolute inset-0 ${
+                phase === "ready"
+                  ? "bg-white"
+                  : "bg-gradient-to-t from-black/55 via-black/10 to-black/35"
+              }`}
+            />
+
+            <div className="absolute left-6 top-6 z-10 rounded-full border border-white/15 bg-black/35 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-white backdrop-blur-md">
+              {currentSong.level} · {song}
             </div>
 
-            <div className="relative flex-1 bg-black overflow-hidden">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1] opacity-90" />
-              <div className="absolute inset-x-0 top-0 h-[3px] bg-white shadow-[0_0_20px_#c48a2c] animate-[scanline_4s_linear_infinite]" />
-              <div className="absolute top-4 right-4 text-white font-mono text-4xl font-black drop-shadow-lg">
-                {remaining}
+            {phase === "singing" && (
+              <>
+                <div className="absolute inset-0 z-[2] opacity-[0.06] [background-image:linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:52px_52px]" />
+                <div className="brain-sing-scanline absolute inset-x-0 top-0 z-[4] h-[22%]" />
+                <div className="absolute inset-x-0 top-0 z-[4] h-px bg-emerald-300/45 shadow-[0_0_24px_rgba(52,211,153,0.6)]" />
+                <div className="absolute right-6 top-20 z-10 font-mono text-[56px] font-black tracking-tight text-white drop-shadow-[0_0_16px_rgba(0,0,0,0.7)] sm:text-[64px]">
+                  {remaining}
+                </div>
+                <div className="absolute bottom-8 left-1/2 z-10 w-[min(96%,980px)] -translate-x-1/2 overflow-hidden rounded-[26px] border border-emerald-200/18 bg-black/22 px-8 py-5 text-center backdrop-blur-md sm:bottom-10 lg:w-[min(88%,1120px)] lg:px-10 lg:py-6">
+                  <p className="relative flex flex-wrap items-center justify-center gap-x-[0.03em] text-3xl font-black tracking-[-0.03em] sm:text-4xl lg:text-5xl">
+                    {renderProgressLyric(
+                      lyricBase,
+                      lyricFillPct,
+                      currentLyricCues,
+                      lyricElapsedSec,
+                    )}
+                  </p>
+                  <p className="mt-3 line-clamp-1 text-xl font-black tracking-[-0.03em] text-white/40 sm:text-2xl lg:text-3xl">
+                    {nextLyricBase}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {phase === "ready" && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/60 p-6 backdrop-blur-md">
+                <div className="flex w-full max-w-[760px] flex-col items-center gap-10 rounded-[36px] border border-white/25 bg-white/88 px-10 pt-18 pb-16 text-center shadow-[0_30px_80px_rgba(15,23,42,0.35)] backdrop-blur-md sm:gap-12 sm:px-16 sm:pt-22 sm:pb-18">
+                  <div className="flex justify-center">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-black uppercase tracking-[0.24em] text-white shadow-[0_14px_28px_rgba(16,185,129,0.35)] sm:px-6 sm:py-3 sm:text-base">
+                      <Music className="h-5 w-5" />
+                      <span>Level 1</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-5">
+                    <Mic className="h-11 w-11 text-emerald-500 sm:h-12 sm:w-12" />
+                    <h2 className="text-5xl font-black tracking-tight text-slate-900 sm:text-6xl">
+                      {song}
+                    </h2>
+                  </div>
+                  <p className="max-w-[620px] text-2xl font-medium leading-relaxed text-slate-500 sm:text-[28px]">
+                    시작하기를 누르면 카운트다운 후
+                    <br />
+                    카메라와 가창 분석이 시작됩니다.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void startCountdown()}
+                    className="inline-flex h-[72px] items-center justify-center gap-3 rounded-full bg-emerald-500 px-12 text-2xl font-black text-white shadow-[0_18px_38px_rgba(16,185,129,0.38)] transition-transform duration-200 hover:scale-105 hover:bg-emerald-400 sm:h-[84px] sm:px-14 sm:text-3xl"
+                  >
+                    <ChevronRight className="h-7 w-7" />
+                    시작하기
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="h-28 border-t-4 border-[#c48a2c] bg-white px-6 flex items-center justify-center relative">
-              <p className="text-3xl font-black text-[#f0ede4] relative whitespace-nowrap">
-                {lyricBase}
-                <span
-                  className="absolute left-0 top-0 text-[#9b6a1f] overflow-hidden whitespace-nowrap transition-[width] duration-100"
-                  style={{ width: `${lyricFillPct}%` }}
-                >
-                  {lyricBase}
-                </span>
-              </p>
-            </div>
+            {phase === "countdown" && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-[rgba(15,23,42,0.16)]">
+                <div className="flex flex-col items-center gap-6 text-center">
+                  <p className="text-sm font-black uppercase tracking-[0.34em] text-white/80 sm:text-base">
+                    Singing Starts In
+                  </p>
+                  <div className="text-[220px] font-black leading-none text-white drop-shadow-[0_10px_34px_rgba(16,185,129,0.42)] sm:text-[280px]">
+                    {countdown === 0 ? "시작" : countdown}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {[3, 2, 1].map((step) => (
+                      <div
+                        key={step}
+                        className={`flex h-12 w-12 items-center justify-center rounded-full border text-lg font-black transition-all sm:h-14 sm:w-14 sm:text-xl ${
+                          countdown <= step && countdown !== 0
+                            ? "border-emerald-300 bg-emerald-400 text-white shadow-[0_0_28px_rgba(52,211,153,0.45)]"
+                            : "border-white/25 bg-white/10 text-white/55"
+                        }`}
+                      >
+                        {step}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
-
-          <aside className="rounded-3xl border border-[#f1e6d0] bg-white shadow-sm p-4 flex flex-col">
-            <div className="rounded-xl border border-[#f1e6d0] border-l-[6px] border-l-[#9b6a1f] bg-[#fdf6e3] p-4 mb-2">
-              <label className="text-[10px] font-extrabold text-[#9b6a1f] uppercase">Jitter</label>
-              <p className="text-3xl font-mono font-black">{rtJitter}</p>
-            </div>
-            <div className="rounded-xl border border-[#f1e6d0] border-l-[6px] border-l-[#9b6a1f] bg-[#fdf6e3] p-4 mb-2">
-              <label className="text-[10px] font-extrabold text-[#9b6a1f] uppercase">Symmetry Index</label>
-              <p className="text-3xl font-mono font-black">{rtSi}</p>
-            </div>
-            <div className="rounded-xl border border-[#f1e6d0] border-l-[6px] border-l-[#9b6a1f] bg-[#fdf6e3] p-4">
-              <label className="text-[10px] font-extrabold text-[#9b6a1f] uppercase">Latency</label>
-              <p className="text-3xl font-mono font-black">{rtLatency}</p>
-            </div>
-
-            <div className="mt-auto pt-3 text-center">
-              <p className="text-xs font-black text-[#9b6a1f]">BRAIN FRIENDS GOLDEN</p>
-              <p className="text-[10px] text-[#7f6d5f]">AI Singing Neuro-Care Module</p>
-            </div>
-          </aside>
         </div>
       </main>
-
-      {phase === "intro" && (
-        <Overlay>
-          <h2 className="text-3xl font-black text-[#9b6a1f] mb-4">브레인 노래방 진입</h2>
-          <p className="text-sm text-[#7f6d5f] font-bold mb-6">검사자 정보를 입력하세요.</p>
-          <div className="w-full max-w-md grid gap-3">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="이름"
-              className="w-full p-3 rounded-xl border border-[#f1e6d0] bg-white"
-            />
-            <input
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
-              placeholder="나이"
-              className="w-full p-3 rounded-xl border border-[#f1e6d0] bg-white"
-            />
-            <select
-              value={gender}
-              onChange={(e) => setGender(e.target.value as Gender)}
-              className="w-full p-3 rounded-xl border border-[#f1e6d0] bg-white"
-            >
-              <option value="여성">여성</option>
-              <option value="남성">남성</option>
-            </select>
-            <button
-              type="button"
-              onClick={registerUser}
-              className="mt-2 h-12 rounded-xl bg-[#9b6a1f] text-white font-black"
-            >
-              검사 시작
-            </button>
-          </div>
-        </Overlay>
-      )}
-
-      {phase === "select" && (
-        <Overlay>
-          <h2 className="text-3xl font-black text-[#9b6a1f] mb-4">곡 선택</h2>
-          <p className="text-sm text-[#7f6d5f] font-bold mb-6">
-            {userName}님, 검사할 노래를 선택하세요.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
-            {(Object.keys(SONGS) as SongKey[]).map((songKey) => (
-              <button
-                key={songKey}
-                type="button"
-                onClick={() => prepareSong(songKey)}
-                className="h-14 rounded-xl border border-[#f1e6d0] bg-white font-black hover:bg-[#fdf6e3] transition-colors"
-              >
-                {songKey}
-              </button>
-            ))}
-          </div>
-        </Overlay>
-      )}
-
-      {phase === "guide" && (
-        <Overlay>
-          <h2 className="text-3xl font-black text-[#9b6a1f] mb-4">{song}</h2>
-          <p className="text-sm text-[#7f6d5f] font-bold mb-2">검사 시간: 30초</p>
-          <p className="text-sm text-[#7f6d5f] font-bold mb-6">
-            카운트다운 후 가창을 시작합니다.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={startCountdown}
-              className="h-12 px-10 rounded-xl bg-[#10b981] text-white font-black"
-            >
-              시작하기
-            </button>
-            {preselectedSong && (
-              <button
-                type="button"
-                onClick={() => router.push("/select-page/sing-training")}
-                className="h-12 px-6 rounded-xl border border-[#c48a2c] text-[#9b6a1f] font-black bg-white"
-              >
-                다른 곡 선택
-              </button>
-            )}
-          </div>
-        </Overlay>
-      )}
-
-      {phase === "countdown" && (
-        <Overlay>
-          <p className="text-sm text-[#7f6d5f] font-bold mb-2">검사 시작까지</p>
-          <h2 className="text-8xl font-black text-[#9b6a1f]">{countdown}</h2>
-        </Overlay>
-      )}
-
-      {phase === "result" && (
-        <Overlay>
-          <div className="w-full max-w-3xl rounded-3xl border-2 border-[#c48a2c] bg-white p-8 shadow-xl">
-            <h2 className="text-3xl font-black text-[#9b6a1f] mb-5 text-center">
-              진단 완료
-            </h2>
-            <div className="rounded-2xl border border-[#f1e6d0] bg-[#fffbf0] p-4 mb-4 text-center">
-              <p className="text-sm font-bold text-[#7f6d5f]">종합 점수</p>
-              <p className="text-6xl font-black text-[#9b6a1f] leading-none">
-                {finalScore}
-                <span className="text-2xl ml-1">점</span>
-              </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-              <Stat title="성대 미세 떨림" value={`${finalJitter}%`} />
-              <Stat title="안면 대칭 지수" value={finalSi} />
-              <Stat title="반응 지연" value={rtLatency} />
-            </div>
-            <p className="text-sm leading-relaxed text-[#2b1a0f] mb-4">{comment}</p>
-            <div className="rounded-xl border border-[#f1e6d0] p-3">
-              <p className="text-sm font-black text-[#9b6a1f] mb-2">지역 랭킹</p>
-              <div className="space-y-1.5">
-                {rankings.map((row, idx) => (
-                  <div
-                    key={`${row.name}-${idx}`}
-                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-bold border ${
-                      row.me
-                        ? "bg-[#fdf6e3] text-[#9b6a1f] border-[#c48a2c]"
-                        : "bg-white border-[#f1e6d0]"
-                    }`}
-                  >
-                    <span>{idx + 1}위. {row.name} ({row.region})</span>
-                    <span>{row.score}점</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="h-11 rounded-xl bg-[#10b981] text-white font-black"
-              >
-                결과 인쇄
-              </button>
-              <button
-                type="button"
-                onClick={resetAll}
-                className="h-11 rounded-xl bg-[#9b6a1f] text-white font-black"
-              >
-                처음으로
-              </button>
-            </div>
-          </div>
-        </Overlay>
-      )}
-
-      <style jsx>{`
-        @keyframes scanline {
-          from {
-            top: 0%;
-          }
-          to {
-            top: 100%;
-          }
-        }
-      `}</style>
     </div>
   );
 }
 
-function Overlay({ children }: { children: React.ReactNode }) {
+export default function BrainSingPage() {
   return (
-    <div className="absolute inset-0 bg-[#fffbf0]/95 backdrop-blur-[1px] z-30 flex flex-col items-center justify-center p-6 text-center">
-      {children}
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#f7faf8] text-sm font-black uppercase tracking-[0.2em] text-emerald-600">
+          Initializing Singing Engine...
+        </div>
+      }
+    >
+      <BrainSingPageContent />
+    </Suspense>
+  );
+}
+
+function OverlayShell({
+  children,
+  subtitle,
+  title,
+}: {
+  children: React.ReactNode;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#f7faf8]/92 p-6 text-center backdrop-blur-[3px]">
+      <div className="w-full max-w-5xl rounded-[32px] border border-emerald-100 bg-white p-8 shadow-2xl sm:p-10">
+        <h2 className="mb-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+          {title}
+        </h2>
+        <p className="mb-8 text-sm font-medium text-slate-500 sm:text-base">
+          {subtitle}
+        </p>
+        {children}
+      </div>
     </div>
   );
 }
 
-function Stat({ title, value }: { title: string; value: string }) {
+function MetricCard({
+  accent,
+  title,
+  value,
+}: {
+  accent: "blue" | "emerald" | "slate";
+  title: string;
+  value: string;
+}) {
+  const accentMap = {
+    blue: "border-l-sky-500 bg-sky-50 text-sky-700",
+    emerald: "border-l-emerald-500 bg-emerald-50 text-emerald-700",
+    slate: "border-l-slate-400 bg-slate-50 text-slate-700",
+  };
+
   return (
-    <div className="rounded-xl border border-[#f1e6d0] bg-[#fffbf0] p-3">
-      <p className="text-[11px] font-extrabold text-[#7f6d5f]">{title}</p>
-      <p className="text-2xl font-mono font-black mt-1">{value}</p>
+    <div
+      className={`rounded-2xl border border-slate-200 border-l-[6px] p-4 ${accentMap[accent]}`}
+    >
+      <label className="block text-[10px] font-extrabold uppercase tracking-widest">
+        {title}
+      </label>
+      <p className="mt-1 font-mono text-3xl font-black text-slate-900">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ResultStat({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[11px] font-extrabold text-slate-500">{title}</p>
+      <p className="mt-1 font-mono text-2xl font-black text-slate-900">
+        {value}
+      </p>
     </div>
   );
 }
