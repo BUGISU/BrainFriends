@@ -215,7 +215,22 @@ export interface TrainingSession {
 
 const SESSION_STORAGE_PREFIX = "kwab_training_session";
 const HISTORY_STORAGE_PREFIX = "kwab_training_history";
-export type TrainingMode = "self" | "rehab";
+export type TrainingMode = "self" | "rehab" | "sing";
+
+export interface SingHistoryResult {
+  song: string;
+  score: number;
+  finalJitter: string;
+  finalSi: string;
+  rtLatency: string;
+  comment: string;
+  rankings: Array<{
+    name: string;
+    score: number;
+    region: string;
+    me?: boolean;
+  }>;
+}
 
 export interface TrainingHistoryEntry {
   historyId: string;
@@ -230,6 +245,7 @@ export interface TrainingHistoryEntry {
   rehabStep?: number;
   completedAt: number;
   aq: number;
+  singResult?: SingHistoryResult;
   stepScores: {
     step1: number; // 0~100
     step2: number; // 0~100
@@ -846,6 +862,78 @@ export class SessionManager {
     } catch {
       return [];
     }
+  }
+
+  static saveSingHistory(
+    patient: PatientProfile,
+    result: SingHistoryResult,
+    completedAt: number = Date.now(),
+  ) {
+    if (typeof window === "undefined") return null;
+    const patientKey = SessionManager.getPatientKey(patient);
+    const key = `${HISTORY_STORAGE_PREFIX}:${patientKey}`;
+    let rows: TrainingHistoryEntry[] = [];
+    try {
+      const raw = localStoreAdapter.getItem(key);
+      rows = raw ? (JSON.parse(raw) as TrainingHistoryEntry[]) : [];
+      if (!Array.isArray(rows)) rows = [];
+    } catch {
+      rows = [];
+    }
+
+    const duplicated = rows.find(
+      (row) =>
+        row.trainingMode === "sing" &&
+        row.completedAt === completedAt &&
+        row.singResult?.song === result.song &&
+        Number(row.singResult?.score ?? row.aq ?? 0) === Number(result.score),
+    );
+    if (duplicated) return duplicated;
+
+    const p = patient as any;
+    const entry: TrainingHistoryEntry = {
+      historyId: `history_sing_${completedAt}`,
+      sessionId: `sing_${completedAt}`,
+      patientKey,
+      patientName: String(p.name ?? ""),
+      birthDate: p.birthDate ? String(p.birthDate) : undefined,
+      age: Number(patient.age ?? 0),
+      educationYears: Number(patient.educationYears ?? 0),
+      place: "brain-sing",
+      trainingMode: "sing",
+      completedAt,
+      aq: Number(result.score ?? 0),
+      singResult: result,
+      stepScores: {
+        step1: 0,
+        step2: 0,
+        step3: 0,
+        step4: 0,
+        step5: 0,
+        step6: 0,
+      },
+      stepDetails: {
+        step1: [],
+        step2: [],
+        step3: [],
+        step4: [],
+        step5: [],
+        step6: [],
+      },
+    };
+
+    const next = [...rows, entry]
+      .filter(
+        (row, i, arr) =>
+          arr.findIndex(
+            (x) => x.historyId === row.historyId || x.sessionId === row.sessionId,
+          ) === i,
+      )
+      .sort((a, b) => a.completedAt - b.completedAt)
+      .slice(-50);
+
+    localStoreAdapter.setItem(key, JSON.stringify(next));
+    return entry;
   }
 
   static deleteHistoryEntries(

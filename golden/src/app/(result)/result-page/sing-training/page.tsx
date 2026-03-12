@@ -11,6 +11,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { loadPatientProfile } from "@/lib/patientStorage";
+import { SessionManager } from "@/lib/kwab/SessionManager";
 
 export const dynamic = "force-static";
 
@@ -60,11 +61,23 @@ export default function SingTrainingResultPage() {
     if (!raw) return;
 
     try {
-      setResult(JSON.parse(raw));
+      const parsed = JSON.parse(raw) as SingResult;
+      setResult(parsed);
+      if (patient) {
+        SessionManager.saveSingHistory(patient as any, {
+          song: parsed.song,
+          score: parsed.score,
+          finalJitter: parsed.finalJitter,
+          finalSi: parsed.finalSi,
+          rtLatency: parsed.rtLatency,
+          comment: parsed.comment,
+          rankings: parsed.rankings,
+        }, parsed.completedAt);
+      }
     } catch {
       setResult(null);
     }
-  }, []);
+  }, [patient]);
 
   if (!result) {
     return (

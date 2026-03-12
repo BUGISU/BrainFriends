@@ -186,8 +186,8 @@ export default function RehabPage() {
         </div>
       </div>
 
-      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-20 sm:pb-24 min-h-[calc(100vh-12.5rem)] flex flex-col justify-center">
-        <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 mb-6 sm:mb-10">
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 lg:pt-10 pb-10 sm:pb-12 lg:pb-14 flex flex-col justify-center">
+        <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-5 mb-5 sm:mb-6 lg:mb-8">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 tracking-tight">
               언어 재활 반복훈련
@@ -240,12 +240,12 @@ export default function RehabPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
           {STEP_CARDS.map((step) => (
             <button
               key={step.id}
               onClick={() => moveStep(step.route)}
-              className="group relative w-full aspect-[16/10] sm:aspect-[4/3] lg:aspect-[5/4] 2xl:aspect-[4/3] rounded-[24px] sm:rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
+              className="group relative w-full min-h-[220px] sm:min-h-0 aspect-[16/10] sm:aspect-[16/10] lg:aspect-[16/10] xl:aspect-[16/9] rounded-[24px] sm:rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
             >
               <div
                 className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"

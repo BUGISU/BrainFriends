@@ -194,7 +194,7 @@ function ResultContent() {
       .filter((row) =>
         currentTrainingMode === "rehab"
           ? row.trainingMode === "rehab"
-          : row.trainingMode !== "rehab",
+          : row.trainingMode === "self" || !row.trainingMode,
       )
       .sort((a, b) => b.completedAt - a.completedAt);
     return {
@@ -215,7 +215,7 @@ function ResultContent() {
       .filter((row) =>
         currentTrainingMode === "rehab"
           ? row.trainingMode === "rehab"
-          : row.trainingMode !== "rehab",
+          : row.trainingMode === "self" || !row.trainingMode,
       )
       .sort((a, b) => b.completedAt - a.completedAt);
 

@@ -113,7 +113,7 @@ export default function SelectSingPage() {
             />
             <div className="grid grid-cols-2 items-center gap-x-2 sm:gap-x-3 min-w-0">
               <p className="col-span-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">
-                Active Patient
+                Active Patient Profile
               </p>
               <h2 className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-none truncate">
                 {isMounted ? (patient?.name ?? "정보 없음") : "정보 없음"}
@@ -121,7 +121,13 @@ export default function SelectSingPage() {
                   {isMounted ? (patient?.age ?? "-") : "-"}세
                 </span>
               </h2>
-              <span className="mt-1 justify-self-start inline-flex px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shadow-sm border whitespace-nowrap bg-slate-50 text-slate-700 border-slate-200">
+              <span
+                className={`mt-1 justify-self-start inline-flex px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shadow-sm border whitespace-nowrap ${
+                  ageGroup === "Senior"
+                    ? "bg-gradient-to-r from-emerald-600 to-emerald-500 text-white border-emerald-500"
+                    : "bg-slate-50 text-slate-700 border-slate-200"
+                }`}
+              >
                 {ageGroup === "Senior" ? "실버 규준 적용" : "일반 규준 적용"}
               </span>
             </div>
@@ -137,6 +143,13 @@ export default function SelectSingPage() {
             </button>
             <button
               type="button"
+              onClick={() => router.push("/report?mode=sing")}
+              className="h-8 sm:h-9 min-w-[90px] sm:min-w-[98px] px-3 sm:px-4 rounded-full text-[11px] sm:text-xs font-black shadow-sm border bg-[#0B1A3A] text-white border-[#0B1A3A] hover:bg-[#09152f] transition-all"
+            >
+              리포트 보기
+            </button>
+            <button
+              type="button"
               onClick={() => router.push("/")}
               className="h-8 sm:h-9 min-w-[90px] sm:min-w-[98px] px-3 sm:px-4 rounded-full text-[11px] sm:text-xs font-black shadow-sm border bg-white text-slate-700 border-slate-200 hover:bg-slate-100 transition-all"
             >
@@ -146,8 +159,8 @@ export default function SelectSingPage() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-10 sm:pt-14 pb-24 sm:pb-28 min-h-[calc(100vh-12.5rem)] flex flex-col justify-center">
-        <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 sm:mb-10">
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 lg:pt-10 pb-10 sm:pb-12 lg:pb-14 flex flex-col justify-center">
+        <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-5 mb-5 sm:mb-6 lg:mb-8">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 tracking-tight">
               브레인 노래방 곡 선택
@@ -162,7 +175,7 @@ export default function SelectSingPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
           {SONG_OPTIONS.map((song) => (
             <button
               key={song.key}
@@ -172,7 +185,7 @@ export default function SelectSingPage() {
                   `/programs/sing-training?song=${encodeURIComponent(song.key)}`,
                 )
               }
-              className="group relative w-full aspect-[16/10] sm:aspect-[4/3] lg:aspect-[5/4] 2xl:aspect-[4/3] rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
+              className="group relative w-full min-h-[220px] sm:min-h-0 aspect-[16/10] sm:aspect-[16/10] lg:aspect-[16/10] xl:aspect-[16/9] rounded-[24px] sm:rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
             >
               <div
                 className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"
@@ -187,7 +200,7 @@ export default function SelectSingPage() {
                 style={{ background: song.overlayStyle }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent" />
-              <div className="relative z-10 h-full p-5 flex flex-col justify-end items-start text-left">
+              <div className="relative z-10 h-full p-4 sm:p-5 flex flex-col justify-end items-start text-left">
                 <div className="flex h-full flex-col">
                   <div>
                     <span

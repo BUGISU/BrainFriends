@@ -1056,7 +1056,7 @@ function Step5Content() {
 
   return (
     <div
-      className={`flex flex-col h-screen bg-slate-50 overflow-y-auto lg:overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}
+      className={`flex flex-col min-h-screen bg-slate-50 overflow-y-auto lg:overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}
     >
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
         <div
@@ -1065,26 +1065,26 @@ function Step5Content() {
         />
       </div>
       <header
-        className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
+        className={`min-h-16 px-3 sm:px-6 py-2 sm:py-0 border-b flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <img
             src="/images/logo/logo.png"
             alt="GOLDEN logo"
-            className="w-10 h-10 rounded-xl object-cover"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
           />
-          <div>
+          <div className="min-w-0">
             <span
               className={`font-black text-[10px] uppercase tracking-widest leading-none block ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}
             >
               Step 05 • Reading Fluency Training
             </span>
-            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
               텍스트 읽기 학습
             </h2>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
           <button
             type="button"
             onClick={handleSkipStep}
@@ -1130,7 +1130,7 @@ function Step5Content() {
       </header>
 
       <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 lg:p-10 pb-8 lg:pb-10 order-1 overflow-y-auto">
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-3 sm:p-4 lg:p-10 pb-8 lg:pb-10 order-1 overflow-y-auto">
           <div className="w-full max-w-2xl mx-auto flex flex-col h-full gap-4 lg:gap-8 justify-start lg:justify-center">
             <div className="w-full bg-white border border-orange-100 rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.18em] mb-1">
@@ -1144,7 +1144,7 @@ function Step5Content() {
             </div>
 
             <div
-              className={`relative bg-white border rounded-[28px] p-8 lg:p-12 shadow-sm transition-all duration-500 ${phase === "reading" ? "border-orange-500 shadow-orange-100/70 scale-[1.01]" : "border-orange-100"}`}
+              className={`relative bg-white border rounded-[24px] sm:rounded-[28px] p-5 sm:p-8 lg:p-12 shadow-sm transition-all duration-500 ${phase === "reading" ? "border-orange-500 shadow-orange-100/70 scale-[1.01]" : "border-orange-100"}`}
             >
               {phase === "reading" && (
                 <div className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-orange-600 text-[11px] font-black font-mono">
@@ -1187,9 +1187,9 @@ function Step5Content() {
               {phase === "ready" && (
                 <button
                   onClick={startReading}
-                  className="group w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl flex items-center justify-center hover:scale-105 transition-all border-4 border-white"
+                  className="group w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl flex items-center justify-center hover:scale-105 transition-all border-4 border-white"
                 >
-                  <div className="w-12 h-12 lg:w-14 lg:h-14 bg-white rounded-full flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 bg-white rounded-full flex items-center justify-center group-hover:bg-orange-100 transition-colors">
                     <svg
                       viewBox="0 0 24 24"
                       className="w-6 h-6 lg:w-7 lg:h-7 text-[#0B1A3A] group-hover:text-orange-600"
@@ -1213,7 +1213,7 @@ function Step5Content() {
                   <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping opacity-35" />
                   <button
                     onClick={stopReading}
-                    className="relative z-10 w-20 h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl flex items-center justify-center"
+                    className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-full bg-[#0B1A3A] shadow-2xl flex items-center justify-center"
                   >
                     <div className="w-7 h-7 lg:w-9 lg:h-9 bg-white rounded-2xl flex items-center justify-center">
                       <div className="w-3.5 h-3.5 lg:w-4.5 lg:h-4.5 bg-slate-900 rounded-sm" />
@@ -1266,7 +1266,7 @@ function Step5Content() {
             </div>
           </div>
         </main>
-        <aside className="w-full lg:w-[380px] h-full border-l border-slate-50 bg-white p-4 shrink-0 overflow-hidden order-2">
+        <aside className="w-full lg:w-[380px] h-auto lg:h-full border-t lg:border-t-0 lg:border-l border-slate-50 bg-white p-3 sm:p-4 shrink-0 overflow-visible lg:overflow-hidden order-2">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}

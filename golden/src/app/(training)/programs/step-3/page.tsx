@@ -771,26 +771,26 @@ function Step3Content() {
         />
       </div>
       <header
-        className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
+        className={`min-h-16 px-3 sm:px-6 py-2 sm:py-0 border-b flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <img
             src="/images/logo/logo.png"
             alt="GOLDEN logo"
-            className="w-10 h-10 rounded-xl object-cover"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
           />
-          <div>
+          <div className="min-w-0">
             <span
               className={`font-black text-[10px] uppercase tracking-widest leading-none block ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}
             >
               Step 03 • Visual-Auditory Association
             </span>
-            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
               단어 명명
             </h2>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
           <button
             type="button"
             onClick={handleSkipStep}
@@ -837,8 +837,8 @@ function Step3Content() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 bg-[#ffffff] pb-8 lg:pb-0 overflow-y-auto">
-        <div className="w-full max-w-5xl mx-auto px-6 py-4 flex flex-col h-full min-h-0 gap-4">
+      <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 bg-[#ffffff] pb-6 lg:pb-0 overflow-y-auto">
+        <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col h-full min-h-0 gap-4">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 border-b border-slate-100 pb-3 shrink-0">
             <div className="space-y-1">
               <div
@@ -853,7 +853,7 @@ function Step3Content() {
                   Step 03
                 </p>
               </div>
-              <h1 className="text-xl lg:text-2xl font-black text-slate-800 break-keep">
+              <h1 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-800 break-keep">
                 {isSpeaking
                   ? "문제를 잘 들어보세요"
                   : "알맞은 그림을 선택하세요"}
@@ -907,7 +907,7 @@ function Step3Content() {
           </div>
 
           <div className="flex-1 min-h-0 flex items-start justify-start lg:items-center lg:justify-center pb-6">
-            <div className="grid grid-cols-3 gap-3 lg:gap-4 w-full lg:h-full lg:max-h-[60vh]">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:gap-4 w-full lg:h-full lg:max-h-[60vh]">
               {currentItem.options.map((option: VisualOption) => {
                 return (
                   <button

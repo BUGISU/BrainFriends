@@ -1,10 +1,15 @@
+import { REHAB_STEP_LABELS } from "@/lib/results/rehab/constants";
 import { TrainingHistoryEntry } from "@/lib/kwab/SessionManager";
 import { getPlaceLabel, getRehabItemLabel, getRehabRowScore } from "@/features/report/utils/reportHelpers";
 
 type Props = {
   isRehabContext: boolean;
+  isSingContext: boolean;
   patientName: string;
-  modeFilter: "self" | "rehab";
+  modeFilter: "self" | "rehab" | "sing";
+  sortOrder: "latest" | "oldest";
+  rehabStepFilter: "all" | 1 | 2 | 3 | 4 | 5 | 6;
+  isFilterOpen: boolean;
   isSelectionMode: boolean;
   showDeleteConfirm: boolean;
   selectedHistoryIds: Set<string>;
@@ -13,7 +18,10 @@ type Props = {
   selectionCheckedClass: string;
   selectedHistoryId: string | null;
   onManageIconClick: () => void;
-  onSetModeFilter: (mode: "self" | "rehab") => void;
+  onSetModeFilter: (mode: "self" | "rehab" | "sing") => void;
+  onToggleFilterOpen: () => void;
+  onSetSortOrder: (order: "latest" | "oldest") => void;
+  onSetRehabStepFilter: (step: "all" | 1 | 2 | 3 | 4 | 5 | 6) => void;
   onDismissDeleteConfirm: () => void;
   onConfirmDeleteSelected: () => void;
   onToggleSelectAll: () => void;
@@ -23,8 +31,12 @@ type Props = {
 
 export function HistorySidebar({
   isRehabContext,
+  isSingContext,
   patientName,
   modeFilter,
+  sortOrder,
+  rehabStepFilter,
+  isFilterOpen,
   isSelectionMode,
   showDeleteConfirm,
   selectedHistoryIds,
@@ -34,6 +46,9 @@ export function HistorySidebar({
   selectedHistoryId,
   onManageIconClick,
   onSetModeFilter,
+  onToggleFilterOpen,
+  onSetSortOrder,
+  onSetRehabStepFilter,
   onDismissDeleteConfirm,
   onConfirmDeleteSelected,
   onToggleSelectAll,
@@ -43,21 +58,140 @@ export function HistorySidebar({
   return (
     <section
       className={`bg-white rounded-2xl p-4 border ${
-        isRehabContext ? "border-sky-100" : "border-orange-100"
+        isSingContext ? "border-emerald-100" : isRehabContext ? "border-sky-100" : "border-orange-100"
       } relative`}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="pr-12">
           <p
             className={`text-[10px] font-black uppercase tracking-widest ${
-              isRehabContext ? "text-sky-500" : "text-orange-500"
+              isSingContext ? "text-emerald-500" : isRehabContext ? "text-sky-500" : "text-orange-500"
             }`}
           >
             Patient
           </p>
           <p className="text-sm font-bold text-slate-700">{patientName || "환자 정보 없음"}</p>
         </div>
-        <div className="absolute right-4 top-4 flex flex-col items-end gap-1.5">
+        <div className="absolute right-4 top-4 flex items-start gap-1.5">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={onToggleFilterOpen}
+              title="필터"
+              aria-label="필터"
+              className={`h-9 w-9 rounded-lg border transition-colors inline-flex items-center justify-center ${
+                modeFilter === "rehab"
+                  ? "bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100"
+                  : modeFilter === "sing"
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                    : "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 12h10" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 18h4" />
+              </svg>
+            </button>
+            {isFilterOpen && (
+              <div className="absolute right-0 top-11 z-20 w-[220px] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                  Filter
+                </p>
+                {modeFilter === "rehab" ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Sort
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => onSetSortOrder("latest")}
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-sm font-black ${
+                          sortOrder === "latest"
+                            ? "border-sky-300 bg-sky-50 text-sky-700"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        최신순
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSetSortOrder("oldest")}
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-sm font-black ${
+                          sortOrder === "oldest"
+                            ? "border-sky-300 bg-sky-50 text-sky-700"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        오래된순
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Step
+                      </p>
+                    <button
+                      type="button"
+                      onClick={() => onSetRehabStepFilter("all")}
+                      className={`w-full rounded-xl border px-3 py-2 text-left text-sm font-black ${
+                        rehabStepFilter === "all"
+                          ? "border-sky-300 bg-sky-50 text-sky-700"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      전체 훈련
+                    </button>
+                    {[1, 2, 3, 4, 5, 6].map((step) => (
+                      <button
+                        key={`filter-step-${step}`}
+                        type="button"
+                        onClick={() => onSetRehabStepFilter(step as 1 | 2 | 3 | 4 | 5 | 6)}
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-sm font-black ${
+                          rehabStepFilter === step
+                            ? "border-sky-300 bg-sky-50 text-sky-700"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        Step {step} · {REHAB_STEP_LABELS[step]}
+                      </button>
+                    ))}
+                  </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => onSetSortOrder("latest")}
+                      className={`w-full rounded-xl border px-3 py-2 text-left text-sm font-black ${
+                        sortOrder === "latest"
+                          ? modeFilter === "sing"
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                            : "border-orange-300 bg-orange-50 text-orange-700"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      최신순
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSetSortOrder("oldest")}
+                      className={`w-full rounded-xl border px-3 py-2 text-left text-sm font-black ${
+                        sortOrder === "oldest"
+                          ? modeFilter === "sing"
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                            : "border-orange-300 bg-orange-50 text-orange-700"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      오래된순
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={onManageIconClick}
@@ -68,6 +202,8 @@ export function HistorySidebar({
                 ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
                 : modeFilter === "rehab"
                   ? "bg-sky-50 border-sky-200 text-sky-700 hover:bg-sky-100"
+                  : modeFilter === "sing"
+                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                   : "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
             }`}
           >
@@ -89,7 +225,7 @@ export function HistorySidebar({
         </div>
       </div>
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
+      <div className="mb-3 grid grid-cols-3 gap-2">
         <button
           type="button"
           onClick={() => onSetModeFilter("self")}
@@ -111,6 +247,17 @@ export function HistorySidebar({
           }`}
         >
           언어재활
+        </button>
+        <button
+          type="button"
+          onClick={() => onSetModeFilter("sing")}
+          className={`h-9 rounded-lg border text-sm font-black transition-colors ${
+            modeFilter === "sing"
+              ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          브레인 노래방
         </button>
       </div>
 
@@ -155,7 +302,11 @@ export function HistorySidebar({
 
       {filteredHistory.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm font-bold text-slate-500">
-          {modeFilter === "rehab" ? "저장된 언어재활 리포트가 없습니다." : "저장된 자가진단 리포트가 없습니다."}
+          {modeFilter === "rehab"
+            ? "저장된 언어재활 리포트가 없습니다."
+            : modeFilter === "sing"
+              ? "저장된 브레인 노래방 리포트가 없습니다."
+              : "저장된 자가진단 리포트가 없습니다."}
         </div>
       ) : (
         <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
@@ -197,6 +348,8 @@ export function HistorySidebar({
                   : selectedHistoryId === row.historyId
                     ? row.trainingMode === "rehab"
                       ? "border-sky-300 bg-sky-50"
+                      : row.trainingMode === "sing"
+                        ? "border-emerald-300 bg-emerald-50"
                       : "border-orange-300 bg-orange-50"
                     : "border-slate-200 bg-white hover:bg-slate-50"
               }`}
@@ -223,14 +376,24 @@ export function HistorySidebar({
                   <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                     <span
                       className={`inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-black ${
-                        row.trainingMode === "rehab" ? "bg-sky-100 text-sky-700" : "bg-orange-100 text-orange-700"
+                        row.trainingMode === "rehab"
+                          ? "bg-sky-100 text-sky-700"
+                          : row.trainingMode === "sing"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-orange-100 text-orange-700"
                       }`}
                     >
-                      {row.trainingMode === "rehab" ? "언어재활" : "자가진단"}
+                      {row.trainingMode === "rehab"
+                        ? "언어재활"
+                        : row.trainingMode === "sing"
+                          ? "브레인 노래방"
+                          : "자가진단"}
                     </span>
                     <p className="text-[11px] font-bold text-slate-600">
                       {row.trainingMode === "rehab"
                         ? `장소: ${getPlaceLabel(row.place)} · 훈련: ${getRehabItemLabel(row)} · 점수: ${getRehabRowScore(row).toFixed(1)}점`
+                        : row.trainingMode === "sing"
+                          ? `곡: ${row.singResult?.song ?? "-"} · 뇌 활력 점수: ${Number(row.singResult?.score ?? row.aq ?? 0).toFixed(1)}점`
                         : `장소: ${getPlaceLabel(row.place)} · 평가점수: ${Number(row.aq || 0).toFixed(1)}점`}
                     </p>
                   </div>

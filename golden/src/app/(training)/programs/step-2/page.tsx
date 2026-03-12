@@ -132,6 +132,7 @@ function Step2Content() {
   const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [showTracking, setShowTracking] = useState(true);
+  const [isMetricsPanelOpen, setIsMetricsPanelOpen] = useState(false);
   const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
   const flowTokenRef = useRef(0);
   const articulationStateRef = useRef(createInitialArticulationAnalyzerState());
@@ -735,6 +736,7 @@ function Step2Content() {
 
     if (currentIndex < protocol.length - 1) {
       setCurrentIndex((prev) => prev + 1);
+      setStatusText("");
       setResultScore(null);
       setResultConsonantAccuracy(null);
       setResultVowelAccuracy(null);
@@ -1386,6 +1388,56 @@ function Step2Content() {
 
       <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-hidden">
         <main className="flex-1 flex flex-col relative p-4 sm:p-6 lg:p-10 order-1 overflow-y-auto">
+          {resultScore === null ? (
+            <div className="absolute right-4 top-4 z-20 w-[150px] sm:w-[190px] max-w-[44vw] lg:hidden">
+              <AnalysisSidebar
+                videoRef={videoRef}
+                canvasRef={canvasRef}
+                isFaceReady={sidebarMetrics.faceDetected}
+                metrics={{
+                  symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
+                  openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
+                  consonantAcc: (sidebarMetrics.consonantAccuracy || 0) * 100,
+                  vowelAcc: (sidebarMetrics.vowelAccuracy || 0) * 100,
+                  consonantClosureRate:
+                    (sidebarMetrics.consonantClosureRate || 0) * 100,
+                  consonantClosureHold:
+                    (sidebarMetrics.consonantClosureHoldScore || 0) * 100,
+                  consonantLipSymmetry:
+                    (sidebarMetrics.consonantLipSymmetry || 0) * 100,
+                  consonantOpeningSpeed:
+                    (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
+                  consonantClosureHoldMs:
+                    sidebarMetrics.consonantClosureHoldMs || 0,
+                  consonantOpeningSpeedMs:
+                    sidebarMetrics.consonantOpeningSpeedMs || 0,
+                  vowelMouthOpening:
+                    (sidebarMetrics.vowelMouthOpening || 0) * 100,
+                  vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
+                  vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
+                  vowelPatternMatch:
+                    (sidebarMetrics.vowelPatternMatch || 0) * 100,
+                  audioLevel: audioLevel,
+                }}
+                showTracking={showTracking}
+                onToggleTracking={() => setShowTracking(!showTracking)}
+                hideMetrics
+                previewAspectClass="aspect-[3/4] sm:aspect-video"
+                previewMediaClass="object-cover object-[center_20%] sm:object-contain sm:object-center"
+              />
+              <button
+                type="button"
+                onClick={() => setIsMetricsPanelOpen(true)}
+                className={`mt-2 ml-auto flex items-center gap-1 rounded-xl px-3 py-2 text-[11px] font-black shadow-sm ${
+                  isRehabMode
+                    ? "bg-sky-500 text-white"
+                    : "bg-white/95 text-slate-800 border border-slate-200"
+                }`}
+              >
+                세부 지표
+              </button>
+            </div>
+          ) : null}
           <div className="w-full max-w-xl mx-auto flex flex-col h-full justify-center gap-6">
             {/* 메인 텍스트 영역 */}
             <div
@@ -1668,8 +1720,7 @@ function Step2Content() {
             </div>
           </div>
         </main>
-
-        <aside className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex flex-col order-2">
+        <aside className="hidden lg:flex w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex-col order-2">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}
@@ -1703,7 +1754,70 @@ function Step2Content() {
             scoreValue={resultScore ? `${resultScore}점` : undefined}
           />
         </aside>
+
       </div>
+      {isMetricsPanelOpen ? (
+        <div className="fixed inset-0 z-40 bg-slate-950/25">
+          <button
+            type="button"
+            aria-label="세부 지표 닫기"
+            onClick={() => setIsMetricsPanelOpen(false)}
+            className="absolute inset-0"
+          />
+          <div className="absolute inset-y-0 right-0 w-full max-w-[380px] border-l border-slate-50 bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
+                  Repetition Training
+                </p>
+                <p className="text-lg font-black text-slate-900">세부 지표</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMetricsPanelOpen(false)}
+                className={`rounded-xl px-3 py-2 text-sm font-black ${accentOutline}`}
+              >
+                닫기
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+              <AnalysisSidebar
+                videoRef={videoRef}
+                canvasRef={canvasRef}
+                isFaceReady={sidebarMetrics.faceDetected}
+                metrics={{
+                  symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
+                  openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
+                  consonantAcc: (sidebarMetrics.consonantAccuracy || 0) * 100,
+                  vowelAcc: (sidebarMetrics.vowelAccuracy || 0) * 100,
+                  consonantClosureRate:
+                    (sidebarMetrics.consonantClosureRate || 0) * 100,
+                  consonantClosureHold:
+                    (sidebarMetrics.consonantClosureHoldScore || 0) * 100,
+                  consonantLipSymmetry:
+                    (sidebarMetrics.consonantLipSymmetry || 0) * 100,
+                  consonantOpeningSpeed:
+                    (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
+                  consonantClosureHoldMs:
+                    sidebarMetrics.consonantClosureHoldMs || 0,
+                  consonantOpeningSpeedMs:
+                    sidebarMetrics.consonantOpeningSpeedMs || 0,
+                  vowelMouthOpening:
+                    (sidebarMetrics.vowelMouthOpening || 0) * 100,
+                  vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
+                  vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
+                  vowelPatternMatch:
+                    (sidebarMetrics.vowelPatternMatch || 0) * 100,
+                  audioLevel: audioLevel,
+                }}
+                showTracking={showTracking}
+                onToggleTracking={() => setShowTracking(!showTracking)}
+                hidePreview
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
       <HomeExitModal
         open={isHomeExitModalOpen}
         onConfirm={confirmGoHome}

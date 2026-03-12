@@ -447,7 +447,7 @@ function Step1Content() {
 
   return (
     <div
-      className={`flex flex-col h-full bg-[#ffffff] overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}
+      className={`flex flex-col min-h-screen bg-[#ffffff] overflow-y-auto lg:overflow-hidden text-slate-900 font-sans ${isRehabMode ? "rehab-accent-scope" : ""}`}
     >
       {/* 상단 진행 프로그레스 바 */}
       <div className="fixed top-0 left-0 w-full h-1 z-[60] bg-slate-100">
@@ -459,27 +459,27 @@ function Step1Content() {
         />
       </div>
       <header
-        className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
+        className={`min-h-16 px-3 sm:px-6 py-2 sm:py-0 border-b flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 bg-white/90 backdrop-blur-md shrink-0 sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <img
             src="/images/logo/logo.png"
             alt="GOLDEN logo"
-            className="w-10 h-10 rounded-xl object-cover"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
           />
-          <div>
+          <div className="min-w-0">
             <span
               className={`font-black text-[10px] uppercase tracking-widest leading-none block ${isRehabMode ? "text-sky-500" : "text-orange-500"}`}
             >
               Step 01 • Auditory Comprehension
             </span>
-            <h2 className="text-lg font-black text-slate-900 tracking-tight">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
               청각 이해 판단 훈련
             </h2>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 ml-auto flex-wrap justify-end">
           <button
             type="button"
             onClick={handleSkipStep}
@@ -539,11 +539,11 @@ function Step1Content() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center py-10 px-6">
-        <div className="w-full max-w-lg mx-auto flex flex-col items-center gap-8 lg:gap-12">
-          <div className="text-center space-y-6">
+      <main className="flex-1 flex flex-col items-center justify-center py-6 sm:py-10 px-4 sm:px-6 overflow-y-auto">
+        <div className="w-full max-w-lg mx-auto flex flex-col items-center gap-6 sm:gap-8 lg:gap-12">
+          <div className="text-center space-y-4 sm:space-y-6">
             <div className="space-y-3">
-              <h1 className="text-2xl lg:text-3xl font-black text-slate-800 break-keep leading-tight">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-800 break-keep leading-tight">
                 {isSpeaking ? "질문을 잘 들어보세요" : "사실이 맞나요?"}
               </h1>
               <div
@@ -601,18 +601,18 @@ function Step1Content() {
             </button>
           </div>
 
-          <div className="flex gap-8 lg:gap-12 w-full max-w-md shrink-0 mb-4">
+          <div className="flex gap-4 sm:gap-8 lg:gap-12 w-full max-w-md shrink-0 mb-2 sm:mb-4">
             <button
               disabled={isSpeaking || isAnswered || !canAnswer}
               onClick={() => handleAnswer(true)}
-              className="flex-1 aspect-square max-h-[180px] bg-white rounded-[40px] text-8xl shadow-[0_12px_24px_rgba(0,0,0,0.04)] border-2 border-slate-50 flex items-center justify-center transition-all hover:border-emerald-100 hover:text-emerald-500 active:scale-95 disabled:opacity-20 text-slate-300 font-black"
+              className="flex-1 aspect-square max-h-[140px] sm:max-h-[180px] bg-white rounded-[28px] sm:rounded-[40px] text-6xl sm:text-8xl shadow-[0_12px_24px_rgba(0,0,0,0.04)] border-2 border-slate-50 flex items-center justify-center transition-all hover:border-emerald-100 hover:text-emerald-500 active:scale-95 disabled:opacity-20 text-slate-300 font-black"
             >
               O
             </button>
             <button
               disabled={isSpeaking || isAnswered || !canAnswer}
               onClick={() => handleAnswer(false)}
-              className={`flex-1 aspect-square max-h-[180px] bg-white rounded-[40px] text-8xl shadow-[0_12px_24px_rgba(0,0,0,0.04)] border-2 border-slate-50 flex items-center justify-center transition-all active:scale-95 disabled:opacity-20 text-slate-300 font-black ${
+              className={`flex-1 aspect-square max-h-[140px] sm:max-h-[180px] bg-white rounded-[28px] sm:rounded-[40px] text-6xl sm:text-8xl shadow-[0_12px_24px_rgba(0,0,0,0.04)] border-2 border-slate-50 flex items-center justify-center transition-all active:scale-95 disabled:opacity-20 text-slate-300 font-black ${
                 isRehabMode
                   ? "hover:border-sky-100 hover:text-sky-500"
                   : "hover:border-orange-100 hover:text-orange-500"

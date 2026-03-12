@@ -100,6 +100,10 @@ export const AnalysisSidebar = ({
   metrics,
   showTracking,
   onToggleTracking,
+  hideMetrics = false,
+  hidePreview = false,
+  previewAspectClass = "aspect-[4/3] sm:aspect-video",
+  previewMediaClass = "object-contain",
 }: any) => {
   const { sidebarMetrics } = useTraining(); // 전역 좌표 데이터를 가져옴
   const [localShowTracking, setLocalShowTracking] = useState(
@@ -275,39 +279,16 @@ export const AnalysisSidebar = ({
   }, [sidebarMetrics?.landmarks]);
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
+    const videoEl = videoRef?.current;
+    if (!videoEl?.srcObject) return;
 
-    async function startCamera() {
-      try {
-        if (
-          navigator.mediaDevices &&
-          navigator.mediaDevices.getUserMedia &&
-          videoRef.current
-        ) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480 },
-            audio: false,
-          });
-
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play().catch(console.error);
-            };
-          }
-        }
-      } catch (err) {
-        console.error("사이드바 카메라 스트림 연결 실패:", err);
-      }
-    }
-
-    startCamera();
-
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+    videoEl.onloadedmetadata = () => {
+      videoEl.play().catch(console.error);
     };
+
+    if (videoEl.readyState >= 1) {
+      videoEl.play().catch(console.error);
+    }
   }, [videoRef]);
 
   useEffect(() => {
@@ -487,17 +468,20 @@ export const AnalysisSidebar = ({
   return (
     <div className="w-full flex flex-col gap-3 lg:h-full overflow-visible lg:overflow-hidden">
       {/* 카메라 프리뷰 섹션 */}
-      <div className="relative aspect-[4/3] bg-gray-900 rounded-[24px] overflow-hidden shrink-0 shadow-inner">
+      {!hidePreview ? (
+        <div
+          className={`relative ${previewAspectClass} bg-slate-900 rounded-[20px] sm:rounded-[24px] overflow-hidden shrink-0 shadow-inner`}
+        >
         <video
           ref={videoRef}
           autoPlay
           muted
           playsInline
-          className="w-full h-full object-cover -scale-x-100"
+          className={`w-full h-full ${previewMediaClass} -scale-x-100 bg-slate-950`}
         />
         <canvas
           ref={canvasRef}
-          className={`absolute inset-0 w-full h-full -scale-x-100 transition-opacity duration-300 ${
+          className={`absolute inset-0 w-full h-full ${previewMediaClass} -scale-x-100 transition-opacity duration-300 ${
             trackingEnabled ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -508,11 +492,11 @@ export const AnalysisSidebar = ({
           </div>
         )}
 
-        <div className="absolute top-3 right-3 z-10">
+        <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10">
           <div className="flex flex-col items-end gap-2">
             <button
               onClick={handleToggleTracking}
-              className={`w-9 h-9 flex items-center justify-center rounded-xl backdrop-blur-md transition-all ${
+              className={`w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl backdrop-blur-md transition-all ${
                 trackingEnabled
                   ? "bg-orange-500 text-white"
                   : "bg-black/40 text-gray-400"
@@ -604,9 +588,11 @@ export const AnalysisSidebar = ({
             </div>
           </div>
         ) : null}
-      </div>
+        </div>
+      ) : null}
 
-      <div className="lg:hidden rounded-[14px] border border-gray-100 bg-[#FBFBFC] px-3 py-3">
+      {!hideMetrics ? (
+        <div className="lg:hidden rounded-[14px] border border-gray-100 bg-[#FBFBFC] px-3 py-3">
         <div className="grid grid-cols-2 gap-2 text-[11px] font-black text-slate-500">
           <div className="rounded-lg border border-slate-100 bg-white px-2 py-1.5">
             안면대칭성{" "}
@@ -633,9 +619,11 @@ export const AnalysisSidebar = ({
             </b>
           </div>
         </div>
-      </div>
+        </div>
+      ) : null}
 
-      <div className="lg:hidden rounded-[14px] border border-gray-100 bg-[#FBFBFC] px-3 py-3 space-y-3">
+      {!hideMetrics ? (
+        <div className="lg:hidden rounded-[14px] border border-gray-100 bg-[#FBFBFC] px-3 py-3 space-y-3">
         <button
           type="button"
           onClick={() => setShowDetails((prev) => !prev)}
@@ -670,9 +658,11 @@ export const AnalysisSidebar = ({
             </div>
           </div>
         ) : null}
-      </div>
+        </div>
+      ) : null}
 
-      <div className="hidden lg:block flex-1 bg-[#FBFBFC] rounded-[24px] p-5 space-y-4 border border-gray-50 shadow-sm overflow-y-auto min-h-0">
+      {!hideMetrics ? (
+        <div className="hidden lg:block flex-1 bg-[#FBFBFC] rounded-[24px] p-5 space-y-4 border border-gray-50 shadow-sm overflow-y-auto min-h-0">
         <MetricBar
           label="안면 대칭성"
           value={metrics.symmetryScore}
@@ -732,7 +722,8 @@ export const AnalysisSidebar = ({
             />
           </div>
         </div>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 };

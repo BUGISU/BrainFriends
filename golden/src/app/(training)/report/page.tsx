@@ -55,9 +55,16 @@ function ReportContent() {
   const [history, setHistory] = useState<TrainingHistoryEntry[]>([]);
   const [selected, setSelected] = useState<TrainingHistoryEntry | null>(null);
   const modeFromQuery = searchParams.get("mode");
-  const initialMode: "self" | "rehab" =
-    modeFromQuery === "rehab" ? "rehab" : "self";
-  const [modeFilter, setModeFilter] = useState<"self" | "rehab">(initialMode);
+  const initialMode: "self" | "rehab" | "sing" =
+    modeFromQuery === "rehab"
+      ? "rehab"
+      : modeFromQuery === "sing"
+        ? "sing"
+        : "self";
+  const [modeFilter, setModeFilter] = useState<"self" | "rehab" | "sing">(initialMode);
+  const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
+  const [rehabStepFilter, setRehabStepFilter] = useState<"all" | 1 | 2 | 3 | 4 | 5 | 6>("all");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [openStepId, setOpenStepId] = useState<number | null>(1);
   const [openAllAccordions, setOpenAllAccordions] = useState(false);
@@ -85,18 +92,27 @@ function ReportContent() {
     const preferredRows =
       initialMode === "rehab"
         ? rows.filter((r) => r.trainingMode === "rehab")
-        : rows.filter((r) => r.trainingMode !== "rehab");
+        : initialMode === "sing"
+          ? rows.filter((r) => r.trainingMode === "sing")
+          : rows.filter((r) => r.trainingMode === "self" || !r.trainingMode);
     setSelected(preferredRows[0] || rows[0] || null);
   }, [initialMode, patient]);
 
   const filteredHistory = useMemo(
-    () =>
-      history.filter((row) =>
+    () => {
+      const rows = history.filter((row) =>
         modeFilter === "rehab"
-          ? row.trainingMode === "rehab"
-          : row.trainingMode !== "rehab",
-      ),
-    [history, modeFilter],
+          ? row.trainingMode === "rehab" &&
+            (rehabStepFilter === "all" || Number(row.rehabStep) === rehabStepFilter)
+          : modeFilter === "sing"
+            ? row.trainingMode === "sing"
+            : row.trainingMode === "self" || !row.trainingMode,
+      );
+      return [...rows].sort((a, b) =>
+        sortOrder === "latest" ? b.completedAt - a.completedAt : a.completedAt - b.completedAt,
+      );
+    },
+    [history, modeFilter, rehabStepFilter, sortOrder],
   );
 
   useEffect(() => {
@@ -125,6 +141,9 @@ function ReportContent() {
     setIsSelectionMode(false);
     setSelectedHistoryIds(new Set());
     setShowDeleteConfirm(false);
+    setIsFilterOpen(false);
+    setSortOrder("latest");
+    setRehabStepFilter("all");
   }, [modeFilter]);
 
   useEffect(() => {
@@ -262,7 +281,7 @@ function ReportContent() {
     : [];
 
   const selfProfileRows = useMemo(() => {
-    if (!selected || selected.trainingMode === "rehab") return [];
+    if (!selected || selected.trainingMode === "rehab" || selected.trainingMode === "sing") return [];
     return (Object.keys(SELF_LABEL_BY_KEY) as StepKey[]).map((key) => ({
       key,
       label: SELF_LABEL_BY_KEY[key],
@@ -292,9 +311,9 @@ function ReportContent() {
   }, [selfProfileRows]);
 
   const selfPreviousRow = useMemo(() => {
-    if (!selected || selected.trainingMode === "rehab") return null;
+    if (!selected || selected.trainingMode === "rehab" || selected.trainingMode === "sing") return null;
     const selfRows = history
-      .filter((row) => row.trainingMode !== "rehab")
+      .filter((row) => row.trainingMode === "self" || !row.trainingMode)
       .sort((a, b) => b.completedAt - a.completedAt);
     const idx = selfRows.findIndex(
       (row) => row.historyId === selected.historyId,
@@ -304,7 +323,7 @@ function ReportContent() {
   }, [history, selected]);
 
   const selfFacialReport = useMemo(() => {
-    if (!selected || selected.trainingMode === "rehab") return null;
+    if (!selected || selected.trainingMode === "rehab" || selected.trainingMode === "sing") return null;
     return buildFacialReport(selected, selfPreviousRow);
   }, [selected, selfPreviousRow]);
 
@@ -322,7 +341,7 @@ function ReportContent() {
   }, [selfProfileRows]);
 
   const selfSessionData = useMemo(() => {
-    if (!selected || selected.trainingMode === "rehab") return null;
+    if (!selected || selected.trainingMode === "rehab" || selected.trainingMode === "sing") return null;
     return {
       step1: { items: getStepItems(selected, "step1") },
       step2: { items: getStepItems(selected, "step2") },
@@ -367,11 +386,12 @@ function ReportContent() {
   }, [selfCurrentScore, selfPreviousScore]);
 
   const selfAllItems = useMemo(() => {
-    if (!selected || selected.trainingMode === "rehab") return [];
+    if (!selected || selected.trainingMode === "rehab" || selected.trainingMode === "sing") return [];
     return STEP_META.flatMap((meta) => getStepItems(selected, meta.key));
   }, [selected]);
 
   const isRehabContext = modeFilter === "rehab";
+  const isSingContext = modeFilter === "sing";
   const rehabPrimaryStep = useMemo(() => {
     if (!selected || selected.trainingMode !== "rehab") return null;
     if (
@@ -566,7 +586,12 @@ function ReportContent() {
         selectedItems: getStepItems(selected, rehabPrimaryStep.key),
       });
     }
-    const selfRows = filteredHistory.filter((row) => row.trainingMode !== "rehab");
+    if (selected.trainingMode === "sing") {
+      return [];
+    }
+    const selfRows = filteredHistory.filter(
+      (row) => row.trainingMode === "self" || !row.trainingMode,
+    );
     return buildEstimatedValidationMetrics({
       selected,
       peerRows: selfRows,
@@ -590,6 +615,8 @@ function ReportContent() {
   const selectionCheckedClass =
     modeFilter === "rehab"
       ? "bg-sky-500 border-sky-500 text-white"
+      : modeFilter === "sing"
+        ? "bg-emerald-500 border-emerald-500 text-white"
       : "bg-orange-500 border-orange-500 text-white";
 
   return (
@@ -611,7 +638,13 @@ function ReportContent() {
         <button
           type="button"
           onClick={() =>
-            router.push(modeFilter === "rehab" ? "/select-page/speech-rehab" : "/select-page/self-assessment")
+            router.push(
+              modeFilter === "rehab"
+                ? "/select-page/speech-rehab"
+                : modeFilter === "sing"
+                  ? "/select-page/sing-training"
+                  : "/select-page/self-assessment",
+            )
           }
           aria-label="홈으로 이동"
           title="홈"
@@ -647,8 +680,12 @@ function ReportContent() {
         <div className="max-w-[1440px] mx-auto grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1076px)] gap-4 lg:gap-6 lg:justify-center py-4 md:py-6 lg:py-8">
           <HistorySidebar
           isRehabContext={isRehabContext}
+          isSingContext={isSingContext}
           patientName={patient?.name || ""}
           modeFilter={modeFilter}
+          sortOrder={sortOrder}
+          rehabStepFilter={rehabStepFilter}
+          isFilterOpen={isFilterOpen}
           isSelectionMode={isSelectionMode}
           showDeleteConfirm={showDeleteConfirm}
           selectedHistoryIds={selectedHistoryIds}
@@ -658,6 +695,15 @@ function ReportContent() {
           selectedHistoryId={selected?.historyId ?? null}
           onManageIconClick={handleManageIconClick}
           onSetModeFilter={setModeFilter}
+          onToggleFilterOpen={() => setIsFilterOpen((prev) => !prev)}
+          onSetSortOrder={(order) => {
+            setSortOrder(order);
+            setIsFilterOpen(false);
+          }}
+          onSetRehabStepFilter={(step) => {
+            setRehabStepFilter(step);
+            setIsFilterOpen(false);
+          }}
           onDismissDeleteConfirm={() => setShowDeleteConfirm(false)}
           onConfirmDeleteSelected={handleConfirmDeleteSelected}
           onToggleSelectAll={handleToggleSelectAll}
@@ -669,12 +715,115 @@ function ReportContent() {
             className={`bg-white rounded-2xl p-4 md:p-5 border ${
               selected?.trainingMode === "rehab"
                 ? "border-sky-100"
+                : selected?.trainingMode === "sing"
+                  ? "border-emerald-100"
                 : "border-orange-100"
             }`}
           >
           {!selected ? (
             <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-bold text-slate-500">
               선택된 리포트가 없습니다.
+            </div>
+          ) : selected.trainingMode === "sing" ? (
+            <div className="space-y-4 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2 pb-24">
+              <section className="rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white p-5 shadow-sm h-[140px] flex flex-col justify-center">
+                <p className="text-xs font-black opacity-90">
+                  {selected.patientName || "환자"} 님의 브레인 노래방 리포트
+                </p>
+                <h2 className="text-2xl sm:text-3xl font-black mt-1">
+                  뇌 활력 점수 {Number(selected.singResult?.score ?? selected.aq ?? 0).toFixed(1)}점
+                </h2>
+                <p className="text-xs sm:text-sm opacity-90 mt-2">
+                  검사일시: {new Date(selected.completedAt).toLocaleString("ko-KR")}
+                </p>
+              </section>
+
+              <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">곡명</p>
+                  <p className="text-2xl font-black text-emerald-600 mt-1">
+                    {selected.singResult?.song ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">안면 대칭</p>
+                  <p className="text-2xl font-black text-slate-900 mt-1">
+                    {selected.singResult?.finalSi ?? "-"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">발성 안정</p>
+                  <p className="text-2xl font-black text-emerald-600 mt-1">
+                    {selected.singResult?.finalJitter ?? "-"}
+                  </p>
+                </div>
+              </section>
+
+              <section className="grid grid-cols-1 xl:grid-cols-[1.02fr_0.98fr] gap-4">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-9 h-9 rounded-xl bg-white border border-emerald-200 flex items-center justify-center">
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                    </span>
+                    <h3 className="text-lg font-black text-slate-900">전문 AI 분석</h3>
+                  </div>
+                  <p className="mt-4 text-base font-bold text-slate-900">
+                    {selected.singResult?.comment || "노래 리듬과 안면 반응을 기반으로 분석한 결과입니다."}
+                  </p>
+                  <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
+                    성대 안정도, 안면 대칭도, 반응 지연 시간을 종합해 현재 회복 흐름을 추적합니다.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                      <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    </span>
+                    <h3 className="text-lg font-black text-slate-900">핵심 지표</h3>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-black text-slate-500">반응 지연 시간</p>
+                      <p className="mt-1 text-xl font-black text-slate-900">
+                        {selected.singResult?.rtLatency ?? "-"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-black text-slate-500">종합 점수</p>
+                      <p className="mt-1 text-xl font-black text-emerald-600">
+                        {Number(selected.singResult?.score ?? selected.aq ?? 0).toFixed(1)}점
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                    <HeartHandshake className="w-4 h-4 text-emerald-600" />
+                  </span>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">전국 실버 랭킹</h3>
+                </div>
+                <div className="space-y-2">
+                  {(selected.singResult?.rankings ?? []).map((row, idx) => (
+                    <div
+                      key={`${row.name}-${idx}`}
+                      className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
+                        row.me
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-50 text-slate-700"
+                      }`}
+                    >
+                      <span className="text-sm font-black">
+                        {idx + 1}위. {row.name} ({row.region})
+                      </span>
+                      <span className="text-sm font-black">{row.score}점</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
             </div>
           ) : availableSteps.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-bold text-slate-500">
@@ -956,7 +1105,7 @@ function ReportContent() {
         </div>
       </main>
 
-      {selected && (
+      {selected && selected.trainingMode !== "sing" && (
         <footer className="no-print sticky bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md">
           <div className="max-w-[1440px] mx-auto px-4 md:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="flex items-center gap-2">

@@ -50,10 +50,10 @@ export default function ModeSelectPage() {
   }, []);
 
   return (
-    <div className="h-full min-h-0 flex flex-col bg-[#F8FAFC] font-sans">
+    <div className="min-h-screen flex flex-col bg-[#F8FAFC] font-sans">
       {/* --- 상단 고정 헤더 --- */}
       <header className="w-full bg-white/90 backdrop-blur-md border-b border-orange-100 sticky top-0 z-50">
-        <div className="w-full px-4 sm:px-6 h-16 flex justify-between items-center">
+        <div className="w-full px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <div className="flex items-center gap-3 sm:gap-5 min-w-0">
             <img
               src="/images/logo/logo.png"
@@ -75,7 +75,7 @@ export default function ModeSelectPage() {
               </span>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 sm:gap-3">
+          <div className="flex items-center justify-end gap-2 sm:gap-3 flex-wrap">
             <button
               onClick={() => router.push("/")}
               className="h-8 sm:h-9 min-w-[90px] sm:min-w-[98px] px-3 sm:px-4 rounded-full text-[11px] sm:text-xs font-black shadow-sm border bg-white text-slate-700 border-slate-200 hover:bg-slate-100 transition-all"
@@ -87,8 +87,8 @@ export default function ModeSelectPage() {
       </header>
 
       {/* --- 메인 콘텐츠 (중앙 집중형) --- */}
-      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-10 sm:pt-14 pb-24 sm:pb-28 min-h-[calc(100vh-12.5rem)] flex flex-col justify-center">
-        <div className="mb-8 sm:mb-10 text-center">
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 lg:pt-10 pb-10 sm:pb-12 lg:pb-14 flex flex-col justify-start xl:justify-center overflow-y-auto">
+        <div className="mb-5 sm:mb-6 lg:mb-8 text-center">
           <h1 className="text-2xxl sm:text-3xl font-black text-slate-900 mb-2 tracking-tight">
             어떤 활동을 시작할까요?
           </h1>
@@ -97,12 +97,12 @@ export default function ModeSelectPage() {
           </p>
         </div>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
           {MODE_CARDS.map((card) => (
             <button
               key={card.key}
               onClick={() => router.push(card.onSelect)}
-              className="group relative w-full aspect-square rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
+              className="group relative w-full min-h-[220px] sm:min-h-[260px] aspect-[16/10] sm:aspect-[4/3] xl:aspect-square rounded-[24px] sm:rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
             >
               <div
                 className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"
@@ -113,7 +113,7 @@ export default function ModeSelectPage() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent" />
 
-              <div className="relative h-full p-5 flex flex-col justify-end items-start text-left z-10">
+              <div className="relative h-full p-4 sm:p-5 flex flex-col justify-end items-start text-left z-10">
                 <span className="px-2.5 py-1 bg-white/15 backdrop-blur-md rounded-full text-[9px] font-black text-white uppercase tracking-widest mb-2 border border-white/20">
                   {card.modeLabel}
                 </span>

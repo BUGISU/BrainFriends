@@ -181,8 +181,8 @@ export default function SelectPage() {
         </div>
       </div>
 
-      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-10 sm:pt-14 pb-24 sm:pb-28 min-h-[calc(100vh-12.5rem)] flex flex-col justify-center">
-        <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 sm:mb-10">
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 sm:px-6 pt-6 sm:pt-8 lg:pt-10 pb-10 sm:pb-12 lg:pb-14 flex flex-col justify-center">
+        <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-5 mb-5 sm:mb-6 lg:mb-8">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 tracking-tight">
               정기 자가진단 선택
@@ -193,12 +193,12 @@ export default function SelectPage() {
           </div>
         </section>
 
-        <section className="mt-2 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
+        <section className="mt-1 sm:mt-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
           {PLACES.map((p) => (
             <button
               key={p.key}
               onClick={() => go(p.key)}
-              className="group relative w-full aspect-[16/10] sm:aspect-[4/3] lg:aspect-[5/4] 2xl:aspect-[4/3] rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
+              className="group relative w-full min-h-[220px] sm:min-h-0 aspect-[16/10] sm:aspect-[16/10] lg:aspect-[16/10] xl:aspect-[16/9] rounded-[24px] sm:rounded-[28px] overflow-hidden shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-slate-300/40"
             >
               {p.imagePath && (
                 <div
@@ -208,7 +208,7 @@ export default function SelectPage() {
               )}
               <div className="absolute inset-0 bg-gradient-to-br from-slate-500/55 to-slate-800/70 opacity-55 group-hover:opacity-65 transition-opacity duration-500" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent" />
-              <div className="relative h-full p-5 flex flex-col justify-end items-start text-left z-10">
+              <div className="relative h-full p-4 sm:p-5 flex flex-col justify-end items-start text-left z-10">
                 <span className="px-2.5 py-1 bg-white/15 backdrop-blur-md rounded-full text-[9px] font-black text-white uppercase tracking-widest mb-2 border border-white/20">
                   Place
                 </span>

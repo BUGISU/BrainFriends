@@ -1118,17 +1118,17 @@ function Step4Content() {
         />
       </div>
       <header
-        className={`h-16 px-6 border-b flex justify-between items-center bg-white/90 backdrop-blur-md sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
+        className={`min-h-16 px-3 sm:px-6 py-2 sm:py-0 border-b flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 bg-white/90 backdrop-blur-md sticky top-0 z-50 ${isRehabMode ? "border-sky-100" : "border-orange-100"}`}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <img
             src="/images/logo/logo.png"
             alt="GOLDEN logo"
-            className="w-10 h-10 rounded-xl object-cover"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
           />
-          <h2 className="text-lg font-black text-slate-900">상황 설명하기</h2>
+          <h2 className="text-base sm:text-lg font-black text-slate-900 truncate">상황 설명하기</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
           <button
             type="button"
             onClick={handleSkipStep}
@@ -1176,11 +1176,11 @@ function Step4Content() {
       </header>
 
       <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-4 lg:p-8 pb-6 lg:pb-8 order-1 overflow-hidden">
-          <div className="max-w-5xl w-full h-full min-h-0 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-stretch">
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-3 sm:p-4 lg:p-8 pb-6 lg:pb-8 order-1 overflow-y-auto lg:overflow-hidden">
+          <div className="max-w-5xl w-full h-full min-h-0 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-stretch">
             {/* 이미지 영역 */}
-            <div className="bg-white p-4 rounded-[40px] shadow-xl border border-slate-100 min-h-0">
-              <div className="aspect-square rounded-[32px] overflow-hidden bg-slate-50 relative flex items-center justify-center">
+            <div className="bg-white p-3 sm:p-4 rounded-[28px] sm:rounded-[40px] shadow-xl border border-slate-100 min-h-0">
+              <div className="aspect-square rounded-[24px] sm:rounded-[32px] overflow-hidden bg-slate-50 relative flex items-center justify-center">
                 {isImageResolving ? (
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent" />
                 ) : (
@@ -1205,7 +1205,7 @@ function Step4Content() {
 
             {/* 대화 및 컨트롤 영역 */}
             <div className="flex flex-col gap-3 sm:gap-4 min-h-0">
-              <div className="bg-white p-6 lg:p-7 rounded-[40px] shadow-sm border border-slate-100">
+              <div className="bg-white p-4 sm:p-6 lg:p-7 rounded-[28px] sm:rounded-[40px] shadow-sm border border-slate-100">
                 <span className="text-[11px] font-black text-orange-500 tracking-[0.3em] uppercase block mb-4">
                   Spontaneous Speech
                 </span>
@@ -1368,7 +1368,7 @@ function Step4Content() {
             </div>
           </div>
         </main>
-        <aside className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex flex-col p-3 lg:p-4 overflow-hidden order-2">
+        <aside className="w-full lg:w-[380px] h-auto lg:h-full border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex flex-col p-3 sm:p-4 lg:p-4 overflow-visible lg:overflow-hidden order-2">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}

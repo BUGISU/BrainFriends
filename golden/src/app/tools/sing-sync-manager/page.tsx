@@ -1,6 +1,8 @@
 "use client";
 
 import { ChangeEvent, KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { SONG_KEYS, SONGS } from "@/features/sing-training/data/songs";
+import { SongKey } from "@/features/sing-training/types";
 import { generateBeatLyrics } from "@/features/sing-training/utils/generateBeatLyrics";
 
 const DEFAULT_LYRICS = `나비야 나비야
@@ -30,12 +32,26 @@ export default function SingSyncManagerPage() {
   const [audioUrl, setAudioUrl] = useState("");
   const [audioLabel, setAudioLabel] = useState("선택된 음원 없음");
   const [marks, setMarks] = useState<number[]>([]);
+  const [captureUnit, setCaptureUnit] = useState<"syllable" | "line">("syllable");
+  const [captureMode, setCaptureMode] = useState<"start-end" | "start-only">(
+    "start-end",
+  );
   const [isRecording, setIsRecording] = useState(false);
   const [lastMarkedAt, setLastMarkedAt] = useState<number | null>(null);
   const [spaceDurationMs, setSpaceDurationMs] = useState(100);
   const [lastDurationMs, setLastDurationMs] = useState(800);
   const [copied, setCopied] = useState(false);
   const [beatInput, setBeatInput] = useState(DEFAULT_BEAT_LINES);
+
+  const lyricPresets = useMemo(
+    () =>
+      SONG_KEYS.map((key) => ({
+        key,
+        title: key,
+        lyricsText: SONGS[key].lyrics.map((line) => line.txt).join("\n"),
+      })),
+    [],
+  );
 
   const lines = useMemo(
     () =>
@@ -46,7 +62,7 @@ export default function SingSyncManagerPage() {
     [lyricsText],
   );
 
-  const tapTargets = useMemo(
+  const syllableTargets = useMemo(
     () =>
       lines.flatMap((line, lineIndex) =>
         Array.from(line)
@@ -61,7 +77,30 @@ export default function SingSyncManagerPage() {
     [lines],
   );
 
-  const nextTarget = tapTargets[marks.length] ?? null;
+  const lineTargets = useMemo(
+    () =>
+      lines.map((line, lineIndex) => ({
+        char: line,
+        lineIndex,
+        charIndex: 0,
+        line,
+      })),
+    [lines],
+  );
+
+  const tapTargets = captureUnit === "line" ? lineTargets : syllableTargets;
+
+  const markTargetCount =
+    captureMode === "start-end" ? tapTargets.length * 2 : tapTargets.length;
+  const nextTargetIndex =
+    captureMode === "start-end" ? Math.floor(marks.length / 2) : marks.length;
+  const nextTarget = tapTargets[nextTargetIndex] ?? null;
+  const nextMarkLabel =
+    captureMode === "start-end"
+      ? marks.length % 2 === 0
+        ? "시작"
+        : "끝"
+      : "시작";
 
   const output = useMemo(() => {
     let globalMarkIndex = 0;
@@ -76,7 +115,9 @@ export default function SingSyncManagerPage() {
           continue;
         }
 
-        const start = marks[globalMarkIndex];
+        const startMarkIndex =
+          captureMode === "start-end" ? globalMarkIndex * 2 : globalMarkIndex;
+        const start = marks[startMarkIndex];
         if (typeof start !== "number") {
           globalMarkIndex += 1;
           continue;
@@ -89,10 +130,15 @@ export default function SingSyncManagerPage() {
           j += 1;
         }
 
-        const nextStart = marks[globalMarkIndex + 1];
+        const explicitEnd =
+          captureMode === "start-end" ? marks[startMarkIndex + 1] : undefined;
+        const nextStart =
+          captureMode === "start-only" ? marks[startMarkIndex + 1] : undefined;
         const reservedGap = spaceCountAfter * spaceDurationMs;
         const duration =
-          typeof nextStart === "number"
+          typeof explicitEnd === "number"
+            ? Math.max(50, explicitEnd - start)
+            : typeof nextStart === "number"
             ? Math.max(50, nextStart - start - reservedGap)
             : lastDurationMs;
 
@@ -121,7 +167,7 @@ export default function SingSyncManagerPage() {
       const lineEnd = last ? last.start + last.duration : lineStart;
 
       return {
-        line,
+        txt: line,
         t: round(lineStart / 1000, 2),
         d: round((lineEnd - lineStart) / 1000, 2),
         cues: syllables.map((item) => ({
@@ -133,7 +179,30 @@ export default function SingSyncManagerPage() {
     });
 
     return JSON.stringify(result, null, 2);
-  }, [lastDurationMs, lines, marks, spaceDurationMs]);
+  }, [captureMode, lastDurationMs, lines, marks, spaceDurationMs]);
+
+  const lineOutput = useMemo(() => {
+    const result = lines.map((line, index) => {
+      const start = marks[index];
+      if (typeof start !== "number") {
+        return null;
+      }
+
+      const nextStart = marks[index + 1];
+      const duration =
+        typeof nextStart === "number"
+          ? Math.max(50, nextStart - start)
+          : lastDurationMs;
+
+      return {
+        txt: line,
+        t: round(start / 1000, 2),
+        d: round(duration / 1000, 2),
+      };
+    }).filter(Boolean);
+
+    return JSON.stringify(result, null, 2);
+  }, [lastDurationMs, lines, marks]);
 
   const beatOutput = useMemo(() => {
     const parsed = beatInput
@@ -155,7 +224,7 @@ export default function SingSyncManagerPage() {
 
   const recordMark = () => {
     if (!audioRef.current || !audioUrl) return;
-    if (marks.length >= tapTargets.length) return;
+    if (marks.length >= markTargetCount) return;
     const nowMs = Math.round(audioRef.current.currentTime * 1000);
     setMarks((prev) => [...prev, nowMs]);
     setLastMarkedAt(nowMs);
@@ -204,6 +273,20 @@ export default function SingSyncManagerPage() {
     setAudioLabel(file.name);
     setMarks([]);
     setIsRecording(false);
+  };
+
+  const handlePresetChange = (key: SongKey) => {
+    const preset = lyricPresets.find((item) => item.key === key);
+    if (!preset) return;
+    setSongName(preset.title);
+    setLyricsText(preset.lyricsText);
+    setMarks([]);
+    setIsRecording(false);
+    setLastMarkedAt(null);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
   };
 
   const handleToggleRecording = async () => {
@@ -257,7 +340,7 @@ export default function SingSyncManagerPage() {
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6">
       <div className="mx-auto grid max-w-7xl gap-6 xl:grid-cols-[440px_minmax(0,1fr)]">
-        <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur">
+        <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur xl:order-2">
           <p className="text-xs font-black uppercase tracking-[0.26em] text-emerald-300">
             Sync Manager
           </p>
@@ -270,6 +353,26 @@ export default function SingSyncManagerPage() {
           </p>
 
           <div className="mt-6 space-y-4">
+            <div>
+              <span className="mb-2 block text-sm font-black text-slate-200">가사 프리셋</span>
+              <div className="flex flex-wrap gap-2">
+                {lyricPresets.map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => handlePresetChange(preset.key)}
+                    className={`rounded-full border px-3 py-2 text-xs font-black transition-colors ${
+                      songName === preset.title
+                        ? "border-emerald-300 bg-emerald-500 text-white"
+                        : "border-white/10 bg-slate-900 text-slate-300"
+                    }`}
+                  >
+                    {preset.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <label className="block">
               <span className="mb-2 block text-sm font-black text-slate-200">곡명</span>
               <input
@@ -290,18 +393,66 @@ export default function SingSyncManagerPage() {
               />
             </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm font-black text-slate-200">음원 파일</span>
-              <input
-                type="file"
-                accept=".mp3,.wav,.m4a,.ogg,.aac,.flac,audio/*"
-                onChange={handleAudioFile}
-                className="block w-full text-sm text-slate-300"
-              />
-              <p className="mt-2 text-xs font-semibold text-slate-400">{audioLabel}</p>
-            </label>
-
             <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaptureUnit("line");
+                    setMarks([]);
+                    setLastMarkedAt(null);
+                  }}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-black ${
+                    captureUnit === "line"
+                      ? "border-sky-300 bg-sky-500 text-white"
+                      : "border-white/10 bg-slate-900 text-slate-300"
+                  }`}
+                >
+                  문장 단위
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaptureUnit("syllable");
+                    setMarks([]);
+                    setLastMarkedAt(null);
+                  }}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-black ${
+                    captureUnit === "syllable"
+                      ? "border-sky-300 bg-sky-500 text-white"
+                      : "border-white/10 bg-slate-900 text-slate-300"
+                  }`}
+                >
+                  음절 단위
+                </button>
+              </div>
+
+              <div className="col-span-2 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCaptureMode("start-end")}
+                  disabled={captureUnit === "line"}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-black ${
+                    captureMode === "start-end"
+                      ? "border-emerald-300 bg-emerald-500 text-white"
+                      : "border-white/10 bg-slate-900 text-slate-300"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  시작/끝 직접 기록
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCaptureMode("start-only")}
+                  disabled={captureUnit === "line"}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-black ${
+                    captureMode === "start-only"
+                      ? "border-emerald-300 bg-emerald-500 text-white"
+                      : "border-white/10 bg-slate-900 text-slate-300"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  시작만 기록
+                </button>
+              </div>
               <label className="block">
                 <span className="mb-2 block text-sm font-black text-slate-200">공백 길이(ms)</span>
                 <input
@@ -323,47 +474,63 @@ export default function SingSyncManagerPage() {
             </div>
           </div>
 
-          <audio
-            ref={audioRef}
-            src={audioUrl}
-            controls
-            className="mt-6 w-full"
-            onEnded={() => setIsRecording(false)}
-          />
+          <section className="mt-6 rounded-[28px] border border-emerald-400/20 bg-emerald-500/10 p-4 sm:p-5">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">
+              Audio
+            </p>
+            <h2 className="mt-2 text-xl font-black text-white">음원 파일</h2>
+            <label className="mt-4 block">
+              <input
+                type="file"
+                accept=".mp3,.wav,.m4a,.ogg,.aac,.flac,audio/*"
+                onChange={handleAudioFile}
+                className="block w-full text-sm text-slate-300"
+              />
+              <p className="mt-2 text-xs font-semibold text-slate-300">{audioLabel}</p>
+            </label>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => void handleToggleRecording()}
-              disabled={!audioUrl}
-              className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-700"
-            >
-              {isRecording ? "재생 중지" : "처음부터 재생 + 기록"}
-            </button>
-            <button
-              type="button"
-              onClick={handleUndo}
-              disabled={marks.length === 0}
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:text-slate-500"
-            >
-              마지막 입력 취소
-            </button>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white"
-            >
-              초기화
-            </button>
-          </div>
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              controls
+              className="mt-4 w-full"
+              onEnded={() => setIsRecording(false)}
+            />
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void handleToggleRecording()}
+                disabled={!audioUrl}
+                className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-700"
+              >
+                {isRecording ? "재생 중지" : "처음부터 재생 + 기록"}
+              </button>
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={marks.length === 0}
+                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:text-slate-500"
+              >
+                마지막 입력 취소
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white"
+              >
+                초기화
+              </button>
+            </div>
+          </section>
 
           <button
             type="button"
             onClick={recordMark}
-            disabled={!audioUrl || marks.length >= tapTargets.length}
+            disabled={!audioUrl || marks.length >= markTargetCount}
             className="mt-5 flex h-28 w-full items-center justify-center rounded-[28px] border border-emerald-300/30 bg-gradient-to-r from-emerald-500 to-emerald-400 text-2xl font-black text-white shadow-[0_24px_50px_rgba(16,185,129,0.35)] transition-transform active:scale-[0.99] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-700 disabled:text-slate-400"
           >
-            음절 시작 기록
+            {captureUnit === "line" ? "문장 시작 기록" : `음절 ${nextMarkLabel} 기록`}
           </button>
 
           <div className="mt-5 rounded-3xl border border-white/10 bg-slate-950/60 p-4 text-sm leading-relaxed text-slate-300">
@@ -372,13 +539,13 @@ export default function SingSyncManagerPage() {
               1. 음원을 넣고 <span className="font-black text-emerald-300">처음부터 재생 + 기록</span> 을 누릅니다.
             </p>
             <p>
-              2. 각 <span className="font-black text-emerald-300">음절이 시작되는 순간</span> 에 큰 버튼이나 `Space` 를 한 번씩 누릅니다.
+              2. <span className="font-black text-emerald-300">문장 단위</span> 는 각 줄이 시작되는 순간만 누릅니다.
             </p>
             <p>
-              3. 길이는 직접 일일이 안 넣습니다. 다음 음절을 누른 시점까지를 자동으로 길이로 계산합니다.
+              3. <span className="font-black text-emerald-300">음절 단위</span> 는 시작/끝 직접 기록 또는 시작만 기록을 선택해 씁니다.
             </p>
             <p>
-              4. `공백 길이(ms)` 는 띄어쓰기 칸 길이, `마지막 길이(ms)` 는 마지막 음절 기본 길이입니다.
+              4. `공백 길이(ms)` 는 띄어쓰기 칸 길이, `마지막 길이(ms)` 는 마지막 문장/음절 기본 길이입니다.
             </p>
           </div>
 
@@ -387,7 +554,7 @@ export default function SingSyncManagerPage() {
               Recording Status
             </p>
             <p className="mt-3 text-2xl font-black text-white">
-              {marks.length} / {tapTargets.length}
+              {marks.length} / {markTargetCount}
             </p>
             <p className="mt-2 text-sm text-slate-300">
               마지막 기록:{" "}
@@ -405,7 +572,7 @@ export default function SingSyncManagerPage() {
               다음 입력:{" "}
               {nextTarget ? (
                 <span className="font-black text-white">
-                  {nextTarget.char} ({nextTarget.lineIndex + 1}번째 줄)
+                  {captureUnit === "line" ? nextTarget.line : `${nextTarget.char} ${nextMarkLabel}`} ({nextTarget.lineIndex + 1}번째 줄)
                 </span>
               ) : (
                 <span className="font-black text-emerald-300">완료</span>
@@ -414,7 +581,7 @@ export default function SingSyncManagerPage() {
           </div>
         </section>
 
-        <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur">
+        <section className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur xl:order-1">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.26em] text-emerald-300">
@@ -441,9 +608,9 @@ export default function SingSyncManagerPage() {
               </div>
             </div>
             <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
-              <p className="text-sm font-black text-white">앱 적용용 JSON</p>
+              <p className="text-sm font-black text-white">songs.ts 적용용 JSON</p>
               <pre className="mt-3 max-h-[480px] overflow-auto rounded-2xl bg-black/30 p-4 text-xs leading-relaxed text-slate-200">
-                {output}
+                {captureUnit === "line" ? lineOutput : output}
               </pre>
             </div>
           </div>
