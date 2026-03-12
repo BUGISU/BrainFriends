@@ -99,9 +99,12 @@ function Step2Content() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mobileVideoRef = useRef<HTMLVideoElement>(null);
+  const mobileCanvasRef = useRef<HTMLCanvasElement>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const analyzerRef = useRef<SpeechAnalyzer | null>(null);
   const audioInputStreamRef = useRef<MediaStream | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
   const speechOnsetMsRef = useRef<number | null>(null);
 
@@ -132,8 +135,8 @@ function Step2Content() {
   const [reviewAudioUrl, setReviewAudioUrl] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any[]>([]);
   const [showTracking, setShowTracking] = useState(true);
-  const [isMetricsPanelOpen, setIsMetricsPanelOpen] = useState(false);
   const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
   const flowTokenRef = useRef(0);
   const articulationStateRef = useRef(createInitialArticulationAnalyzerState());
   const liveArticulationRef = useRef({
@@ -686,7 +689,16 @@ function Step2Content() {
         const videoStream = await navigator.mediaDevices.getUserMedia({
           video: true,
         });
-        if (videoRef.current) videoRef.current.srcObject = videoStream;
+        videoStreamRef.current = videoStream;
+        [videoRef.current, mobileVideoRef.current]
+          .filter(Boolean)
+          .forEach((target) => {
+            const element = target as HTMLVideoElement;
+            element.srcObject = videoStream;
+            element.onloadedmetadata = () => {
+              element.play().catch(console.error);
+            };
+          });
 
         // 오디오 입력 스트림을 미리 열고 재사용: 매 문항 초기화 지연 감소
         try {
@@ -704,6 +716,10 @@ function Step2Content() {
     setupCamera();
     return () => {
       flowTokenRef.current += 1;
+      if (videoStreamRef.current) {
+        videoStreamRef.current.getTracks().forEach((t) => t.stop());
+        videoStreamRef.current = null;
+      }
       if (audioInputStreamRef.current) {
         audioInputStreamRef.current.getTracks().forEach((t) => t.stop());
         audioInputStreamRef.current = null;
@@ -713,6 +729,35 @@ function Step2Content() {
       resetRuntimeStatus();
     };
   }, [protocol.length, resetRuntimeStatus, stepSignature]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncViewport = () => setIsDesktopViewport(mediaQuery.matches);
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    const videoStream = videoStreamRef.current;
+    const targets = [videoRef.current, mobileVideoRef.current].filter(
+      Boolean,
+    ) as HTMLVideoElement[];
+    if (!targets.length || !videoStream) return;
+
+    targets.forEach((videoEl) => {
+      if (videoEl.srcObject !== videoStream) {
+        videoEl.srcObject = videoStream;
+      }
+      videoEl.onloadedmetadata = () => {
+        videoEl.play().catch(console.error);
+      };
+      if (videoEl.readyState >= 1) {
+        videoEl.play().catch(console.error);
+      }
+    });
+  }, [resultScore, currentIndex]);
 
   useEffect(() => {
     if (!isMounted || !currentItem) return;
@@ -1387,58 +1432,12 @@ function Step2Content() {
       </header>
 
       <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-hidden">
-        <main className="flex-1 flex flex-col relative p-4 sm:p-6 lg:p-10 order-1 overflow-y-auto">
-          {resultScore === null ? (
-            <div className="absolute right-4 top-4 z-20 w-[150px] sm:w-[190px] max-w-[44vw] lg:hidden">
-              <AnalysisSidebar
-                videoRef={videoRef}
-                canvasRef={canvasRef}
-                isFaceReady={sidebarMetrics.faceDetected}
-                metrics={{
-                  symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
-                  openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
-                  consonantAcc: (sidebarMetrics.consonantAccuracy || 0) * 100,
-                  vowelAcc: (sidebarMetrics.vowelAccuracy || 0) * 100,
-                  consonantClosureRate:
-                    (sidebarMetrics.consonantClosureRate || 0) * 100,
-                  consonantClosureHold:
-                    (sidebarMetrics.consonantClosureHoldScore || 0) * 100,
-                  consonantLipSymmetry:
-                    (sidebarMetrics.consonantLipSymmetry || 0) * 100,
-                  consonantOpeningSpeed:
-                    (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
-                  consonantClosureHoldMs:
-                    sidebarMetrics.consonantClosureHoldMs || 0,
-                  consonantOpeningSpeedMs:
-                    sidebarMetrics.consonantOpeningSpeedMs || 0,
-                  vowelMouthOpening:
-                    (sidebarMetrics.vowelMouthOpening || 0) * 100,
-                  vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
-                  vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
-                  vowelPatternMatch:
-                    (sidebarMetrics.vowelPatternMatch || 0) * 100,
-                  audioLevel: audioLevel,
-                }}
-                showTracking={showTracking}
-                onToggleTracking={() => setShowTracking(!showTracking)}
-                hideMetrics
-                previewAspectClass="aspect-[3/4] sm:aspect-video"
-                previewMediaClass="object-cover object-[center_20%] sm:object-contain sm:object-center"
-              />
-              <button
-                type="button"
-                onClick={() => setIsMetricsPanelOpen(true)}
-                className={`mt-2 ml-auto flex items-center gap-1 rounded-xl px-3 py-2 text-[11px] font-black shadow-sm ${
-                  isRehabMode
-                    ? "bg-sky-500 text-white"
-                    : "bg-white/95 text-slate-800 border border-slate-200"
-                }`}
-              >
-                세부 지표
-              </button>
-            </div>
-          ) : null}
-          <div className="w-full max-w-xl mx-auto flex flex-col h-full justify-center gap-6">
+        <main className="flex-1 flex flex-col relative p-4 pb-24 sm:p-6 sm:pb-24 lg:p-10 lg:pb-16 order-1 overflow-y-auto">
+          <div
+            className={`w-full max-w-xl mx-auto flex flex-col gap-6 ${
+              resultScore === null ? "h-full justify-center" : "justify-start pb-6"
+            }`}
+          >
             {/* 메인 텍스트 영역 */}
             <div
               className={`w-full rounded-[40px] p-8 lg:p-12 text-center transition-colors duration-150 ${
@@ -1580,7 +1579,7 @@ function Step2Content() {
                   </div>
                 </div>
 
-                <div className="mt-5 flex flex-col gap-3 relative z-[1]">
+                <div className="mt-6 flex flex-col gap-3 relative z-[1] pb-2">
                   <button
                     onClick={() => {
                       if (reviewAudioUrl && !isPlayingAudio) {
@@ -1720,7 +1719,7 @@ function Step2Content() {
             </div>
           </div>
         </main>
-        <aside className="hidden lg:flex w-[380px] border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex-col order-2">
+        <aside className="hidden lg:flex w-[380px] h-auto lg:h-full border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex-col p-3 sm:p-4 lg:p-4 overflow-visible lg:overflow-hidden order-2">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}
@@ -1752,72 +1751,11 @@ function Step2Content() {
             onToggleTracking={() => setShowTracking(!showTracking)}
             scoreLabel="실시간 대칭도"
             scoreValue={resultScore ? `${resultScore}점` : undefined}
+            hidePreview={!isDesktopViewport}
+            hideMetrics={!isDesktopViewport}
           />
         </aside>
-
       </div>
-      {isMetricsPanelOpen ? (
-        <div className="fixed inset-0 z-40 bg-slate-950/25">
-          <button
-            type="button"
-            aria-label="세부 지표 닫기"
-            onClick={() => setIsMetricsPanelOpen(false)}
-            className="absolute inset-0"
-          />
-          <div className="absolute inset-y-0 right-0 w-full max-w-[380px] border-l border-slate-50 bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
-                  Repetition Training
-                </p>
-                <p className="text-lg font-black text-slate-900">세부 지표</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsMetricsPanelOpen(false)}
-                className={`rounded-xl px-3 py-2 text-sm font-black ${accentOutline}`}
-              >
-                닫기
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
-              <AnalysisSidebar
-                videoRef={videoRef}
-                canvasRef={canvasRef}
-                isFaceReady={sidebarMetrics.faceDetected}
-                metrics={{
-                  symmetryScore: (sidebarMetrics.facialSymmetry || 0) * 100,
-                  openingRatio: (sidebarMetrics.mouthOpening || 0) * 100,
-                  consonantAcc: (sidebarMetrics.consonantAccuracy || 0) * 100,
-                  vowelAcc: (sidebarMetrics.vowelAccuracy || 0) * 100,
-                  consonantClosureRate:
-                    (sidebarMetrics.consonantClosureRate || 0) * 100,
-                  consonantClosureHold:
-                    (sidebarMetrics.consonantClosureHoldScore || 0) * 100,
-                  consonantLipSymmetry:
-                    (sidebarMetrics.consonantLipSymmetry || 0) * 100,
-                  consonantOpeningSpeed:
-                    (sidebarMetrics.consonantOpeningSpeedScore || 0) * 100,
-                  consonantClosureHoldMs:
-                    sidebarMetrics.consonantClosureHoldMs || 0,
-                  consonantOpeningSpeedMs:
-                    sidebarMetrics.consonantOpeningSpeedMs || 0,
-                  vowelMouthOpening:
-                    (sidebarMetrics.vowelMouthOpening || 0) * 100,
-                  vowelMouthWidth: (sidebarMetrics.vowelMouthWidth || 0) * 100,
-                  vowelRounding: (sidebarMetrics.vowelRounding || 0) * 100,
-                  vowelPatternMatch:
-                    (sidebarMetrics.vowelPatternMatch || 0) * 100,
-                  audioLevel: audioLevel,
-                }}
-                showTracking={showTracking}
-                onToggleTracking={() => setShowTracking(!showTracking)}
-                hidePreview
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
       <HomeExitModal
         open={isHomeExitModalOpen}
         onConfirm={confirmGoHome}

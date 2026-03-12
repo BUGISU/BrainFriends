@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -10,7 +10,7 @@ import {
   Sparkles,
   Trophy,
 } from "lucide-react";
-import { loadPatientProfile } from "@/lib/patientStorage";
+import { loadPatientProfile, type PatientProfile } from "@/lib/patientStorage";
 import { SessionManager } from "@/lib/kwab/SessionManager";
 
 export const dynamic = "force-static";
@@ -32,11 +32,34 @@ type SingResult = {
   comment: string;
   rankings: RankRow[];
   completedAt: number;
+  governance?: {
+    catalogVersion: string;
+    analysisVersion: string;
+    requirementIds: string[];
+    failureModes: string[];
+  };
 };
+
+async function persistToDatabase(patient: PatientProfile, result: SingResult) {
+  const response = await fetch("/api/sing-results", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ patient, result }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: "unknown_error" }));
+    throw new Error(payload?.error || "failed_to_persist_sing_result");
+  }
+}
 
 export default function SingTrainingResultPage() {
   const [result, setResult] = useState<SingResult | null>(null);
+  const [dbSaveState, setDbSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const patient = useMemo(() => loadPatientProfile(), []);
+  const lastPersistedKeyRef = useRef<string | null>(null);
 
   const moveToSongSelect = () => {
     if (typeof window === "undefined") return;
@@ -64,20 +87,55 @@ export default function SingTrainingResultPage() {
       const parsed = JSON.parse(raw) as SingResult;
       setResult(parsed);
       if (patient) {
-        SessionManager.saveSingHistory(patient as any, {
-          song: parsed.song,
-          score: parsed.score,
-          finalJitter: parsed.finalJitter,
-          finalSi: parsed.finalSi,
-          rtLatency: parsed.rtLatency,
-          comment: parsed.comment,
-          rankings: parsed.rankings,
-        }, parsed.completedAt);
+        SessionManager.saveSingHistory(
+          patient as any,
+          {
+            song: parsed.song,
+            score: parsed.score,
+            finalJitter: parsed.finalJitter,
+            finalSi: parsed.finalSi,
+            rtLatency: parsed.rtLatency,
+            comment: parsed.comment,
+            rankings: parsed.rankings,
+            governance: parsed.governance,
+          },
+          parsed.completedAt,
+        );
       }
     } catch {
       setResult(null);
     }
   }, [patient]);
+
+  useEffect(() => {
+    if (!patient || !result) return;
+
+    const persistKey = `${patient.sessionId}:${result.completedAt}:${result.song}`;
+    if (lastPersistedKeyRef.current === persistKey) {
+      return;
+    }
+    lastPersistedKeyRef.current = persistKey;
+
+    let cancelled = false;
+    setDbSaveState("saving");
+
+    void persistToDatabase(patient, result)
+      .then(() => {
+        if (!cancelled) {
+          setDbSaveState("saved");
+        }
+      })
+      .catch((error) => {
+        console.error("[sing-result] database persistence failed", error);
+        if (!cancelled) {
+          setDbSaveState("failed");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patient, result]);
 
   if (!result) {
     return (
@@ -103,9 +161,18 @@ export default function SingTrainingResultPage() {
 
   const facialSymmetryScore = Number(result.finalSi || 0);
   const jitterScore = Number(result.finalJitter || 0);
-  const mouthImprovement = Math.max(8, Math.round((facialSymmetryScore - 80) * 0.9));
-  const eyeImprovement = Math.max(6, Math.round((facialSymmetryScore - 82) * 0.65));
-  const rhythmCoordination = Math.max(70, Math.min(99, result.score - Math.round(jitterScore * 5)));
+  const mouthImprovement = Math.max(
+    8,
+    Math.round((facialSymmetryScore - 80) * 0.9),
+  );
+  const eyeImprovement = Math.max(
+    6,
+    Math.round((facialSymmetryScore - 82) * 0.65),
+  );
+  const rhythmCoordination = Math.max(
+    70,
+    Math.min(99, result.score - Math.round(jitterScore * 5)),
+  );
   const maskedAge = patient?.age ? `${patient.age}세 기준` : "동일 연령대 기준";
   const vitalityComment =
     result.score >= 90
@@ -126,6 +193,18 @@ export default function SingTrainingResultPage() {
               </h1>
               <p className="mt-2 text-base font-medium text-slate-500">
                 {result.userName}님의 안면 마비 진단 기반 노래 분석 결과입니다.
+              </p>
+              {result.governance ? (
+                <p className="mt-2 text-sm font-semibold text-slate-500">
+                  Catalog {result.governance.catalogVersion} · Analysis{" "}
+                  {result.governance.analysisVersion}
+                </p>
+              ) : null}
+              <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                {dbSaveState === "saving" && "DB Sync In Progress"}
+                {dbSaveState === "saved" && "DB Sync Complete"}
+                {dbSaveState === "failed" && "DB Sync Failed - Local backup kept"}
+                {dbSaveState === "idle" && "DB Sync Pending"}
               </p>
             </div>
             <div className="flex gap-3">
@@ -290,9 +369,7 @@ export default function SingTrainingResultPage() {
                   입을 크게 벌리는 동작이 지난번보다 {Math.max(12, mouthImprovement)}% 더 정확해졌고,
                   눈 주위 반응도도 함께 개선되는 양상을 보였습니다.
                 </p>
-                <p>
-                  {result.comment}
-                </p>
+                <p>{result.comment}</p>
                 <div className="rounded-[24px] border border-emerald-200 bg-white/70 p-4">
                   <p className="flex items-center gap-2 text-base font-black text-emerald-700">
                     <ArrowUpRight className="h-5 w-5" />

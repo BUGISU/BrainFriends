@@ -27,5 +27,22 @@ export type SongMeta = {
   audioSrc: string;
   durationSec?: number;
   lyricLeadOffsetSec?: number;
+  selection: {
+    description: string;
+    imagePath: string;
+    imagePosition: string;
+    overlayStyle: string;
+    badgeStyle: string;
+    startLabelStyle: string;
+  };
+  governance: {
+    catalogVersion: string;
+    analysisVersion: string;
+    requirementIds: string[];
+    intendedUse: string;
+    inputs: string[];
+    outputs: string[];
+    failureModes: string[];
+  };
   lyrics: LyricLine[];
 };

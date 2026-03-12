@@ -12,7 +12,12 @@ import {
   RotateCcw,
   Trophy,
 } from "lucide-react";
-import { SONG_KEYS, SONGS } from "@/features/sing-training/data/songs";
+import {
+  SING_TRAINING_ANALYSIS_VERSION,
+  SING_TRAINING_CATALOG_VERSION,
+  SONG_KEYS,
+  SONGS,
+} from "@/features/sing-training/data/songs";
 import { SongKey, SyllableCue } from "@/features/sing-training/types";
 import { useTrainingSession } from "@/hooks/useTrainingSession";
 
@@ -23,6 +28,24 @@ type RankRow = {
   score: number;
   region: string;
   me?: boolean;
+};
+
+type SingResultEnvelope = {
+  song: string;
+  userName: string;
+  score: number;
+  finalJitter: string;
+  finalSi: string;
+  rtLatency: string;
+  comment: string;
+  rankings: RankRow[];
+  completedAt: number;
+  governance: {
+    catalogVersion: string;
+    analysisVersion: string;
+    requirementIds: string[];
+    failureModes: string[];
+  };
 };
 
 const LYRIC_LEAD_OFFSET_SEC = 0.28;
@@ -366,7 +389,15 @@ function BrainSingPageContent() {
           comment: finalComment,
           rankings: rows,
           completedAt: Date.now(),
-        }),
+          governance: {
+            catalogVersion:
+              currentSong.governance.catalogVersion ?? SING_TRAINING_CATALOG_VERSION,
+            analysisVersion:
+              currentSong.governance.analysisVersion ?? SING_TRAINING_ANALYSIS_VERSION,
+            requirementIds: currentSong.governance.requirementIds,
+            failureModes: currentSong.governance.failureModes,
+          },
+        } satisfies SingResultEnvelope),
       );
     }
 
@@ -748,3 +779,5 @@ function ResultStat({ title, value }: { title: string; value: string }) {
     </div>
   );
 }
+
+

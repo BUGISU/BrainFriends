@@ -224,6 +224,12 @@ export interface SingHistoryResult {
   finalSi: string;
   rtLatency: string;
   comment: string;
+  governance?: {
+    catalogVersion: string;
+    analysisVersion: string;
+    requirementIds: string[];
+    failureModes: string[];
+  };
   rankings: Array<{
     name: string;
     score: number;
@@ -1176,3 +1182,5 @@ export function useSessionManager(patient: PatientProfile, place: string) {
     saveStep6: (result: Step6Result) => manager.saveStep6Result(result),
   };
 }
+
+

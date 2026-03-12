@@ -175,6 +175,7 @@ function Step5Content() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const analyzerRef = useRef<SpeechAnalyzer | null>(null);
   const readingStartAtRef = useRef<number | null>(null);
@@ -194,6 +195,7 @@ function Step5Content() {
   const [results, setResults] = useState<ReadingMetrics[]>([]);
   const [showTracking, setShowTracking] = useState(true);
   const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
   const articulationStateRef = useRef(createInitialArticulationAnalyzerState());
   const liveArticulationRef = useRef({
     consonant: 0,
@@ -456,7 +458,13 @@ function Step5Content() {
           const stream = await navigator.mediaDevices.getUserMedia({
             video: true,
           });
-          if (videoRef.current) videoRef.current.srcObject = stream;
+          videoStreamRef.current = stream;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play().catch(console.error);
+            };
+          }
         }
       } catch (err) {
         console.error("Step 5 Camera Error:", err);
@@ -465,6 +473,10 @@ function Step5Content() {
     setupCamera();
 
     return () => {
+      if (videoStreamRef.current) {
+        videoStreamRef.current.getTracks().forEach((track) => track.stop());
+        videoStreamRef.current = null;
+      }
       if (timerRef.current) clearInterval(timerRef.current);
       if (highlightTimerRef.current) clearInterval(highlightTimerRef.current);
       analyzerRef.current?.cancelAnalysis();
@@ -475,6 +487,31 @@ function Step5Content() {
       resetRuntimeStatus();
     };
   }, [resetRuntimeStatus, texts.length, stepSignature]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncViewport = () => setIsDesktopViewport(mediaQuery.matches);
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    const videoStream = videoStreamRef.current;
+    if (!videoEl || !videoStream) return;
+
+    if (videoEl.srcObject !== videoStream) {
+      videoEl.srcObject = videoStream;
+    }
+    videoEl.onloadedmetadata = () => {
+      videoEl.play().catch(console.error);
+    };
+    if (videoEl.readyState >= 1) {
+      videoEl.play().catch(console.error);
+    }
+  }, [currentIndex, phase, currentResult]);
 
   const getPhaseMessage = () => {
     switch (phase) {
@@ -1131,7 +1168,7 @@ function Step5Content() {
 
       <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
         <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-3 sm:p-4 lg:p-10 pb-8 lg:pb-10 order-1 overflow-y-auto">
-          <div className="w-full max-w-2xl mx-auto flex flex-col h-full gap-4 lg:gap-8 justify-start lg:justify-center">
+          <div className="w-full max-w-2xl mx-auto flex flex-col h-full gap-4 lg:gap-8 justify-center">
             <div className="w-full bg-white border border-orange-100 rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.18em] mb-1">
                 진행 가이드
@@ -1266,7 +1303,7 @@ function Step5Content() {
             </div>
           </div>
         </main>
-        <aside className="w-full lg:w-[380px] h-auto lg:h-full border-t lg:border-t-0 lg:border-l border-slate-50 bg-white p-3 sm:p-4 shrink-0 overflow-visible lg:overflow-hidden order-2">
+        <aside className="w-full lg:w-[380px] h-auto lg:h-full border-t lg:border-t-0 lg:border-l border-slate-50 bg-white shrink-0 flex flex-col p-3 sm:p-4 lg:p-4 overflow-visible lg:overflow-hidden order-2">
           <AnalysisSidebar
             videoRef={videoRef}
             canvasRef={canvasRef}
@@ -1300,6 +1337,8 @@ function Step5Content() {
             scoreValue={
               currentResult ? `${currentResult.readingScore.toFixed(1)}점` : "-"
             }
+            hidePreview={!isDesktopViewport}
+            hideMetrics={!isDesktopViewport}
           />
         </aside>
       </div>

@@ -1,5 +1,38 @@
 import { LyricLine, SongKey, SongMeta } from "@/features/sing-training/types";
 
+export const SING_TRAINING_CATALOG_VERSION = "sing-catalog-2026-03-12";
+export const SING_TRAINING_ANALYSIS_VERSION = "brain-sing-sim-v1";
+
+const COMMON_GOVERNANCE: SongMeta["governance"] = {
+  catalogVersion: SING_TRAINING_CATALOG_VERSION,
+  analysisVersion: SING_TRAINING_ANALYSIS_VERSION,
+  requirementIds: [
+    "SING-REQ-001",
+    "SING-REQ-IO-001",
+    "SING-REQ-VV-001",
+    "SING-REQ-FAIL-001",
+  ],
+  intendedUse:
+    "30초 내외 노래 훈련 세션에서 음원/가사 타임라인을 고정하고 발성·안면 반응 지표를 일관되게 산출하기 위한 내부 카탈로그 정의",
+  inputs: [
+    "선택된 곡 식별자",
+    "고정된 음원 파일 경로",
+    "가사 라인 및 음절 단위 cue 타임라인",
+    "카메라/마이크 권한 상태",
+  ],
+  outputs: [
+    "곡별 훈련 화면 구성",
+    "실시간 가사 표시 기준",
+    "세션 결과에 포함되는 곡/버전 메타데이터",
+  ],
+  failureModes: [
+    "존재하지 않는 곡 key 요청",
+    "오디오 메타데이터 로드 실패",
+    "카메라 또는 마이크 권한 거부",
+    "세션 결과 저장 직렬화 실패",
+  ],
+};
+
 function buildEvenCues(txt: string, d: number) {
   const chars = Array.from(txt);
   const step = chars.length > 0 ? d / chars.length : d;
@@ -28,6 +61,17 @@ export const SONGS: Record<SongKey, SongMeta> = {
     badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-100",
     audioSrc: "/audio/sing-training/nabiya.mp3",
     durationSec: 24.41,
+    selection: {
+      description:
+        "짧고 익숙한 멜로디로 가장 부담 없이 호흡 시작과 발성 진입을 확인합니다.",
+      imagePath: "/images/mode/sing-card.png",
+      imagePosition: "18% 18%",
+      overlayStyle:
+        "linear-gradient(135deg, rgba(236, 253, 245, 0.32) 0%, rgba(52, 211, 153, 0.22) 100%)",
+      badgeStyle: "linear-gradient(90deg, #6EE7B7 0%, #34D399 100%)",
+      startLabelStyle: "text-emerald-200/95",
+    },
+    governance: COMMON_GOVERNANCE,
     lyrics: [
       lyricLine(0, 3.38, "나비야 나비야"),
       lyricLine(3.38, 2.8, "이리 날아 오너라"),
@@ -46,6 +90,17 @@ export const SONGS: Record<SongKey, SongMeta> = {
     badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-100",
     audioSrc: "/audio/sing-training/dunggeulge.mp3",
     durationSec: 30.91,
+    selection: {
+      description:
+        "빠른 반복 리듬과 연속 조음이 많아 환자 기준으로 부담이 큰 편입니다.",
+      imagePath: "/images/mode/sing-card.png",
+      imagePosition: "14% 26%",
+      overlayStyle:
+        "linear-gradient(135deg, rgba(250, 245, 255, 0.34) 0%, rgba(192, 132, 252, 0.22) 100%)",
+      badgeStyle: "linear-gradient(90deg, #F9A8D4 0%, #F472B6 100%)",
+      startLabelStyle: "text-fuchsia-200/95",
+    },
+    governance: COMMON_GOVERNANCE,
     lyrics: [
       lyricLine(0, 2.03, "둥글게 둥글게"),
       lyricLine(2.03, 1.92, "둥글게 둥글게"),
@@ -71,6 +126,17 @@ export const SONGS: Record<SongKey, SongMeta> = {
     badgeClass: "bg-teal-50 text-teal-700 border-teal-100",
     audioSrc: "/audio/sing-training/arirang.mp3",
     durationSec: 37.73,
+    selection: {
+      description:
+        "느린 흐름에 맞춰 호흡 길이와 발화 유창성을 비교적 안정적으로 점검합니다.",
+      imagePath: "/images/mode/sing-card.png",
+      imagePosition: "16% 22%",
+      overlayStyle:
+        "linear-gradient(135deg, rgba(239, 246, 255, 0.32) 0%, rgba(96, 165, 250, 0.22) 100%)",
+      badgeStyle: "linear-gradient(90deg, #93C5FD 0%, #60A5FA 100%)",
+      startLabelStyle: "text-sky-200/95",
+    },
+    governance: COMMON_GOVERNANCE,
     lyrics: [
       lyricLine(0, 4.78, "아리랑~ 아리랑~"),
       lyricLine(4.78, 4.67, "아라~리~요~~~"),
@@ -90,6 +156,17 @@ export const SONGS: Record<SongKey, SongMeta> = {
     audioSrc: "/audio/sing-training/doraji.mp3",
     durationSec: 47.9,
     lyricLeadOffsetSec: 0,
+    selection: {
+      description:
+        "빠른 장단 반응과 발음 명료도를 함께 요구하는 고난도 곡입니다.",
+      imagePath: "/images/mode/sing-card.png",
+      imagePosition: "12% 30%",
+      overlayStyle:
+        "linear-gradient(135deg, rgba(250, 245, 255, 0.34) 0%, rgba(192, 132, 252, 0.22) 100%)",
+      badgeStyle: "linear-gradient(90deg, #F9A8D4 0%, #F472B6 100%)",
+      startLabelStyle: "text-fuchsia-200/95",
+    },
+    governance: COMMON_GOVERNANCE,
     lyrics: [
       lyricLine(0, 3.83, "도라지 도라지~"),
       lyricLine(3.83, 3.27, "백도~ 라~ 지"),
@@ -116,6 +193,17 @@ export const SONGS: Record<SongKey, SongMeta> = {
     badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
     audioSrc: "/audio/sing-training/gunbam.mp3",
     durationSec: 29.64,
+    selection: {
+      description:
+        "짧은 문장과 박자 전환 구간에서 호흡 조절과 발화 지속성을 평가합니다.",
+      imagePath: "/images/mode/sing-card.png",
+      imagePosition: "10% 20%",
+      overlayStyle:
+        "linear-gradient(135deg, rgba(239, 246, 255, 0.32) 0%, rgba(96, 165, 250, 0.22) 100%)",
+      badgeStyle: "linear-gradient(90deg, #93C5FD 0%, #60A5FA 100%)",
+      startLabelStyle: "text-sky-200/95",
+    },
+    governance: COMMON_GOVERNANCE,
     lyrics: [
       lyricLine(0, 2.46, "바람이 분다"),
       lyricLine(2.46, 1.68, "바람이 불어"),
@@ -139,6 +227,17 @@ export const SONGS: Record<SongKey, SongMeta> = {
     badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-100",
     audioSrc: "/audio/sing-training/miryang-arirang.mp3",
     durationSec: 36.53,
+    selection: {
+      description:
+        "긴 흐름과 큰 박자 변화가 있어 가장 난도가 높은 축에 속합니다.",
+      imagePath: "/images/mode/sing-card.png",
+      imagePosition: "8% 28%",
+      overlayStyle:
+        "linear-gradient(135deg, rgba(250, 245, 255, 0.34) 0%, rgba(192, 132, 252, 0.22) 100%)",
+      badgeStyle: "linear-gradient(90deg, #F9A8D4 0%, #F472B6 100%)",
+      startLabelStyle: "text-fuchsia-200/95",
+    },
+    governance: COMMON_GOVERNANCE,
     lyrics: [
       lyricLine(0, 1.32, "날좀 보~~소"),
       lyricLine(1.32, 1.64, "날좀 보~~소"),

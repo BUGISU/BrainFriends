@@ -102,8 +102,8 @@ export const AnalysisSidebar = ({
   onToggleTracking,
   hideMetrics = false,
   hidePreview = false,
-  previewAspectClass = "aspect-[4/3] sm:aspect-video",
-  previewMediaClass = "object-contain",
+  previewAspectClass = "aspect-[4/3]",
+  previewMediaClass = "object-cover object-center",
 }: any) => {
   const { sidebarMetrics } = useTraining(); // 전역 좌표 데이터를 가져옴
   const [localShowTracking, setLocalShowTracking] = useState(
@@ -470,14 +470,14 @@ export const AnalysisSidebar = ({
       {/* 카메라 프리뷰 섹션 */}
       {!hidePreview ? (
         <div
-          className={`relative ${previewAspectClass} bg-slate-900 rounded-[20px] sm:rounded-[24px] overflow-hidden shrink-0 shadow-inner`}
+        className={`relative ${previewAspectClass} bg-transparent rounded-[20px] sm:rounded-[24px] overflow-hidden shrink-0 shadow-inner`}
         >
         <video
           ref={videoRef}
           autoPlay
           muted
           playsInline
-          className={`w-full h-full ${previewMediaClass} -scale-x-100 bg-slate-950`}
+          className={`w-full h-full ${previewMediaClass} -scale-x-100 bg-transparent`}
         />
         <canvas
           ref={canvasRef}

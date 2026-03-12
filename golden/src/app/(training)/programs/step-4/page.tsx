@@ -166,6 +166,7 @@ function Step4Content() {
   const imageCacheRef = useRef<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
 
   const [isMounted, setIsMounted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -182,6 +183,7 @@ function Step4Content() {
   const [showHint, setShowHint] = useState(false);
   const [showTracking, setShowTracking] = useState(true);
   const [isHomeExitModalOpen, setIsHomeExitModalOpen] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
   const articulationStateRef = useRef(createInitialArticulationAnalyzerState());
   const liveArticulationRef = useRef({
     consonant: 0,
@@ -515,8 +517,31 @@ function Step4Content() {
     } catch {
       // ignore restore failure and start from first item
     }
+    async function setupCamera() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+          return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        videoStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play().catch(console.error);
+          };
+        }
+      } catch (err) {
+        console.error("Step 4 Camera Error:", err);
+      }
+    }
+    setupCamera();
     resetRuntimeStatus();
     return () => {
+      if (videoStreamRef.current) {
+        videoStreamRef.current.getTracks().forEach((track) => track.stop());
+        videoStreamRef.current = null;
+      }
       if (timerRef.current) clearInterval(timerRef.current);
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
@@ -528,6 +553,31 @@ function Step4Content() {
       resetRuntimeStatus();
     };
   }, [resetRuntimeStatus, scenarios.length, stepSignature]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncViewport = () => setIsDesktopViewport(mediaQuery.matches);
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    const videoStream = videoStreamRef.current;
+    if (!videoEl || !videoStream) return;
+
+    if (videoEl.srcObject !== videoStream) {
+      videoEl.srcObject = videoStream;
+    }
+    videoEl.onloadedmetadata = () => {
+      videoEl.play().catch(console.error);
+    };
+    if (videoEl.readyState >= 1) {
+      videoEl.play().catch(console.error);
+    }
+  }, [currentIndex, phase, currentResult]);
 
   // 안내 음성 재생 (단순 버전)
   const playInstruction = useCallback(() => {
@@ -1126,7 +1176,9 @@ function Step4Content() {
             alt="GOLDEN logo"
             className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0"
           />
-          <h2 className="text-base sm:text-lg font-black text-slate-900 truncate">상황 설명하기</h2>
+          <h2 className="text-base sm:text-lg font-black text-slate-900 truncate">
+            상황 설명하기
+          </h2>
         </div>
         <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
           <button
@@ -1176,8 +1228,12 @@ function Step4Content() {
       </header>
 
       <div className="flex flex-1 flex-col lg:flex-row min-h-0 overflow-hidden">
-        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-3 sm:p-4 lg:p-8 pb-6 lg:pb-8 order-1 overflow-y-auto lg:overflow-hidden">
-          <div className="max-w-5xl w-full h-full min-h-0 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-stretch">
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] lg:min-h-0 relative p-3 sm:p-4 lg:p-8 pb-24 sm:pb-10 lg:pb-8 order-1 overflow-y-auto lg:overflow-hidden">
+          <div
+            className={`max-w-5xl w-full min-h-0 mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 ${
+              phase === "review" ? "items-start" : "h-full items-stretch"
+            }`}
+          >
             {/* 이미지 영역 */}
             <div className="bg-white p-3 sm:p-4 rounded-[28px] sm:rounded-[40px] shadow-xl border border-slate-100 min-h-0">
               <div className="aspect-square rounded-[24px] sm:rounded-[32px] overflow-hidden bg-slate-50 relative flex items-center justify-center">
@@ -1219,7 +1275,7 @@ function Step4Content() {
 
                 <div className="mt-8">
                   {phase === "review" ? (
-                    <div className="w-full space-y-3">
+                    <div className="w-full space-y-3 pb-6 sm:pb-0">
                       <div className="bg-white p-5 sm:p-6 rounded-[28px] sm:rounded-[32px] border border-orange-100 shadow-lg grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 sm:gap-5 items-start">
                         <div className="min-w-0">
                           <span className="text-[10px] font-black text-slate-400 uppercase">
@@ -1254,7 +1310,7 @@ function Step4Content() {
                       </div>
                       <button
                         onClick={handleNext}
-                        className={`w-full py-5 rounded-[24px] font-black text-lg ${trainingButtonStyles.navyPrimary}`}
+                        className={`mb-10 sm:mb-10 w-full min-h-[64px] py-4 sm:py-5 rounded-[24px] font-black text-base sm:text-lg ${trainingButtonStyles.navyPrimary}`}
                       >
                         {currentIndex < scenarios.length - 1
                           ? "다음 상황 보기"
@@ -1402,6 +1458,8 @@ function Step4Content() {
             scoreValue={
               currentResult ? `${currentResult.kwabScore}/10` : undefined
             }
+            hidePreview={!isDesktopViewport}
+            hideMetrics={!isDesktopViewport}
           />
         </aside>
       </div>
