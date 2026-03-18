@@ -91,10 +91,10 @@ const MIN_MEASURED_FACE_SAMPLES = 8;
 const MIN_SING_TRANSCRIPT_CHARS = 2;
 const MAX_SING_KEY_FRAMES = 3;
 const KEY_FRAME_CAPTURE_INTERVAL_MS = 5000;
-const CALIBRATION_MIN_TRACKING_QUALITY = 58;
-const CALIBRATION_MIN_FACE_WIDTH = 0.14;
-const CALIBRATION_MAX_CENTER_OFFSET = 0.12;
-const CALIBRATION_STABLE_MS = 1000;
+const CALIBRATION_MIN_TRACKING_QUALITY = 30;
+const CALIBRATION_MIN_FACE_WIDTH = 0.1;
+const CALIBRATION_MAX_CENTER_OFFSET = 0.18;
+const CALIBRATION_STABLE_MS = 400;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -353,7 +353,7 @@ function evaluateFaceCalibration(metrics: {
     return {
       ready: false,
       trackingQuality,
-      message: "조명을 밝게 하고 안경 반사를 줄인 뒤 정면을 유지해 주세요.",
+      message: "얼굴이 인식되었지만 추적이 약합니다. 정면을 유지하거나 조금 더 밝은 곳에서 시도해 주세요.",
     };
   }
 
@@ -1419,16 +1419,16 @@ function BrainSingPageContent() {
             )}
 
             {phase === "calibrating" && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-[rgba(15,23,42,0.28)] p-6 backdrop-blur-[2px]">
-                <div className="flex w-full max-w-[760px] flex-col items-center gap-8 rounded-[36px] border border-white/20 bg-black/40 px-8 py-10 text-center text-white shadow-[0_24px_70px_rgba(15,23,42,0.45)] backdrop-blur-md sm:px-12">
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-[rgba(15,23,42,0.14)] p-6 backdrop-blur-[1px]">
+                <div className="flex w-full max-w-[760px] flex-col items-center gap-8 rounded-[36px] border border-white/45 bg-[rgba(255,255,255,0.18)] px-8 py-10 text-center text-white shadow-[0_24px_70px_rgba(15,23,42,0.26)] backdrop-blur-sm sm:px-12">
                   <div className="space-y-2">
                     <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">
                       Face Calibration
                     </p>
-                    <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
+                    <h2 className="text-4xl font-black tracking-tight text-white drop-shadow-[0_2px_12px_rgba(15,23,42,0.32)] sm:text-5xl">
                       얼굴을 가이드에 맞춰 주세요
                     </h2>
-                    <p className="text-sm font-medium text-white/80 sm:text-base">
+                    <p className="text-sm font-medium text-white/92 drop-shadow-[0_1px_8px_rgba(15,23,42,0.24)] sm:text-base">
                       시작 전에 정면 얼굴을 먼저 안정적으로 인식합니다.
                     </p>
                   </div>
@@ -1440,14 +1440,14 @@ function BrainSingPageContent() {
                     <div className="absolute left-1/2 top-[36%] h-3 w-3 -translate-x-1/2 rounded-full border border-emerald-200 bg-emerald-300/90" />
                   </div>
 
-                  <div className="w-full rounded-2xl border border-white/15 bg-white/10 px-5 py-4 text-left">
+                  <div className="w-full rounded-2xl border border-white/40 bg-[rgba(15,23,42,0.22)] px-5 py-4 text-left">
                     <div className="flex flex-wrap items-center justify-between gap-4">
-                      <p className="text-sm font-bold text-white/90">{calibrationMessage}</p>
+                      <p className="text-sm font-bold text-white">{calibrationMessage}</p>
                       <span
                         className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
                           calibrationReady
                             ? "bg-emerald-400 text-slate-950"
-                            : "bg-white/12 text-white/80"
+                            : "bg-white/20 text-white"
                         }`}
                       >
                         추적 품질 {normalizeTrackingQuality(sidebarMetrics.trackingQuality).toFixed(0)}%
@@ -1459,7 +1459,7 @@ function BrainSingPageContent() {
                     <button
                       type="button"
                       onClick={() => void startCalibration()}
-                      className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 bg-white/10 px-6 text-sm font-black text-white"
+                      className="inline-flex h-12 items-center justify-center rounded-full border border-white/45 bg-[rgba(15,23,42,0.28)] px-6 text-sm font-black text-white"
                     >
                       다시 인식
                     </button>
@@ -1470,7 +1470,7 @@ function BrainSingPageContent() {
                       className={`inline-flex h-14 items-center justify-center gap-3 rounded-full px-8 text-lg font-black transition ${
                         calibrationReady
                           ? "bg-emerald-500 text-white shadow-[0_16px_34px_rgba(16,185,129,0.38)] hover:bg-emerald-400"
-                          : "cursor-not-allowed bg-white/15 text-white/45"
+                          : "cursor-not-allowed bg-white/25 text-white/70"
                       }`}
                     >
                       <ChevronRight className="h-5 w-5" />

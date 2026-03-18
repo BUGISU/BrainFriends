@@ -30,6 +30,7 @@ function TrainingLayoutContent({ children }: { children: React.ReactNode }) {
     "/programs/step-2",
     "/programs/step-4",
     "/programs/step-5",
+    "/programs/sing-training",
   ]);
   const showLiveTrainingChrome =
     isProgramRoute &&
