@@ -78,6 +78,9 @@ type SingResultEnvelope = {
   versionSnapshot: VersionSnapshot;
 };
 
+const SING_RESULT_SESSION_KEY = "bf_sing_result_transient";
+const SING_LAST_SONG_SESSION_KEY = "bf_sing_song_transient";
+
 const LYRIC_LEAD_OFFSET_SEC = 0.28;
 const AUDIO_LEVEL_ONSET_THRESHOLD = 0.02;
 const MIN_VOICED_RMS = 0.015;
@@ -876,10 +879,12 @@ function BrainSingPageContent() {
     setScanStatus("COMPLETE");
 
     if (typeof window !== "undefined") {
-      (window as any).__BRAINFRIENDS_LAST_SING_RESULT__ = {
-        song,
-        userName,
-        score,
+      window.sessionStorage.setItem(
+        SING_RESULT_SESSION_KEY,
+        JSON.stringify({
+          song,
+          userName,
+          score,
         finalJitter: finalJitterText,
         finalSi: finalSiText,
         rtLatency: finalLatencyText,
@@ -915,8 +920,9 @@ function BrainSingPageContent() {
           config_version:
             currentSong.governance.catalogVersion ?? SING_TRAINING_CATALOG_VERSION,
         }),
-      } satisfies SingResultEnvelope;
-      (window as any).__BRAINFRIENDS_LAST_SING_SONG__ = song;
+        } satisfies SingResultEnvelope),
+      );
+      window.sessionStorage.setItem(SING_LAST_SONG_SESSION_KEY, song);
     }
 
     if (typeof window !== "undefined") {

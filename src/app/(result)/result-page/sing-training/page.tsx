@@ -76,6 +76,9 @@ type SingResult = {
   versionSnapshot?: VersionSnapshot;
 };
 
+const SING_RESULT_SESSION_KEY = "bf_sing_result_transient";
+const SING_LAST_SONG_SESSION_KEY = "bf_sing_song_transient";
+
 type RankingPayload = {
   top5: RankRow[];
   myRank: RankRow | null;
@@ -311,8 +314,8 @@ export default function SingTrainingResultPage() {
       reviewAudioRef.current.pause();
       reviewAudioRef.current = null;
     }
-    delete (window as any).__BRAINFRIENDS_LAST_SING_RESULT__;
-    delete (window as any).__BRAINFRIENDS_LAST_SING_SONG__;
+    window.sessionStorage.removeItem(SING_RESULT_SESSION_KEY);
+    window.sessionStorage.removeItem(SING_LAST_SONG_SESSION_KEY);
     window.location.replace("/select-page/sing-training");
   };
 
@@ -352,9 +355,9 @@ export default function SingTrainingResultPage() {
       video.srcObject = null;
     });
 
-    const raw = (window as any).__BRAINFRIENDS_LAST_SING_RESULT__;
+    const raw = window.sessionStorage.getItem(SING_RESULT_SESSION_KEY);
     if (!raw) {
-      const lastSong = (window as any).__BRAINFRIENDS_LAST_SING_SONG__;
+      const lastSong = window.sessionStorage.getItem(SING_LAST_SONG_SESSION_KEY);
       if (lastSong && lastSong in SONGS) {
         const fallbackResult = buildFallbackSingResult(
           lastSong as SongKey,
@@ -368,10 +371,9 @@ export default function SingTrainingResultPage() {
     }
 
     try {
-      const parsed =
-        typeof raw === "string" ? (JSON.parse(raw) as SingResult) : (raw as SingResult);
-      delete (window as any).__BRAINFRIENDS_LAST_SING_RESULT__;
-      delete (window as any).__BRAINFRIENDS_LAST_SING_SONG__;
+      const parsed = JSON.parse(raw) as SingResult;
+      window.sessionStorage.removeItem(SING_RESULT_SESSION_KEY);
+      window.sessionStorage.removeItem(SING_LAST_SONG_SESSION_KEY);
       setResult(parsed);
       const parsedMyRank = parsed.rankings.find(
         (item) => item.me && Number.isFinite(Number(item.rank)),
