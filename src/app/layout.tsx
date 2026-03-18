@@ -42,6 +42,7 @@ function buildStorageBootstrapScript(patient: unknown, drafts: unknown) {
         if (scope === "local") {
           return [
             "kwab_training_session",
+            "kwab_clinical_audit_trail",
             "kwab_training_exit_progress",
             "step1_data",
             "step1_data__meta",
@@ -57,7 +58,10 @@ function buildStorageBootstrapScript(patient: unknown, drafts: unknown) {
             "step6_recorded_data__meta",
           ].includes(key);
         }
-        if (["btt.trainingMode", "btt.trialMode", "brain-sing-result"].includes(key)) {
+        if (scope === "local" && key.startsWith("kwab_training_history:")) {
+          return true;
+        }
+        if (["btt.trainingMode", "btt.trialMode", "brain-sing-result", "brain-sing-last-song"].includes(key)) {
           return true;
         }
         return key.startsWith("step3_protocol:") || key.startsWith("step6_questions:");

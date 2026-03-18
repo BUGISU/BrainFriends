@@ -69,12 +69,8 @@ function getDeviceInfo() {
 }
 
 export function appendClientClinicalAuditLog(entry: ClientClinicalAuditEntry) {
-  if (typeof window === "undefined") return;
-
-  const raw = localStoreAdapter.getItem(CLIENT_AUDIT_TRAIL_KEY);
-  const parsed = raw ? (JSON.parse(raw) as ClientClinicalAuditEntry[]) : [];
-  const next = [...parsed, entry].slice(-MAX_CLIENT_AUDIT_ENTRIES);
-  localStoreAdapter.setItem(CLIENT_AUDIT_TRAIL_KEY, JSON.stringify(next));
+  void entry;
+  return;
 }
 
 export function buildClientStepAuditLog(params: {
@@ -136,8 +132,7 @@ export function buildClientStepAuditLog(params: {
     algorithm_versions: versionSnapshot ?? null,
     failure_reason: failureReason,
     storage_targets: [
-      "localStorage:kwab_training_session",
-      `localStorage:${CLIENT_AUDIT_TRAIL_KEY}`,
+      "server:audit-pipeline",
     ],
   } satisfies ClientClinicalAuditEntry;
 }

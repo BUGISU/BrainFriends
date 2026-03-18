@@ -12,7 +12,6 @@ import {
   Trophy,
 } from "lucide-react";
 import type { PatientProfile } from "@/lib/patientStorage";
-import { SessionManager } from "@/lib/kwab/SessionManager";
 import type { VersionSnapshot } from "@/lib/analysis/versioning";
 import { fetchMyHistoryEntries } from "@/lib/client/historyApi";
 import { dataUrlToBlob, uploadClinicalMedia } from "@/lib/client/clinicalMediaUpload";
@@ -312,7 +311,8 @@ export default function SingTrainingResultPage() {
       reviewAudioRef.current.pause();
       reviewAudioRef.current = null;
     }
-    window.sessionStorage.removeItem("brain-sing-result");
+    delete (window as any).__BRAINFRIENDS_LAST_SING_RESULT__;
+    delete (window as any).__BRAINFRIENDS_LAST_SING_SONG__;
     window.location.replace("/select-page/sing-training");
   };
 
@@ -352,9 +352,9 @@ export default function SingTrainingResultPage() {
       video.srcObject = null;
     });
 
-    const raw = window.sessionStorage.getItem("brain-sing-result");
+    const raw = (window as any).__BRAINFRIENDS_LAST_SING_RESULT__;
     if (!raw) {
-      const lastSong = window.sessionStorage.getItem("brain-sing-last-song");
+      const lastSong = (window as any).__BRAINFRIENDS_LAST_SING_SONG__;
       if (lastSong && lastSong in SONGS) {
         const fallbackResult = buildFallbackSingResult(
           lastSong as SongKey,
@@ -368,34 +368,15 @@ export default function SingTrainingResultPage() {
     }
 
     try {
-      const parsed = JSON.parse(raw) as SingResult;
+      const parsed =
+        typeof raw === "string" ? (JSON.parse(raw) as SingResult) : (raw as SingResult);
+      delete (window as any).__BRAINFRIENDS_LAST_SING_RESULT__;
+      delete (window as any).__BRAINFRIENDS_LAST_SING_SONG__;
       setResult(parsed);
       const parsedMyRank = parsed.rankings.find(
         (item) => item.me && Number.isFinite(Number(item.rank)),
       );
       setMyRank(parsedMyRank ?? null);
-      if (patient) {
-        SessionManager.saveSingHistory(
-          patient as any,
-          {
-            song: parsed.song,
-            score: parsed.score,
-            finalJitter: parsed.finalJitter,
-            finalSi: parsed.finalSi,
-            rtLatency: parsed.rtLatency,
-            finalConsonant: parsed.finalConsonant,
-            finalVowel: parsed.finalVowel,
-            lyricAccuracy: parsed.lyricAccuracy,
-            transcript: parsed.transcript,
-            comment: parsed.comment,
-            measurementReason: parsed.measurementReason,
-            rankings: parsed.rankings,
-            governance: parsed.governance,
-            versionSnapshot: parsed.versionSnapshot,
-          },
-          parsed.completedAt,
-        );
-      }
     } catch {
       setResult(null);
       setMyRank(null);
@@ -480,12 +461,6 @@ export default function SingTrainingResultPage() {
         }
         if (nextResult) {
           setResult(nextResult);
-          if (typeof window !== "undefined") {
-            window.sessionStorage.setItem(
-              "brain-sing-result",
-              JSON.stringify(nextResult),
-            );
-          }
         }
         if (!ok) {
           console.error("[sing-result] database persistence failed", error);

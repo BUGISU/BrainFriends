@@ -703,9 +703,6 @@ function BrainSingPageContent() {
     if (!requestedSong) return;
     setSong(requestedSong);
     setPhase("ready");
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem("brain-sing-last-song", requestedSong);
-    }
   }, [requestedSong]);
 
   const prepareSong = (selected: SongKey) => {
@@ -720,9 +717,6 @@ function BrainSingPageContent() {
     setRtSi("0.0");
     setRtLatency("-- ms");
     setScanStatus("READY");
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem("brain-sing-last-song", selected);
-    }
   };
 
   const startCountdown = async () => {
@@ -815,7 +809,8 @@ function BrainSingPageContent() {
       pronunciation.lyricAccuracy != null;
     const hasMeasuredFace =
       avgS != null && siData.length >= MIN_MEASURED_FACE_SAMPLES;
-    const metricSource = hasMeasuredPronunciation ? "measured" : "demo";
+    const metricSource =
+      hasMeasuredPronunciation || hasMeasuredFace ? "measured" : "demo";
     const effectiveJitter = avgJ ?? 0;
     const effectiveSymmetry = avgS ?? 0;
     const score = calculateCompositeSingScore({
@@ -881,49 +876,47 @@ function BrainSingPageContent() {
     setScanStatus("COMPLETE");
 
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(
-        "brain-sing-result",
-        JSON.stringify({
-          song,
-          userName,
-          score,
-          finalJitter: finalJitterText,
-          finalSi: finalSiText,
-          rtLatency: finalLatencyText,
-          finalConsonant: finalConsonantText,
-          finalVowel: finalVowelText,
-          lyricAccuracy: lyricAccuracyText,
-          transcript: pronunciation.transcript,
-          metricSource,
-          measurementReason,
-          comment: finalComment,
-          rankings: rows,
-            completedAt: Date.now(),
-            reviewAudioUrl: reviewAudio.dataUrl,
-            reviewKeyFrames: keyFramesRef.current,
-            reviewAudioMediaId: null,
-            reviewAudioObjectKey: null,
-          reviewAudioUploadState,
-          reviewAudioUploadError,
-          governance: {
-            catalogVersion:
-              currentSong.governance.catalogVersion ?? SING_TRAINING_CATALOG_VERSION,
-            analysisVersion:
-              currentSong.governance.analysisVersion ?? SING_TRAINING_ANALYSIS_VERSION,
-            requirementIds: currentSong.governance.requirementIds,
-            failureModes: currentSong.governance.failureModes,
-          },
-          versionSnapshot: buildVersionSnapshot("sing", {
-            algorithm_version:
-              currentSong.governance.analysisVersion ?? SING_TRAINING_ANALYSIS_VERSION,
-            model_version:
-              currentSong.governance.analysisVersion ?? SING_TRAINING_ANALYSIS_VERSION,
-            requirements: currentSong.governance.requirementIds,
-            config_version:
-              currentSong.governance.catalogVersion ?? SING_TRAINING_CATALOG_VERSION,
-          }),
-        } satisfies SingResultEnvelope),
-      );
+      (window as any).__BRAINFRIENDS_LAST_SING_RESULT__ = {
+        song,
+        userName,
+        score,
+        finalJitter: finalJitterText,
+        finalSi: finalSiText,
+        rtLatency: finalLatencyText,
+        finalConsonant: finalConsonantText,
+        finalVowel: finalVowelText,
+        lyricAccuracy: lyricAccuracyText,
+        transcript: pronunciation.transcript,
+        metricSource,
+        measurementReason,
+        comment: finalComment,
+        rankings: rows,
+        completedAt: Date.now(),
+        reviewAudioUrl: reviewAudio.dataUrl,
+        reviewKeyFrames: keyFramesRef.current,
+        reviewAudioMediaId: null,
+        reviewAudioObjectKey: null,
+        reviewAudioUploadState,
+        reviewAudioUploadError,
+        governance: {
+          catalogVersion:
+            currentSong.governance.catalogVersion ?? SING_TRAINING_CATALOG_VERSION,
+          analysisVersion:
+            currentSong.governance.analysisVersion ?? SING_TRAINING_ANALYSIS_VERSION,
+          requirementIds: currentSong.governance.requirementIds,
+          failureModes: currentSong.governance.failureModes,
+        },
+        versionSnapshot: buildVersionSnapshot("sing", {
+          algorithm_version:
+            currentSong.governance.analysisVersion ?? SING_TRAINING_ANALYSIS_VERSION,
+          model_version:
+            currentSong.governance.analysisVersion ?? SING_TRAINING_ANALYSIS_VERSION,
+          requirements: currentSong.governance.requirementIds,
+          config_version:
+            currentSong.governance.catalogVersion ?? SING_TRAINING_CATALOG_VERSION,
+        }),
+      } satisfies SingResultEnvelope;
+      (window as any).__BRAINFRIENDS_LAST_SING_SONG__ = song;
     }
 
     if (typeof window !== "undefined") {

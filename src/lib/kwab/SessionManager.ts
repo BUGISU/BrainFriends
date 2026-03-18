@@ -225,6 +225,7 @@ export interface TrainingSession {
 
 const SESSION_STORAGE_PREFIX = "kwab_training_session";
 const HISTORY_STORAGE_PREFIX = "kwab_training_history";
+const ENABLE_LOCAL_HISTORY_CACHE = false;
 export type TrainingMode = "self" | "rehab" | "sing";
 export type MeasurementQualityLevel = "measured" | "partial" | "demo";
 
@@ -764,6 +765,7 @@ export class SessionManager {
 
   private saveHistoryEntry(mode: TrainingMode = "self", rehabStep?: number) {
     if (typeof window === "undefined") return;
+    if (!ENABLE_LOCAL_HISTORY_CACHE) return;
     const aq = this.session.kwabScores?.aq;
     if (aq === undefined || aq === null) return;
 
@@ -1246,6 +1248,7 @@ export class SessionManager {
   }
 
   static getHistoryFor(patient: PatientProfile): TrainingHistoryEntry[] {
+    if (!ENABLE_LOCAL_HISTORY_CACHE) return [];
     if (typeof window === "undefined") return [];
     const patientKey = SessionManager.getPatientKey(patient);
     const key = `${HISTORY_STORAGE_PREFIX}:${patientKey}`;
@@ -1264,6 +1267,39 @@ export class SessionManager {
     result: SingHistoryResult,
     completedAt: number = Date.now(),
   ) {
+    if (!ENABLE_LOCAL_HISTORY_CACHE) {
+      const p = patient as any;
+      return {
+        historyId: `history_sing_${completedAt}`,
+        sessionId: `sing_${completedAt}`,
+        patientKey: SessionManager.getPatientKey(patient),
+        patientName: String(p.name ?? ""),
+        birthDate: p.birthDate ? String(p.birthDate) : undefined,
+        age: Number(patient.age ?? 0),
+        educationYears: Number(patient.educationYears ?? 0),
+        place: "brain-sing",
+        trainingMode: "sing" as TrainingMode,
+        completedAt,
+        aq: Number(result.score ?? 0),
+        singResult: result,
+        stepScores: {
+          step1: 0,
+          step2: 0,
+          step3: 0,
+          step4: 0,
+          step5: 0,
+          step6: 0,
+        },
+        stepDetails: {
+          step1: [],
+          step2: [],
+          step3: [],
+          step4: [],
+          step5: [],
+          step6: [],
+        },
+      } satisfies TrainingHistoryEntry;
+    }
     if (typeof window === "undefined") return null;
     const patientKey = SessionManager.getPatientKey(patient);
     const key = `${HISTORY_STORAGE_PREFIX}:${patientKey}`;
@@ -1335,6 +1371,7 @@ export class SessionManager {
     patient: PatientProfile,
     historyIds: string[],
   ): number {
+    if (!ENABLE_LOCAL_HISTORY_CACHE) return 0;
     if (typeof window === "undefined" || !Array.isArray(historyIds) || historyIds.length === 0) {
       return 0;
     }
@@ -1368,6 +1405,7 @@ export class SessionManager {
     place: string,
     count: number = 5,
   ): number {
+    if (!ENABLE_LOCAL_HISTORY_CACHE) return 0;
     if (typeof window === "undefined" || count <= 0) return 0;
     const patientKey = SessionManager.getPatientKey(patient);
     const key = `${HISTORY_STORAGE_PREFIX}:${patientKey}`;

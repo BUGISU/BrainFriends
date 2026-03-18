@@ -224,21 +224,8 @@ function ResultContent() {
   }, [derivedKwab, patientProfile]);
 
   const historySourceRows = useMemo(() => {
-    if (!patientForHistory) return [] as TrainingHistoryEntry[];
-    const localRows = SessionManager.getHistoryFor(patientForHistory);
-    if (!serverHistory) {
-      return localRows;
-    }
-
-    const merged = new Map<string, TrainingHistoryEntry>();
-    for (const row of serverHistory) {
-      merged.set(String(row.historyId), row);
-    }
-    for (const row of localRows) {
-      merged.set(String(row.historyId), row);
-    }
-    return Array.from(merged.values());
-  }, [patientForHistory, serverHistory]);
+    return serverHistory ?? ([] as TrainingHistoryEntry[]);
+  }, [serverHistory]);
 
   const latestAndPreviousHistory = useMemo(() => {
     if (!patientForHistory) return { current: null, previous: null };
@@ -416,11 +403,9 @@ function ResultContent() {
   const handleExportData = () => {
     if (!sessionData) return;
     const patient = patientProfile;
-    const historyForPatient = patient
-      ? SessionManager.getHistoryFor(patient as any).sort(
-          (a, b) => b.completedAt - a.completedAt,
-        )
-      : [];
+    const historyForPatient = [...historySourceRows].sort(
+      (a, b) => b.completedAt - a.completedAt,
+    );
     const latestExamAt = historyForPatient[0]?.completedAt || Date.now();
 
     const pad2 = (n: number) => String(n).padStart(2, "0");

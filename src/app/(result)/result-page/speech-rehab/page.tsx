@@ -85,15 +85,7 @@ function ResultRehabPage() {
     }
     void fetchMyHistoryEntries()
       .then(({ entries }) => {
-        const localRows = SessionManager.getHistoryFor(patient as any);
-        const merged = new Map<string, TrainingHistoryEntry>();
-        for (const row of entries) {
-          merged.set(String(row.historyId), row);
-        }
-        for (const row of localRows) {
-          merged.set(String(row.historyId), row);
-        }
-        const rows = Array.from(merged.values())
+        const rows = [...entries]
           .filter((row) => !String(row.historyId || "").startsWith("mock_"))
           .filter((row) => row.trainingMode === "rehab")
           .sort((a, b) => b.completedAt - a.completedAt);
@@ -103,12 +95,8 @@ function ResultRehabPage() {
       })
       .catch((e) => {
         console.error("[result-rehab] load server history failed:", e);
-        const rows = SessionManager.getHistoryFor(patient as any)
-          .filter((row) => !String(row.historyId || "").startsWith("mock_"))
-          .filter((row) => row.trainingMode === "rehab")
-          .sort((a, b) => b.completedAt - a.completedAt);
         if (!cancelled) {
-          setHistoryRows(rows);
+          setHistoryRows([]);
         }
       });
 
