@@ -504,7 +504,6 @@ function Step2Content() {
       }, audioInputStreamRef.current || undefined);
       setIsRecorderReady(true);
     } catch (err) {
-      console.error("❌ 녹음 시작 실패:", err);
       setIsRecording(false);
       setIsRecorderReady(false);
       setStatusText("마이크 준비에 실패했습니다. 다시 시도해 주세요.");
@@ -650,7 +649,7 @@ function Step2Content() {
             const element = target as HTMLVideoElement;
             element.srcObject = videoStream;
             element.onloadedmetadata = () => {
-              element.play().catch(console.error);
+      element.play().catch(() => undefined);
             };
           });
 
@@ -664,7 +663,6 @@ function Step2Content() {
           audioInputStreamRef.current = null;
         }
       } catch (err) {
-        console.error("Camera Error:", err);
       }
     }
     setupCamera();
@@ -704,10 +702,10 @@ function Step2Content() {
         videoEl.srcObject = videoStream;
       }
       videoEl.onloadedmetadata = () => {
-        videoEl.play().catch(console.error);
+      videoEl.play().catch(() => undefined);
       };
       if (videoEl.readyState >= 1) {
-        videoEl.play().catch(console.error);
+      videoEl.play().catch(() => undefined);
       }
     });
   }, [resultScore, currentIndex]);
@@ -813,7 +811,6 @@ function Step2Content() {
           versionSnapshot: buildVersionSnapshot("step2"),
         });
       } catch (error) {
-        console.error("Save Error:", error);
       }
 
       const avgScore =
@@ -911,7 +908,6 @@ function Step2Content() {
 
       pushStep3OrRehabResult(step2Score);
     } catch (error) {
-      console.error("Step2 skip failed:", error);
     }
   }, [
     place,
@@ -1172,7 +1168,6 @@ function Step2Content() {
                 });
                 resolve(true);
               } catch (saveErr) {
-                console.error("Step2 localStorage 저장 실패:", saveErr);
                 setStatusText("녹음 저장 중 오류가 발생했습니다.");
                 updateRuntimeStatus({
                   pageError: true,
@@ -1189,7 +1184,6 @@ function Step2Content() {
               }
             };
             reader.onerror = () => {
-              console.error("Step2 FileReader 오류");
               setStatusText("녹음 파일 처리 중 오류가 발생했습니다.");
               setIsSaving(false);
               updateRuntimeStatus({
@@ -1246,7 +1240,6 @@ function Step2Content() {
             .map((entry) => entry[1]);
         });
       } catch (err) {
-        console.error("Analysis Error:", err);
         setStatusText("분석 중 오류가 발생했습니다.");
         updateRuntimeStatus({
           recording: false,

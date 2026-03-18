@@ -30,7 +30,7 @@ import {
   WhisperTranscriber,
 } from "@/lib/speech/SpeechAnalyzer";
 
-type Phase = "select" | "ready" | "countdown" | "singing" | "result";
+type Phase = "select" | "ready" | "calibrating" | "countdown" | "singing" | "result";
 
 type RankRow = {
   name: string;
@@ -91,6 +91,10 @@ const MIN_MEASURED_FACE_SAMPLES = 8;
 const MIN_SING_TRANSCRIPT_CHARS = 2;
 const MAX_SING_KEY_FRAMES = 3;
 const KEY_FRAME_CAPTURE_INTERVAL_MS = 5000;
+const CALIBRATION_MIN_TRACKING_QUALITY = 58;
+const CALIBRATION_MIN_FACE_WIDTH = 0.14;
+const CALIBRATION_MAX_CENTER_OFFSET = 0.12;
+const CALIBRATION_STABLE_MS = 1000;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -302,6 +306,64 @@ function calculateCompositeSingScore(metrics: {
   return Math.round(clamp(totalScore, 0, 100));
 }
 
+function normalizeTrackingQuality(value: number) {
+  const safe = Number(value || 0);
+  return safe <= 1 ? safe * 100 : safe;
+}
+
+function evaluateFaceCalibration(metrics: {
+  faceDetected?: boolean;
+  trackingQuality?: number;
+  landmarks?: any[];
+}) {
+  const trackingQuality = normalizeTrackingQuality(Number(metrics.trackingQuality || 0));
+  const landmarks = Array.isArray(metrics.landmarks) ? metrics.landmarks : [];
+  const nose = landmarks[1];
+  const leftCheek = landmarks[234];
+  const rightCheek = landmarks[454];
+  const faceWidth =
+    leftCheek && rightCheek ? Math.abs(Number(rightCheek.x) - Number(leftCheek.x)) : 0;
+  const centerOffset = nose ? Math.abs(Number(nose.x) - 0.5) : 1;
+
+  if (!metrics.faceDetected || !landmarks.length) {
+    return {
+      ready: false,
+      trackingQuality,
+      message: "얼굴을 화면 중앙 가이드 안에 맞춰 주세요.",
+    };
+  }
+
+  if (faceWidth < CALIBRATION_MIN_FACE_WIDTH) {
+    return {
+      ready: false,
+      trackingQuality,
+      message: "카메라에 얼굴이 더 크게 보이도록 가까이 와 주세요.",
+    };
+  }
+
+  if (centerOffset > CALIBRATION_MAX_CENTER_OFFSET) {
+    return {
+      ready: false,
+      trackingQuality,
+      message: "얼굴을 가운데에 맞추고 정면을 바라봐 주세요.",
+    };
+  }
+
+  if (trackingQuality < CALIBRATION_MIN_TRACKING_QUALITY) {
+    return {
+      ready: false,
+      trackingQuality,
+      message: "조명을 밝게 하고 안경 반사를 줄인 뒤 정면을 유지해 주세요.",
+    };
+  }
+
+  return {
+    ready: true,
+    trackingQuality,
+    message: "얼굴 인식이 안정되었습니다. 노래를 시작할 수 있습니다.",
+  };
+}
+
 function renderProgressLyric(
   text: string,
   progressPct: number,
@@ -399,6 +461,7 @@ function BrainSingPageContent() {
   const finishGuardRef = useRef(false);
   const audioEndedRef = useRef(false);
   const sessionStartRef = useRef<number | null>(null);
+  const calibrationStableSinceRef = useRef<number | null>(null);
   const keyFramesRef = useRef<SingKeyFrame[]>([]);
   const lastKeyFrameCapturedAtRef = useRef<number>(0);
   const measuredPitchHistoryRef = useRef<number[]>([]);
@@ -436,6 +499,11 @@ function BrainSingPageContent() {
   const [isBgmMuted, setIsBgmMuted] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   const [songDurationSec, setSongDurationSec] = useState(30);
+  const [calibrationReady, setCalibrationReady] = useState(false);
+  const [calibrationMessage, setCalibrationMessage] = useState(
+    "카메라를 켜고 얼굴을 화면 중앙 가이드에 맞춰 주세요.",
+  );
+  const [mediaAccessError, setMediaAccessError] = useState<string | null>(null);
 
   const currentSong = SONGS[song];
   const lyricLeadOffsetSec =
@@ -551,6 +619,49 @@ function BrainSingPageContent() {
     }
   }, [isBgmMuted]);
 
+  useEffect(() => {
+    if (phase !== "calibrating") {
+      calibrationStableSinceRef.current = null;
+      return;
+    }
+
+    if (mediaAccessError) {
+      calibrationStableSinceRef.current = null;
+      setCalibrationReady(false);
+      setCalibrationMessage(mediaAccessError);
+      return;
+    }
+
+    const assessment = evaluateFaceCalibration({
+      faceDetected: sidebarMetrics.faceDetected,
+      trackingQuality: sidebarMetrics.trackingQuality,
+      landmarks: sidebarMetrics.landmarks,
+    });
+    setCalibrationMessage(assessment.message);
+
+    if (!assessment.ready) {
+      calibrationStableSinceRef.current = null;
+      setCalibrationReady(false);
+      return;
+    }
+
+    if (calibrationStableSinceRef.current == null) {
+      calibrationStableSinceRef.current = performance.now();
+      setCalibrationReady(false);
+      return;
+    }
+
+    if (performance.now() - calibrationStableSinceRef.current >= CALIBRATION_STABLE_MS) {
+      setCalibrationReady(true);
+    }
+  }, [
+    mediaAccessError,
+    phase,
+    sidebarMetrics.faceDetected,
+    sidebarMetrics.landmarks,
+    sidebarMetrics.trackingQuality,
+  ]);
+
   const stopAnalysisLoopKeepingCamera = () => {
     if (countdownTimerRef.current !== null) {
       window.clearInterval(countdownTimerRef.current);
@@ -604,6 +715,56 @@ function BrainSingPageContent() {
       reader.readAsDataURL(blob);
     });
 
+  const primeSongAudio = async () => {
+    if (!songAudioRef.current) return;
+    try {
+      songAudioRef.current.muted = isBgmMuted;
+      songAudioRef.current.currentTime = 0;
+      await songAudioRef.current.play();
+      songAudioRef.current.pause();
+      songAudioRef.current.currentTime = 0;
+    } catch {
+      setAudioReady(false);
+    }
+  };
+
+  const ensureMediaCapture = async () => {
+    if (streamRef.current) {
+      return true;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+          channelCount: 1,
+        },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      if (sideVideoRef.current) {
+        sideVideoRef.current.srcObject = stream;
+      }
+      setMediaAccessError(null);
+      return true;
+    } catch {
+      streamRef.current = null;
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      if (sideVideoRef.current) {
+        sideVideoRef.current.srcObject = null;
+      }
+      setMediaAccessError("카메라와 마이크 권한을 허용한 뒤 다시 시도해 주세요.");
+      return false;
+    }
+  };
+
   const startVoiceRecording = () => {
     const stream = streamRef.current;
     if (!stream || typeof MediaRecorder === "undefined") return;
@@ -634,7 +795,6 @@ function BrainSingPageContent() {
       recorder.start();
       mediaRecorderRef.current = recorder;
     } catch (error) {
-      console.warn("[brain-sing] voice recording start failed", error);
       if (measurementSourceRef.current) {
         measurementSourceRef.current.disconnect();
         measurementSourceRef.current = null;
@@ -685,8 +845,7 @@ function BrainSingPageContent() {
           });
           const dataUrl = await blobToDataUrl(blob);
           resolve({ dataUrl, blob });
-        } catch (error) {
-          console.warn("[brain-sing] voice recording finalize failed", error);
+        } catch {
           resolve({ dataUrl: null, blob: null });
         } finally {
           recordedChunksRef.current = [];
@@ -717,6 +876,9 @@ function BrainSingPageContent() {
     if (!requestedSong) return;
     setSong(requestedSong);
     setPhase("ready");
+    setCalibrationReady(false);
+    setCalibrationMessage("카메라를 켜고 얼굴을 화면 중앙 가이드에 맞춰 주세요.");
+    setMediaAccessError(null);
   }, [requestedSong]);
 
   const prepareSong = (selected: SongKey) => {
@@ -731,69 +893,44 @@ function BrainSingPageContent() {
     setRtSi("0.0");
     setRtLatency("-- ms");
     setScanStatus("READY");
+    setCalibrationReady(false);
+    setCalibrationMessage("카메라를 켜고 얼굴을 화면 중앙 가이드에 맞춰 주세요.");
+    setMediaAccessError(null);
   };
 
-  const startCountdown = async () => {
-    const beginCountdown = () => {
-      setCountdown(3);
-      setPhase("countdown");
-      setScanStatus("CALIBRATING");
+  const startCalibration = async () => {
+    stopAnalysisLoopKeepingCamera();
+    calibrationStableSinceRef.current = null;
+    setCalibrationReady(false);
+    setMediaAccessError(null);
+    setCalibrationMessage("카메라를 켜고 얼굴을 화면 중앙 가이드에 맞춰 주세요.");
+    setPhase("calibrating");
+    setScanStatus("CALIBRATING");
+    await primeSongAudio();
+    await ensureMediaCapture();
+  };
 
-      countdownTimerRef.current = window.setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            if (countdownTimerRef.current !== null) {
-              window.clearInterval(countdownTimerRef.current);
-              countdownTimerRef.current = null;
-            }
-            window.setTimeout(() => {
-              startSinging();
-            }, 450);
-            return 0;
+  const startCountdown = () => {
+    if (!calibrationReady) return;
+    setCountdown(3);
+    setPhase("countdown");
+    setScanStatus("CALIBRATING");
+
+    countdownTimerRef.current = window.setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownTimerRef.current !== null) {
+            window.clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
           }
-          return prev - 1;
-        });
-      }, 1000);
-    };
-
-    try {
-      if (songAudioRef.current) {
-        try {
-          songAudioRef.current.muted = isBgmMuted;
-          songAudioRef.current.currentTime = 0;
-          await songAudioRef.current.play();
-          songAudioRef.current.pause();
-          songAudioRef.current.currentTime = 0;
-        } catch {
-          console.warn(`[brain-sing] audio prime failed: ${currentSong.audioSrc}`);
+          window.setTimeout(() => {
+            startSinging();
+          }, 450);
+          return 0;
         }
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: { echoCancellation: true, noiseSuppression: true },
+        return prev - 1;
       });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      if (sideVideoRef.current) {
-        sideVideoRef.current.srcObject = stream;
-      }
-
-      beginCountdown();
-    } catch {
-      console.warn("[brain-sing] media permission unavailable, continuing in fallback mode");
-      streamRef.current = null;
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      if (sideVideoRef.current) {
-        sideVideoRef.current.srcObject = null;
-      }
-      setScanStatus("FALLBACK");
-      beginCountdown();
-    }
+    }, 1000);
   };
 
   const finishSinging = async (jitterData: number[], siData: number[]) => {
@@ -1000,9 +1137,7 @@ function BrainSingPageContent() {
       songAudioRef.current.onended = () => {
         audioEndedRef.current = true;
       };
-      songAudioRef.current.play().catch(() => {
-        console.warn(`[brain-sing] audio playback failed: ${currentSong.audioSrc}`);
-      });
+      songAudioRef.current.play().catch(() => undefined);
     }
 
     singingTimerRef.current = window.setInterval(() => {
@@ -1130,6 +1265,9 @@ function BrainSingPageContent() {
     setRtLatency("-- ms");
     setJitterHistory([]);
     setSiHistory([]);
+    setCalibrationReady(false);
+    setCalibrationMessage("카메라를 켜고 얼굴을 화면 중앙 가이드에 맞춰 주세요.");
+    setMediaAccessError(null);
   };
 
   return (
@@ -1270,12 +1408,75 @@ function BrainSingPageContent() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => void startCountdown()}
+                    onClick={() => void startCalibration()}
                     className="inline-flex h-[72px] items-center justify-center gap-3 rounded-full bg-emerald-500 px-12 text-2xl font-black text-white shadow-[0_18px_38px_rgba(16,185,129,0.38)] transition-transform duration-200 hover:scale-105 hover:bg-emerald-400 sm:h-[84px] sm:px-14 sm:text-3xl"
                   >
-                    <ChevronRight className="h-7 w-7" />
-                    시작하기
+                    <Camera className="h-7 w-7" />
+                    얼굴 맞추기
                   </button>
+                </div>
+              </div>
+            )}
+
+            {phase === "calibrating" && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-[rgba(15,23,42,0.28)] p-6 backdrop-blur-[2px]">
+                <div className="flex w-full max-w-[760px] flex-col items-center gap-8 rounded-[36px] border border-white/20 bg-black/40 px-8 py-10 text-center text-white shadow-[0_24px_70px_rgba(15,23,42,0.45)] backdrop-blur-md sm:px-12">
+                  <div className="space-y-2">
+                    <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-300">
+                      Face Calibration
+                    </p>
+                    <h2 className="text-4xl font-black tracking-tight sm:text-5xl">
+                      얼굴을 가이드에 맞춰 주세요
+                    </h2>
+                    <p className="text-sm font-medium text-white/80 sm:text-base">
+                      시작 전에 정면 얼굴을 먼저 안정적으로 인식합니다.
+                    </p>
+                  </div>
+
+                  <div className="relative flex h-[260px] w-[220px] items-center justify-center sm:h-[320px] sm:w-[260px]">
+                    <div className="absolute inset-0 rounded-[48%] border-2 border-dashed border-emerald-300/85 shadow-[0_0_30px_rgba(110,231,183,0.25)]" />
+                    <div className="absolute left-1/2 top-[16%] h-[68%] w-px -translate-x-1/2 bg-emerald-300/75" />
+                    <div className="absolute left-1/2 top-1/2 h-px w-[68%] -translate-x-1/2 bg-emerald-300/55" />
+                    <div className="absolute left-1/2 top-[36%] h-3 w-3 -translate-x-1/2 rounded-full border border-emerald-200 bg-emerald-300/90" />
+                  </div>
+
+                  <div className="w-full rounded-2xl border border-white/15 bg-white/10 px-5 py-4 text-left">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <p className="text-sm font-bold text-white/90">{calibrationMessage}</p>
+                      <span
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${
+                          calibrationReady
+                            ? "bg-emerald-400 text-slate-950"
+                            : "bg-white/12 text-white/80"
+                        }`}
+                      >
+                        추적 품질 {normalizeTrackingQuality(sidebarMetrics.trackingQuality).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void startCalibration()}
+                      className="inline-flex h-12 items-center justify-center rounded-full border border-white/25 bg-white/10 px-6 text-sm font-black text-white"
+                    >
+                      다시 인식
+                    </button>
+                    <button
+                      type="button"
+                      onClick={startCountdown}
+                      disabled={!calibrationReady}
+                      className={`inline-flex h-14 items-center justify-center gap-3 rounded-full px-8 text-lg font-black transition ${
+                        calibrationReady
+                          ? "bg-emerald-500 text-white shadow-[0_16px_34px_rgba(16,185,129,0.38)] hover:bg-emerald-400"
+                          : "cursor-not-allowed bg-white/15 text-white/45"
+                      }`}
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                      노래 시작
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

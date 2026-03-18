@@ -448,7 +448,6 @@ function Step3Content() {
       setAnalysisResults(parsed);
       setCurrentIndex(Math.min(parsed.length, protocol.length - 1));
     } catch (error) {
-      console.error("Step 3 이어하기 복원 실패:", error);
     }
   }, [protocol, stepSignature]);
 
@@ -685,7 +684,6 @@ function Step3Content() {
             versionSnapshot: buildVersionSnapshot("step3"),
           });
         } catch (e) {
-          console.error("❌ Step 3 SessionManager 저장 실패:", e);
         }
         if (typeof window !== "undefined") {
           sessionStorage.removeItem(`${STEP3_PROTOCOL_KEY_PREFIX}:${place}`);
@@ -760,7 +758,6 @@ function Step3Content() {
 
       pushStep4OrRehabResult(score);
     } catch (error) {
-      console.error("Step3 skip failed:", error);
     }
   }, [patientProfile, place, protocol, pushStep4OrRehabResult, stepSignature]);
 

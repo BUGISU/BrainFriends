@@ -417,6 +417,12 @@ export default function SingTrainingResultPage() {
           return;
         }
 
+        const hasMeasuredFromHistory =
+          latestSing.singResult.finalConsonant !== "-" ||
+          latestSing.singResult.finalVowel !== "-" ||
+          latestSing.singResult.lyricAccuracy !== "-" ||
+          latestSing.singResult.finalSi !== "-";
+
         setResult({
           song: latestSing.singResult.song,
           userName: latestSing.patientName,
@@ -428,17 +434,23 @@ export default function SingTrainingResultPage() {
           finalVowel: latestSing.singResult.finalVowel,
           lyricAccuracy: latestSing.singResult.lyricAccuracy,
           transcript: latestSing.singResult.transcript,
+          metricSource: hasMeasuredFromHistory ? "measured" : "demo",
           comment: latestSing.singResult.comment,
           measurementReason: latestSing.singResult.measurementReason,
+          reviewAudioUrl: latestSing.singResult.reviewAudioUrl ?? null,
           reviewKeyFrames: latestSing.singResult.reviewKeyFrames ?? [],
           rankings: latestSing.singResult.rankings ?? [],
           completedAt: latestSing.completedAt,
+          reviewAudioUploadState: latestSing.singResult.reviewAudioUrl
+            ? "uploaded"
+            : "not_recorded",
           governance: latestSing.singResult.governance,
           versionSnapshot: latestSing.singResult.versionSnapshot,
         });
         setMyRank(
           latestSing.singResult.rankings?.find((item) => item.me) ?? null,
         );
+        setDbSaveState("saved");
         setHasLoadedResult(true);
       })
       .catch(() => {

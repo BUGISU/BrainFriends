@@ -498,12 +498,11 @@ function Step5Content() {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play().catch(console.error);
+      videoRef.current?.play().catch(() => undefined);
             };
           }
         }
       } catch (err) {
-        console.error("Step 5 Camera Error:", err);
       }
     }
     setupCamera();
@@ -542,10 +541,10 @@ function Step5Content() {
       videoEl.srcObject = videoStream;
     }
     videoEl.onloadedmetadata = () => {
-      videoEl.play().catch(console.error);
+      videoEl.play().catch(() => undefined);
     };
     if (videoEl.readyState >= 1) {
-      videoEl.play().catch(console.error);
+      videoEl.play().catch(() => undefined);
     }
   }, [currentIndex, phase, currentResult]);
 
@@ -636,7 +635,6 @@ function Step5Content() {
         );
       }, 900);
     } catch (err) {
-      console.error(err);
       setPhase("ready");
       setHighlightIndex(-1);
       updateRuntimeStatus({
@@ -880,7 +878,6 @@ function Step5Content() {
               });
               resolve(true);
             } catch (saveError) {
-              console.error(saveError);
               updateRuntimeStatus({
                 pageError: true,
                 needsRetry: true,
@@ -925,7 +922,6 @@ function Step5Content() {
       setCurrentResult(res);
       setPhase("review");
     } catch (error) {
-      console.error(error);
       updateRuntimeStatus({
         recording: false,
         saving: false,
@@ -1015,7 +1011,6 @@ function Step5Content() {
           versionSnapshot: buildVersionSnapshot("step5"),
         });
       } catch (error) {
-        console.error(error);
       }
       const avg = Math.round(
         updatedResults.reduce((s, r) => s + r.readingScore, 0) /
@@ -1114,7 +1109,6 @@ function Step5Content() {
       );
       pushStep6OrRehabResult(avg);
     } catch (error) {
-      console.error("Step5 skip failed:", error);
       pushStep6OrRehabResult(80);
     }
   }, [pushStep6OrRehabResult, resetRuntimeStatus, texts, stepSignature]);

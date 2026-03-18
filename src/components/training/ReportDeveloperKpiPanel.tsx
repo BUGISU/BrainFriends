@@ -22,7 +22,7 @@ export function ReportDeveloperKpiPanel({
     return "대기";
   };
 
-  if (process.env.NODE_ENV !== "development" || metrics.length === 0) {
+  if (metrics.length === 0) {
     return null;
   }
 

@@ -187,7 +187,6 @@ function Step1Content() {
       setScore(resumedScore);
       setCurrentIndex(Math.min(normalized.length, trainingData.length - 1));
     } catch (error) {
-      console.error("Step 1 이어하기 복원 실패:", error);
     }
   }, [stepSignature, trainingData]);
 
@@ -264,7 +263,6 @@ function Step1Content() {
 
         sessionManager.saveStep1Result(step1Data);
       } catch (error) {
-        console.error("❌ Step 1 저장 실패:", error);
       }
     },
     [patientProfile, placeParam, stepSignature],
@@ -311,7 +309,6 @@ function Step1Content() {
         router.push(`/programs/step-2?step1=${finalScore}&place=${placeParam}`);
       }
     } catch (error) {
-      console.error("Step1 skip failed:", error);
     }
   }, [patientProfile, placeParam, router, saveStep1Results, trainingData]);
 
@@ -354,7 +351,6 @@ function Step1Content() {
         localStorage.setItem(STEP1_STORAGE_KEY, JSON.stringify(progressForStorage));
         saveResumeMeta(STEP1_STORAGE_KEY, stepSignature, progressForStorage.length);
       } catch (error) {
-        console.error("Step 1 진행 저장 실패:", error);
       }
 
       setTimeout(() => {

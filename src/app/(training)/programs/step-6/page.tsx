@@ -301,7 +301,6 @@ function Step6Content() {
       setCurrentIndex(Math.min(restored.length, questions.length - 1));
       setPhase("writing");
     } catch (error) {
-      console.error("Step 6 이어하기 복원 실패:", error);
     }
   }, [questions, stepSignature]);
 
@@ -626,7 +625,6 @@ function Step6Content() {
           isRehabMode && rehabTargetStep === 6 ? "rehab" : "self",
         );
       } catch (error) {
-        console.error("SessionManager 저장 실패:", error);
         const fallbackRows = JSON.parse(
           localStorage.getItem(STEP6_STORAGE_KEY) || "[]",
         );
@@ -759,7 +757,6 @@ function Step6Content() {
         `${isRehabStep6 ? "/result-page/speech-rehab" : "/result-page/self-assessment"}?${params.toString()}`,
       );
     } catch (error) {
-      console.error("Step6 skip failed:", error);
     }
   }, [
     articulationBaseline.consonant,

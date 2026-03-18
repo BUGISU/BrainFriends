@@ -34,6 +34,12 @@ export default function LoginPage() {
     }
   };
 
+  const isAdminPatient = (patient: PatientProfile | null | undefined) =>
+    Boolean(
+      patient &&
+        (patient.userRole === "admin" || patient.name === "관리자"),
+    );
+
   const requestPermissions = async () => {
     setIsRequestingPermissions(true);
     try {
@@ -53,7 +59,7 @@ export default function LoginPage() {
 
   const moveAfterPermission = async (patient: PatientProfile) => {
     bootstrapPatient(patient);
-    if (patient.userRole === "admin") {
+    if (isAdminPatient(patient)) {
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem("btt.trialMode");
       }
@@ -92,10 +98,6 @@ export default function LoginPage() {
 
   const routeAfterAuth = (patient: PatientProfile) => {
     bootstrapPatient(patient);
-    if (patient.userRole === "admin") {
-      router.replace("/select-page/mode");
-      return;
-    }
     setPendingPatient(patient);
     setShowPermissionModal(true);
   };
@@ -366,7 +368,7 @@ export default function LoginPage() {
                   const granted = await requestPermissions();
                   if (!granted) return;
                   setShowPermissionModal(false);
-                  if (pendingPatient.userRole === "admin") {
+                  if (isAdminPatient(pendingPatient)) {
                     if (typeof window !== "undefined") {
                       window.sessionStorage.removeItem("btt.trialMode");
                     }

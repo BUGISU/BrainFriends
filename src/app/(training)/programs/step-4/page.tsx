@@ -569,11 +569,10 @@ function Step4Content() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play().catch(console.error);
+      videoRef.current?.play().catch(() => undefined);
           };
         }
       } catch (err) {
-        console.error("Step 4 Camera Error:", err);
       }
     }
     setupCamera();
@@ -611,10 +610,10 @@ function Step4Content() {
       videoEl.srcObject = videoStream;
     }
     videoEl.onloadedmetadata = () => {
-      videoEl.play().catch(console.error);
+      videoEl.play().catch(() => undefined);
     };
     if (videoEl.readyState >= 1) {
-      videoEl.play().catch(console.error);
+      videoEl.play().catch(() => undefined);
     }
   }, [currentIndex, phase, currentResult]);
 
@@ -677,7 +676,6 @@ function Step4Content() {
         1000,
       );
     } catch (err) {
-      console.error(err);
       updateRuntimeStatus({
         recording: false,
         pageError: true,
@@ -909,7 +907,6 @@ function Step4Content() {
           });
           saveSucceeded = true;
         } catch (e) {
-          console.error("[Step4] save:failed", e);
           setSaveStatusText("저장 실패");
           updateRuntimeStatus({
             pageError: true,
@@ -954,7 +951,6 @@ function Step4Content() {
       });
       setPhase("review");
     } catch (err) {
-      console.error("[Step4] analyze:failed", err);
       updateRuntimeStatus({
         recording: false,
         saving: false,
@@ -982,7 +978,6 @@ function Step4Content() {
     setIsPlayingAudio(true);
     audio.onended = () => setIsPlayingAudio(false);
     audio.play().catch((e) => {
-      console.error("[Step4] playback:failed", e);
       setIsPlayingAudio(false);
     });
   }, [currentResult, isPlayingAudio]);
@@ -1048,7 +1043,6 @@ function Step4Content() {
           versionSnapshot: buildVersionSnapshot("step4"),
         });
       } catch (e) {
-        console.error("[Step4] session:save:failed", e);
       }
 
       const avgScore = Math.round(
@@ -1143,7 +1137,6 @@ function Step4Content() {
 
       pushStep5OrRehabResult(score);
     } catch (error) {
-      console.error("Step4 skip failed:", error);
     }
   }, [place, pushStep5OrRehabResult, scenarios, stepSignature]);
 
