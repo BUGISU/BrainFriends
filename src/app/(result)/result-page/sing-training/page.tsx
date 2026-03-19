@@ -835,7 +835,7 @@ export default function SingTrainingResultPage() {
             />
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="mt-5 space-y-5">
             <section className="rounded-[30px] border border-emerald-100 bg-[linear-gradient(180deg,#f7fcfa_0%,#eefbf4_100%)] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:p-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
@@ -904,7 +904,7 @@ export default function SingTrainingResultPage() {
             </section>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+          <div className="mt-5 space-y-5">
             <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:p-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-800">
@@ -983,53 +983,49 @@ export default function SingTrainingResultPage() {
                     Facial Support Metrics
                   </p>
                   <h2 className="mt-1 text-2xl font-black text-slate-900">
-                    보조 안면 반응 지표
+                    기준 대비 안면 반응 변화
                   </h2>
                 </div>
               </div>
 
               <div className="mt-6 space-y-5">
                 <SymmetryRow
-                  label="좌측 구강 근육 활성도"
-                  before={mouthImprovement == null ? null : 67}
-                  after={mouthImprovement == null ? null : 67 + mouthImprovement}
-                    feedback={
-                      mouthImprovement == null ? "미측정" : `${mouthImprovement}% 변화`
-                    }
-                  />
-                  <SymmetryRow
-                    label="좌측 안륜근 반응도"
-                    before={eyeImprovement == null ? null : 72}
-                    after={eyeImprovement == null ? null : 72 + eyeImprovement}
+                  label="입 주위 반응 변화"
+                  delta={mouthImprovement}
                   feedback={
-                    eyeImprovement == null ? "미측정" : `${eyeImprovement}% 변화`
+                    mouthImprovement == null ? "미측정" : `${mouthImprovement.toFixed(1)}점 변화`
                   }
+                  tone="emerald"
                 />
                 <SymmetryRow
-                  label="표정-발성 보조 협응 지수"
-                  before={facialResponseChangeScore == null ? null : 4}
-                  after={
-                    facialResponseChangeScore == null
-                      ? null
-                      : Math.min(98, Math.round(4 + facialResponseChangeScore))
+                  label="눈매 반응 변화"
+                  delta={eyeImprovement}
+                  feedback={
+                    eyeImprovement == null ? "미측정" : `${eyeImprovement.toFixed(1)}점 변화`
                   }
+                  tone="emerald"
+                />
+                <SymmetryRow
+                  label="표정-발성 협응 변화"
+                  delta={facialResponseChangeScore}
                   feedback={
                     facialResponseChangeScore == null
                       ? "미측정"
-                      : `${Math.max(4, Math.round(facialResponseChangeScore))}점 변화`
+                      : `${facialResponseChangeScore.toFixed(1)}점 변화`
                   }
+                  tone="slate"
                 />
               </div>
 
               <div className="mt-6 rounded-[24px] bg-emerald-50 p-4 text-emerald-900">
                 <p className="text-sm font-black">
                   {isMeasuredResult
-                    ? `노래 발화 중 기준 얼굴 대비 입 주위 반응과 눈매 반응 변화를 보조 지표로 함께 기록했습니다.`
+                    ? `노래 발화 중 기준 얼굴 대비 입 주위와 눈매 반응 변화 정도를 보조 지표로 함께 기록했습니다.`
                     : "안면 반응 측정 데이터가 부족해 보조 안면 그래프는 계산하지 않았습니다."}
                 </p>
                 <p className="mt-2 text-base font-medium text-emerald-800">
                   {isMeasuredResult
-                    ? "노래방의 핵심 평가는 발화 점수이며, 안면 반응 변화는 기준 얼굴 대비 보조 반응 지표로 함께 해석합니다."
+                    ? "노래방의 핵심 평가는 발화 점수이며, 안면 반응 변화는 기준 얼굴 대비 변화 정도를 참고 지표로 함께 해석합니다."
                     : "측정이 충분한 세션에서만 안면 보조 지표를 레포트에 함께 반영합니다."}
                 </p>
               </div>
@@ -1149,16 +1145,16 @@ function MetricPill({ title, value }: { title: string; value: string }) {
 
 function SymmetryRow({
   label,
-  before,
-  after,
+  delta,
   feedback,
+  tone,
 }: {
   label: string;
-  before: number | null;
-  after: number | null;
+  delta: number | null;
   feedback: string;
+  tone: "slate" | "emerald";
 }) {
-  const unavailable = before == null || after == null;
+  const unavailable = delta == null;
   return (
     <div className="rounded-[24px] border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-4">
@@ -1167,7 +1163,7 @@ function SymmetryRow({
           <p className="mt-1 text-sm font-medium text-slate-500">{feedback}</p>
         </div>
         <p className="text-sm font-black uppercase tracking-[0.18em] text-emerald-600">
-          {unavailable ? "N/A" : "After"}
+          {unavailable ? "N/A" : "Change"}
         </p>
       </div>
       {unavailable ? (
@@ -1176,8 +1172,7 @@ function SymmetryRow({
         </div>
       ) : (
         <div className="mt-4 space-y-3">
-          <Bar label="시작 시점" value={before} tone="slate" />
-          <Bar label="훈련 후" value={after} tone="emerald" />
+          <Bar label="기준 대비 변화량" value={delta} tone={tone} />
         </div>
       )}
     </div>
@@ -1193,7 +1188,8 @@ function Bar({
   value: number;
   tone: "slate" | "emerald";
 }) {
-  const width = `${Math.max(12, Math.min(100, value))}%`;
+  const clampedValue = Math.max(0, Math.min(100, value));
+  const width = `${Math.max(12, clampedValue)}%`;
   const fillClass =
     tone === "emerald"
       ? "bg-[linear-gradient(90deg,#10b981_0%,#34d399_100%)]"
@@ -1203,7 +1199,7 @@ function Bar({
     <div>
       <div className="mb-1 flex items-center justify-between text-sm font-bold text-slate-600">
         <span>{label}</span>
-        <span>{value}%</span>
+        <span>{clampedValue.toFixed(1)}점</span>
       </div>
       <div className="h-3 rounded-full bg-slate-100">
         <div className={`h-3 rounded-full ${fillClass}`} style={{ width }} />
