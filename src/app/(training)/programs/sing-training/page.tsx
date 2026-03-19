@@ -86,6 +86,11 @@ type SingResultEnvelope = {
   versionSnapshot: VersionSnapshot;
 };
 
+type BaselineFaceMetrics = {
+  facialSymmetry: number | null;
+  trackingQuality: number | null;
+};
+
 const SING_RESULT_SESSION_KEY = "bf_sing_result_transient";
 const SING_LAST_SONG_SESSION_KEY = "bf_sing_song_transient";
 
@@ -154,13 +159,13 @@ function buildMeasuredComment(params: {
     params.latencyMs == null ? "반응속도는 측정되지 않았습니다" : `반응 시작 시간은 ${params.latencyMs}ms`;
   const faceText =
     params.facialResponseChange == null
-      ? "기준 얼굴 대비 안면 반응 변화는 측정되지 않았습니다"
-      : `기준 얼굴 대비 안면 반응 변화는 ${params.facialResponseChange.toFixed(1)}점`;
+      ? "안면 반응 변화 참고값은 확보되지 않았습니다"
+      : `안면 반응 변화 참고값은 ${params.facialResponseChange.toFixed(1)}점`;
   const supportText =
     params.facialSymmetry == null
       ? "안면 반응 보조 기준값은 확보되지 않았습니다"
       : `안면 반응 보조 기준값은 ${params.facialSymmetry.toFixed(1)}점이었습니다`;
-  return `가창 분석 결과 자음 정확도는 ${params.consonantAccuracy.toFixed(1)}점, 모음 정확도는 ${params.vowelAccuracy.toFixed(1)}점, 가사 일치도는 ${params.lyricAccuracy.toFixed(1)}점으로 분석되었습니다. ${faceText}이며 ${supportText}. 발성 흔들림은 ${params.jitterPct.toFixed(2)}% 수준입니다. ${latencyText}.`;
+  return `가창 분석 결과 자음 정확도는 ${params.consonantAccuracy.toFixed(1)}점, 모음 정확도는 ${params.vowelAccuracy.toFixed(1)}점, 가사 일치도는 ${params.lyricAccuracy.toFixed(1)}점으로 분석되었습니다. ${faceText}이며 ${supportText}. 발성 흔들림은 ${params.jitterPct.toFixed(2)}% 수준입니다. ${latencyText}. 안면 변화값은 총점에 반영하지 않고 참고 지표로만 해석합니다.`;
 }
 
 function normalizeLyricsForAnalysis(text: string) {
@@ -295,11 +300,9 @@ function calculateCompositeSingScore(metrics: {
   latencyMs: number | null;
 }) {
   const weightedParts: Array<{ value: number | null; weight: number }> = [
-    { value: metrics.consonantAccuracy, weight: 0.35 },
-    { value: metrics.vowelAccuracy, weight: 0.35 },
+    { value: metrics.consonantAccuracy, weight: 0.4 },
+    { value: metrics.vowelAccuracy, weight: 0.4 },
     { value: metrics.lyricAccuracy, weight: 0.15 },
-    { value: metrics.facialSymmetryAbsolute, weight: 0.03 },
-    { value: metrics.facialResponseChange, weight: 0.07 },
     {
       value:
         metrics.latencyMs == null
@@ -446,30 +449,40 @@ function buildSkippedSingResult(params: {
     requirementIds: string[];
     failureModes: string[];
   };
+  reviewKeyFrames?: SingKeyFrame[];
 }): SingResultEnvelope {
+  const demoTranscript = normalizeLyricsForAnalysis(
+    SONGS[params.song].lyrics
+      .slice(0, 2)
+      .map((line) => line.txt)
+      .join(" "),
+  );
   return {
     song: params.song,
     userName: params.userName || "사용자",
-    score: 0,
-    finalJitter: "--",
-    finalSi: "--",
-    facialResponseDelta: "--",
-    rtLatency: "-- ms",
-    finalConsonant: "--",
-    finalVowel: "--",
-    lyricAccuracy: "--",
-    transcript: "",
+    score: 72,
+    finalJitter: "6.4%",
+    finalSi: "96.2",
+    facialResponseDelta: "3.8",
+    rtLatency: "1240 ms",
+    finalConsonant: "74.8",
+    finalVowel: "77.6",
+    lyricAccuracy: "69.4",
+    transcript: demoTranscript,
     metricSource: "demo",
     measurementReason: "관리자 skip으로 인해 실측을 수행하지 않았습니다.",
     comment:
-      "관리자 skip으로 생성된 화면 확인용 결과입니다. 실측 데이터가 아니므로 서버 저장과 랭킹 반영은 수행되지 않습니다.",
+      "관리자 skip으로 생성된 화면 확인용 시연 결과입니다. 실제 측정값이 아니므로 서버 저장과 랭킹 반영은 수행되지 않습니다.",
     rankings: [],
     completedAt: Date.now(),
     reviewAudioUrl: null,
-    reviewKeyFrames: [],
+    reviewKeyFrames: params.reviewKeyFrames ?? [],
     reviewAudioMediaId: null,
     reviewAudioObjectKey: null,
-    reviewAudioUploadState: "not_recorded",
+    reviewAudioUploadState:
+      params.reviewKeyFrames && params.reviewKeyFrames.length > 0
+        ? "pending_result_sync"
+        : "not_recorded",
     reviewAudioUploadError: null,
     governance: params.governance,
     versionSnapshot: buildVersionSnapshot("sing", {
@@ -478,7 +491,9 @@ function buildSkippedSingResult(params: {
       requirements: params.governance.requirementIds,
       config_version: params.governance.catalogVersion,
       measurement_metadata: {
-        facial_response_delta: null,
+        facial_response_delta: 3.8,
+        baseline_facial_symmetry: 96.2,
+        baseline_tracking_quality: 72,
       },
     }),
   };
@@ -525,6 +540,10 @@ function BrainSingPageContent() {
   const calibrationStableSinceRef = useRef<number | null>(null);
   const calibrationCompletedRef = useRef(false);
   const calibrationBaselineSymmetryRef = useRef<number | null>(null);
+  const calibrationBaselineMetricsRef = useRef<BaselineFaceMetrics>({
+    facialSymmetry: null,
+    trackingQuality: null,
+  });
   const keyFramesRef = useRef<SingKeyFrame[]>([]);
   const lastKeyFrameCapturedAtRef = useRef<number>(0);
   const measuredPitchHistoryRef = useRef<number[]>([]);
@@ -660,6 +679,10 @@ function BrainSingPageContent() {
     voiceOnsetLatencyMsRef.current = null;
     calibrationCompletedRef.current = false;
     calibrationBaselineSymmetryRef.current = null;
+    calibrationBaselineMetricsRef.current = {
+      facialSymmetry: null,
+      trackingQuality: null,
+    };
     sessionStartRef.current = null;
     recordedChunksRef.current = [];
     if (videoRef.current) {
@@ -719,9 +742,16 @@ function BrainSingPageContent() {
     }
 
     if (performance.now() - calibrationStableSinceRef.current >= CALIBRATION_STABLE_MS) {
-      calibrationBaselineSymmetryRef.current = sidebarMetrics.faceDetected
+      const baselineSymmetry = sidebarMetrics.faceDetected
         ? clamp((sidebarMetrics.facialSymmetry || 0) * 100, 0, 100)
         : null;
+      calibrationBaselineSymmetryRef.current = baselineSymmetry;
+      calibrationBaselineMetricsRef.current = {
+        facialSymmetry: baselineSymmetry,
+        trackingQuality: Number.isFinite(sidebarMetrics.trackingQuality)
+          ? clamp(sidebarMetrics.trackingQuality || 0, 0, 100)
+          : null,
+      };
       calibrationCompletedRef.current = true;
       setCalibrationReady(true);
     }
@@ -977,6 +1007,10 @@ function BrainSingPageContent() {
     calibrationStableSinceRef.current = null;
     calibrationCompletedRef.current = false;
     calibrationBaselineSymmetryRef.current = null;
+    calibrationBaselineMetricsRef.current = {
+      facialSymmetry: null,
+      trackingQuality: null,
+    };
     setCalibrationReady(false);
     setMediaAccessError(null);
     setCalibrationMessage("카메라를 켜고 얼굴을 화면 중앙 가이드에 맞춰 주세요.");
@@ -1193,6 +1227,14 @@ function BrainSingPageContent() {
               hasMeasuredFace && effectiveFacialResponseDelta != null
                 ? Number(effectiveFacialResponseDelta.toFixed(1))
                 : null,
+            baseline_facial_symmetry:
+              calibrationBaselineMetricsRef.current.facialSymmetry == null
+                ? null
+                : Number(calibrationBaselineMetricsRef.current.facialSymmetry.toFixed(1)),
+            baseline_tracking_quality:
+              calibrationBaselineMetricsRef.current.trackingQuality == null
+                ? null
+                : Number(calibrationBaselineMetricsRef.current.trackingQuality.toFixed(1)),
           },
         }),
         } satisfies SingResultEnvelope),
@@ -1407,6 +1449,14 @@ function BrainSingPageContent() {
   const handleSkipSong = () => {
     if (!isAdmin || typeof window === "undefined") return;
     stopActiveSession();
+    const demoKeyFrames = [
+      captureKeyFrame(videoRef.current, "frame-1") ??
+        captureKeyFrame(sideVideoRef.current, "frame-1"),
+      captureKeyFrame(videoRef.current, "frame-2") ??
+        captureKeyFrame(sideVideoRef.current, "frame-2"),
+      captureKeyFrame(videoRef.current, "frame-3") ??
+        captureKeyFrame(sideVideoRef.current, "frame-3"),
+    ].filter((frame): frame is SingKeyFrame => frame != null);
     const skippedResult = buildSkippedSingResult({
       song,
       userName: patient?.name ?? "관리자",
@@ -1418,6 +1468,7 @@ function BrainSingPageContent() {
         requirementIds: currentSong.governance.requirementIds,
         failureModes: currentSong.governance.failureModes,
       },
+      reviewKeyFrames: demoKeyFrames,
     });
     window.sessionStorage.setItem(
       SING_RESULT_SESSION_KEY,

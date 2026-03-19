@@ -76,6 +76,49 @@ function isDemoSkipEntry(entry: TrainingHistoryEntry | null) {
   return entry.measurementQuality?.overall === "demo";
 }
 
+function getSingBaselineMetrics(entry: TrainingHistoryEntry | null) {
+  const metadata = entry?.singResult?.versionSnapshot?.measurement_metadata;
+  const baselineFacialSymmetry =
+    typeof metadata?.baseline_facial_symmetry === "number"
+      ? metadata.baseline_facial_symmetry
+      : typeof metadata?.baseline_facial_symmetry === "string"
+        ? Number(metadata.baseline_facial_symmetry)
+        : null;
+  const baselineTrackingQuality =
+    typeof metadata?.baseline_tracking_quality === "number"
+      ? metadata.baseline_tracking_quality
+      : typeof metadata?.baseline_tracking_quality === "string"
+        ? Number(metadata.baseline_tracking_quality)
+        : null;
+
+  return {
+    facialSymmetry: Number.isFinite(baselineFacialSymmetry)
+      ? baselineFacialSymmetry
+      : null,
+    trackingQuality: Number.isFinite(baselineTrackingQuality)
+      ? baselineTrackingQuality
+      : null,
+  };
+}
+
+function findPreviousSingBaselineEntry(
+  history: TrainingHistoryEntry[],
+  selected: TrainingHistoryEntry | null,
+) {
+  if (!selected || selected.trainingMode !== "sing") return null;
+  const currentSong = String(selected.singResult?.song || "");
+  const previousRows = history
+    .filter((row) => row.trainingMode === "sing" && row.historyId !== selected.historyId)
+    .filter((row) => row.completedAt < selected.completedAt)
+    .sort((a, b) => b.completedAt - a.completedAt);
+
+  return (
+    previousRows.find((row) => String(row.singResult?.song || "") === currentSong) ??
+    previousRows[0] ??
+    null
+  );
+}
+
 function ServerExcludedBadge() {
   return (
     <div className="inline-flex items-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-700 sm:text-xs">
@@ -588,6 +631,36 @@ function ReportContent() {
     return Number((rehabCurrentScore - rehabPreviousScore).toFixed(1));
   }, [rehabCurrentScore, rehabPreviousScore]);
 
+  const previousSingBaselineEntry = useMemo(
+    () => findPreviousSingBaselineEntry(history, selected),
+    [history, selected],
+  );
+
+  const singCurrentBaselineMetrics = useMemo(
+    () => getSingBaselineMetrics(selected),
+    [selected],
+  );
+
+  const singPreviousBaselineMetrics = useMemo(
+    () => getSingBaselineMetrics(previousSingBaselineEntry),
+    [previousSingBaselineEntry],
+  );
+
+  const singBaselineComparisonDelta = useMemo(() => {
+    if (
+      singCurrentBaselineMetrics.facialSymmetry == null ||
+      singPreviousBaselineMetrics.facialSymmetry == null
+    ) {
+      return null;
+    }
+    return Number(
+      Math.abs(
+        singCurrentBaselineMetrics.facialSymmetry -
+          singPreviousBaselineMetrics.facialSymmetry,
+      ).toFixed(1),
+    );
+  }, [singCurrentBaselineMetrics, singPreviousBaselineMetrics]);
+
   const rehabImpression = useMemo(() => {
     if (!rehabPrimaryStep) return null;
     const metricMap = new Map(rehabDetailComparisons.map((m) => [m.key, m]));
@@ -855,67 +928,119 @@ function ReportContent() {
                 </p>
               </section>
 
-              <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">이번 결과</p>
+                  <p className="mt-1 text-2xl font-black text-emerald-600">
+                    {Number(selected.singResult?.score ?? selected.aq ?? 0).toFixed(1)}점
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">자음 정확도</p>
+                  <p className="mt-1 text-2xl font-black text-slate-900">
+                    {selected.singResult?.finalConsonant && selected.singResult.finalConsonant !== "--"
+                      ? `${selected.singResult.finalConsonant}점`
+                      : "미측정"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">모음 정확도</p>
+                  <p className="mt-1 text-2xl font-black text-slate-900">
+                    {selected.singResult?.finalVowel && selected.singResult.finalVowel !== "--"
+                      ? `${selected.singResult.finalVowel}점`
+                      : "미측정"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">가사 일치도</p>
+                  <p className="mt-1 text-2xl font-black text-slate-900">
+                    {selected.singResult?.lyricAccuracy && selected.singResult.lyricAccuracy !== "--"
+                      ? `${selected.singResult.lyricAccuracy}점`
+                      : "미측정"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">반응 지연 시간</p>
+                  <p className="mt-1 text-2xl font-black text-slate-900">
+                    {selected.singResult?.rtLatency && selected.singResult.rtLatency !== "-- ms"
+                      ? selected.singResult.rtLatency
+                      : "미측정"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-sm font-black text-slate-500">발성 안정도</p>
+                  <p className="mt-1 text-2xl font-black text-emerald-600">
+                    {selected.singResult?.finalJitter ?? "-"}
+                  </p>
+                </div>
                 <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
                   <p className="text-sm font-black text-slate-500">곡명</p>
-                  <p className="text-2xl font-black text-emerald-600 mt-1">
+                  <p className="mt-1 text-2xl font-black text-emerald-600">
                     {selected.singResult?.song ?? "-"}
                   </p>
                 </div>
-                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-sm font-black text-slate-500">안면 반응 변화</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">
-                    {selected.singResult?.facialResponseDelta ?? "-"}
+              </div>
+
+              <section className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
+                <div className="flex items-center gap-2">
+                  <span className="w-9 h-9 rounded-xl bg-white border border-emerald-200 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900">전문 AI 분석</h3>
+                </div>
+                <p className="mt-4 text-base font-bold text-slate-900">
+                  {isDemoSkipEntry(selected)
+                    ? "관리자 skip으로 생성된 시연용 결과입니다. 결과 화면 시연만 가능하며 서버 원장 반영 대상은 아닙니다."
+                    : selected.singResult?.comment || "노래 리듬과 발화 흐름을 기반으로 분석한 결과입니다."}
+                </p>
+                <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
+                  성대 안정도와 반응 지연 시간을 중심으로 보고, 안면 변화값은 직전 세션 baseline 대비 참고 지표로만 해석합니다.
+                </p>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="flex items-center gap-2">
+                  <span className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-slate-700" />
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900">측정 신호 요약</h3>
+                </div>
+                <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">
+                    Speech Metrics
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-700">
+                    자음 {selected.singResult?.finalConsonant && selected.singResult.finalConsonant !== "--" ? `${selected.singResult.finalConsonant}점` : "미측정"} ·
+                    {" "}모음 {selected.singResult?.finalVowel && selected.singResult.finalVowel !== "--" ? `${selected.singResult.finalVowel}점` : "미측정"} ·
+                    {" "}가사 일치도 {selected.singResult?.lyricAccuracy && selected.singResult.lyricAccuracy !== "--" ? `${selected.singResult.lyricAccuracy}점` : "미측정"} ·
+                    {" "}반응속도 {selected.singResult?.rtLatency && selected.singResult.rtLatency !== "-- ms" ? selected.singResult.rtLatency : "미측정"}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {selected.singResult?.transcript?.trim()
+                      ? `인식 가사: "${selected.singResult.transcript}"`
+                      : "인식된 가사 텍스트가 없습니다."}
                   </p>
                 </div>
-                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-sm font-black text-slate-500">발성 안정</p>
-                  <p className="text-2xl font-black text-emerald-600 mt-1">
-                    {selected.singResult?.finalJitter ?? "-"}
+                <div className="mt-4 rounded-[24px] border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+                  <p className="text-sm font-black">노래방의 핵심 평가는 발화 점수입니다.</p>
+                  <p className="mt-2 text-base font-medium text-emerald-800">
+                    안면 변화값은 직전 세션 baseline 대비 참고 지표로만 해석합니다.
                   </p>
                 </div>
               </section>
 
-              <section className="grid grid-cols-1 xl:grid-cols-[1.02fr_0.98fr] gap-4">
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-9 h-9 rounded-xl bg-white border border-emerald-200 flex items-center justify-center">
-                      <Sparkles className="w-4 h-4 text-emerald-600" />
-                    </span>
-                    <h3 className="text-lg font-black text-slate-900">전문 AI 분석</h3>
-                  </div>
-                  <p className="mt-4 text-base font-bold text-slate-900">
-                    {isDemoSkipEntry(selected)
-                      ? "관리자 skip으로 생성된 시연용 결과입니다. 결과 화면 시연만 가능하며 서버 원장 반영 대상은 아닙니다."
-                      : selected.singResult?.comment || "노래 리듬과 안면 반응을 기반으로 분석한 결과입니다."}
-                  </p>
-                  <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
-                    성대 안정도, 기준 얼굴 대비 안면 반응 변화, 반응 지연 시간을 종합해 현재 회복 흐름을 추적합니다.
-                  </p>
+              <section className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="flex items-center gap-2">
+                  <span className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                    <Music className="w-4 h-4 text-slate-700" />
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900">재생 및 프레임 확인</h3>
                 </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-                      <TrendingUp className="w-4 h-4 text-emerald-600" />
-                    </span>
-                    <h3 className="text-lg font-black text-slate-900">핵심 지표</h3>
-                  </div>
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-xs font-black text-slate-500">반응 지연 시간</p>
-                      <p className="mt-1 text-xl font-black text-slate-900">
-                        {selected.singResult?.rtLatency ?? "-"}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-xs font-black text-slate-500">종합 점수</p>
-                      <p className="mt-1 text-xl font-black text-emerald-600">
-                        {Number(selected.singResult?.score ?? selected.aq ?? 0).toFixed(1)}점
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3">
+                <div className="mt-4 space-y-4">
+                  <div>
                     <button
                       type="button"
                       onClick={() => {
@@ -939,8 +1064,75 @@ function ReportContent() {
                       {playingId === `sing-audio-${selected.historyId}` ? "재생 중..." : "내가 부른 노래 듣기"}
                     </button>
                   </div>
+                  {selected.singResult?.reviewKeyFrames?.length ? (
+                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">
+                        Face Key Frames
+                      </p>
+                      <p className="mt-2 text-sm text-slate-500">
+                        노래 중 수집한 안면 반응 대표 프레임입니다.
+                      </p>
+                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {selected.singResult.reviewKeyFrames.map((frame, index) => (
+                          <div
+                            key={`${frame.label}-${frame.capturedAt}-${index}`}
+                            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                          >
+                            <img
+                              src={frame.dataUrl}
+                              alt={`노래방 key frame ${index + 1}`}
+                              className="h-32 w-full object-cover"
+                            />
+                            <div className="border-t border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
+                              {frame.label} · {new Date(frame.capturedAt).toLocaleTimeString("ko-KR")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </section>
+
+              {singBaselineComparisonDelta != null ? (
+                <section className="rounded-2xl border border-emerald-100 bg-[#fbfefc] p-5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center">
+                      <Activity className="w-4 h-4 text-emerald-700" />
+                    </span>
+                    <h3 className="text-lg font-black text-slate-900">직전 세션 기준 대비 안면 변화량</h3>
+                  </div>
+                  <div className="mt-4">
+                    <div className="rounded-[24px] border border-emerald-200 bg-white px-4 py-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">직전 세션 baseline 대비 안면 변화량</p>
+                          <p className="mt-1 text-sm font-medium text-slate-500">
+                            {singBaselineComparisonDelta.toFixed(1)}점 변화
+                          </p>
+                        </div>
+                        <p className="text-xl font-black text-emerald-600">
+                          {singBaselineComparisonDelta.toFixed(1)}점
+                        </p>
+                      </div>
+                      <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-emerald-500"
+                          style={{ width: `${Math.min(100, Math.max(6, singBaselineComparisonDelta * 12))}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-[24px] bg-emerald-50 p-4 text-emerald-900">
+                    <p className="text-sm font-black">
+                      이번 세션 시작 baseline과 직전 세션 baseline을 비교한 보조 변화값입니다.
+                    </p>
+                    <p className="mt-2 text-base font-medium text-emerald-800">
+                      현재는 입, 눈, 표정 협응을 각각 독립 계측하지 않고 baseline 얼굴 metric 1개만 비교합니다.
+                    </p>
+                  </div>
+                </section>
+              ) : null}
             </div>
           ) : availableSteps.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 p-6 text-sm font-bold text-slate-500">

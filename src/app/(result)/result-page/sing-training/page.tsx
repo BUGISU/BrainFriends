@@ -86,6 +86,11 @@ type RankingPayload = {
   myRank: RankRow | null;
 };
 
+type BaselineFaceMetrics = {
+  facialSymmetry: number | null;
+  trackingQuality: number | null;
+};
+
 type PersistDatabaseResult = {
   ranking: RankingPayload | null;
   skipped: boolean;
@@ -120,6 +125,52 @@ function isDemoSkipSingResult(result: SingResult | null) {
   const reason = String(result?.measurementReason || "");
   const comment = String(result?.comment || "");
   return reason.includes("관리자 skip") || comment.includes("관리자 skip");
+}
+
+function getBaselineFaceMetrics(result: SingResult | null | undefined): BaselineFaceMetrics {
+  const metadata = result?.versionSnapshot?.measurement_metadata;
+  const baselineFacialSymmetry =
+    typeof metadata?.baseline_facial_symmetry === "number"
+      ? metadata.baseline_facial_symmetry
+      : typeof metadata?.baseline_facial_symmetry === "string"
+        ? Number(metadata.baseline_facial_symmetry)
+        : null;
+  const baselineTrackingQuality =
+    typeof metadata?.baseline_tracking_quality === "number"
+      ? metadata.baseline_tracking_quality
+      : typeof metadata?.baseline_tracking_quality === "string"
+        ? Number(metadata.baseline_tracking_quality)
+        : null;
+
+  return {
+    facialSymmetry: Number.isFinite(baselineFacialSymmetry)
+      ? baselineFacialSymmetry
+      : null,
+    trackingQuality: Number.isFinite(baselineTrackingQuality)
+      ? baselineTrackingQuality
+      : null,
+  };
+}
+
+function findPreviousSingBaseline(
+  entries: HistorySingEntry[],
+  current: SingResult | null,
+): BaselineFaceMetrics {
+  if (!current) {
+    return { facialSymmetry: null, trackingQuality: null };
+  }
+
+  const currentCompletedAt = Number(current.completedAt || 0);
+  const currentSong = String(current.song || "");
+  const singEntries = entries
+    .filter((entry) => entry.trainingMode === "sing" && entry.singResult)
+    .filter((entry) => entry.completedAt < currentCompletedAt)
+    .sort((a, b) => b.completedAt - a.completedAt);
+  const previousEntry =
+    singEntries.find((entry) => String(entry.singResult?.song || "") === currentSong) ??
+    singEntries[0];
+
+  return getBaselineFaceMetrics(previousEntry?.singResult as SingResult | undefined);
 }
 
 function ServerExcludedBadge() {
@@ -183,22 +234,28 @@ function buildSkippedDemoSingResult(
   patientName: string,
 ): SingResult {
   const songMeta = SONGS[song];
+  const demoTranscript = songMeta.lyrics
+    .slice(0, 2)
+    .map((line) => line.txt)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
   return {
     song,
     userName: patientName || "관리자",
-    score: 0,
-    finalJitter: "--",
-    finalSi: "--",
-    facialResponseDelta: "--",
-    rtLatency: "-- ms",
-    finalConsonant: "--",
-    finalVowel: "--",
-    lyricAccuracy: "--",
-    transcript: "",
+    score: 72,
+    finalJitter: "6.4%",
+    finalSi: "96.2",
+    facialResponseDelta: "3.8",
+    rtLatency: "1240 ms",
+    finalConsonant: "74.8",
+    finalVowel: "77.6",
+    lyricAccuracy: "69.4",
+    transcript: demoTranscript,
     metricSource: "demo",
     measurementReason: "관리자 skip으로 인해 실측을 수행하지 않았습니다.",
     comment:
-      "관리자 skip으로 생성된 화면 확인용 결과입니다. 실측 데이터가 아니므로 서버 저장과 랭킹 반영은 수행되지 않습니다.",
+      "관리자 skip으로 생성된 화면 확인용 시연 결과입니다. 실측 데이터가 아니므로 서버 저장과 랭킹 반영은 수행되지 않습니다.",
     rankings: EMPTY_RANKINGS,
     completedAt: Date.now(),
     reviewAudioUrl: null,
@@ -430,6 +487,7 @@ export default function SingTrainingResultPage() {
   >("idle");
   const [isPlayingReview, setIsPlayingReview] = useState(false);
   const [myRank, setMyRank] = useState<RankRow | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<HistorySingEntry[]>([]);
   const { patient } = useTrainingSession();
   const lastPersistedKeyRef = useRef<string | null>(null);
   const reviewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -547,6 +605,7 @@ export default function SingTrainingResultPage() {
     void fetchMyHistoryEntries()
       .then(({ entries }) => {
         if (cancelled) return;
+        setHistoryEntries(entries);
         const latestSing = entries.find((row) => row.trainingMode === "sing");
         if (!latestSing?.singResult) {
           if (!result && fallbackSong) {
@@ -579,6 +638,7 @@ export default function SingTrainingResultPage() {
       })
       .catch(() => {
         if (!cancelled) {
+          setHistoryEntries([]);
           if (!result && fallbackSong) {
             const isSkipDemo = searchParams.get("demo") === "skip";
             setResult(
@@ -706,23 +766,20 @@ export default function SingTrainingResultPage() {
   const isMeasuredResult = isMeasuredSingResult(result);
   const isDemoSkipResult = isDemoSkipSingResult(result);
   const isServerExcluded = dbSaveState === "local_only" || !isMeasuredResult;
-  const facialResponseChangeScore = parseMeasuredNumber(result.facialResponseDelta);
+  const currentBaselineMetrics = getBaselineFaceMetrics(result);
+  const previousBaselineMetrics = findPreviousSingBaseline(historyEntries, result);
+  const baselineComparisonDelta =
+    currentBaselineMetrics.facialSymmetry == null ||
+    previousBaselineMetrics.facialSymmetry == null
+      ? null
+      : Math.abs(
+          currentBaselineMetrics.facialSymmetry -
+            previousBaselineMetrics.facialSymmetry,
+        );
   const jitterScore = parseMeasuredNumber(result.finalJitter);
   const consonantScore = parseMeasuredNumber(result.finalConsonant);
   const vowelScore = parseMeasuredNumber(result.finalVowel);
   const lyricAccuracyScore = parseMeasuredNumber(result.lyricAccuracy);
-  const mouthImprovement =
-    facialResponseChangeScore == null
-      ? null
-      : Math.max(0, Math.round(facialResponseChangeScore * 1.8));
-  const eyeImprovement =
-    facialResponseChangeScore == null
-      ? null
-      : Math.max(0, Math.round(facialResponseChangeScore * 1.4));
-  const rhythmCoordination =
-    jitterScore == null
-      ? null
-      : Math.max(70, Math.min(99, result.score - Math.round(jitterScore * 5)));
   const vitalityComment =
     !isMeasuredResult
       ? result.measurementReason || "측정 데이터가 충분하지 않아 화면 확인용 결과만 표시합니다."
@@ -740,14 +797,8 @@ export default function SingTrainingResultPage() {
     consonantScore == null ? "미측정" : `${consonantScore.toFixed(1)}점`;
   const vowelLabel =
     vowelScore == null ? "미측정" : `${vowelScore.toFixed(1)}점`;
-  const facialResponseLabel =
-    facialResponseChangeScore == null
-      ? "미측정"
-      : `${facialResponseChangeScore.toFixed(1)}점 변화`;
   const jitterLabel =
     jitterScore == null ? "미측정" : `${jitterScore.toFixed(2)}%`;
-  const rhythmCoordinationLabel =
-    rhythmCoordination == null ? "미측정" : `${rhythmCoordination}점`;
   const lyricAccuracyLabel =
     lyricAccuracyScore == null ? "미측정" : `${lyricAccuracyScore.toFixed(1)}점`;
 
@@ -788,16 +839,6 @@ export default function SingTrainingResultPage() {
               ) : null}
             </div>
             <div className="flex flex-wrap gap-3">
-              {result.reviewAudioUrl ? (
-                <button
-                  type="button"
-                  onClick={playReviewAudio}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 font-black text-emerald-700"
-                >
-                  <Music className="h-4 w-4" />
-                  {isPlayingReview ? "재생 중..." : "내 노래 듣기"}
-                </button>
-              ) : null}
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -817,12 +858,11 @@ export default function SingTrainingResultPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <SummaryCard title="이번 결과" value={scoreLabel} accent="primary" />
             <SummaryCard title="자음 정확도" value={consonantLabel} />
             <SummaryCard title="모음 정확도" value={vowelLabel} />
             <SummaryCard title="가사 일치도" value={lyricAccuracyLabel} />
-            <SummaryCard title="안면 반응 변화" value={facialResponseLabel} />
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -859,7 +899,7 @@ export default function SingTrainingResultPage() {
                 </p>
                 <p>
                   {isMeasuredResult
-                    ? "자음과 모음 산출 점수를 기반으로 보면 발화 명료도가 안정적이었고, 가사 흐름을 따라가는 수행도도 양호했습니다. 보조 지표로 기준 얼굴 대비 안면 반응 변화와 반응 속도도 함께 확인했습니다."
+                    ? "자음과 모음 산출 점수를 기반으로 보면 발화 명료도가 안정적이었고, 가사 흐름을 따라가는 수행도도 양호했습니다. 안면 변화값은 직전 세션 baseline 대비 참고 지표로만 확인했습니다."
                     : isDemoSkipResult
                       ? "관리자 skip으로 생성된 시연용 결과입니다. 곡 재생과 결과 UI 확인만 가능하며 서버 저장과 리포트 원장 반영은 수행하지 않습니다."
                       : `${result.measurementReason || "마이크 입력 또는 안면 추적 데이터가 부족하면 임상 결과를 확정할 수 없습니다."} 곡 재생과 결과 UI는 확인할 수 있지만, 서버 저장과 레포트 반영은 수행되지 않습니다.`}
@@ -898,7 +938,7 @@ export default function SingTrainingResultPage() {
               <div className="mt-4 rounded-[24px] border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
                 <p className="text-sm font-black">발화 산출과 가사 추종이 전반적으로 안정적인 흐름을 보였습니다.</p>
                 <p className="mt-2 text-base font-medium text-emerald-800">
-                  노래방의 핵심 평가는 발화 점수이며, 안면 반응 변화는 기준 얼굴 대비 보조 반응 지표로 함께 해석합니다.
+                  노래방의 핵심 평가는 발화 점수이며, 안면 변화값은 직전 세션 baseline 대비 참고 지표로만 해석합니다.
                 </p>
               </div>
             </section>
@@ -973,63 +1013,41 @@ export default function SingTrainingResultPage() {
               </div>
             </section>
 
-            <section className="rounded-[30px] border border-emerald-100 bg-[#fbfefc] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:p-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                  <Activity className="h-6 w-6" />
+            {baselineComparisonDelta != null ? (
+              <section className="rounded-[30px] border border-emerald-100 bg-[#fbfefc] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:p-8">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                    <Activity className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-600">
+                      Facial Support Metric
+                    </p>
+                    <h2 className="mt-1 text-2xl font-black text-slate-900">
+                      직전 세션 기준 대비 안면 변화량
+                    </h2>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-600">
-                    Facial Support Metrics
+
+                <div className="mt-6 space-y-5">
+                  <SymmetryRow
+                    label="직전 세션 baseline 대비 안면 변화량"
+                    delta={baselineComparisonDelta}
+                    feedback={`${baselineComparisonDelta.toFixed(1)}점 변화`}
+                    tone="emerald"
+                  />
+                </div>
+
+                <div className="mt-6 rounded-[24px] bg-emerald-50 p-4 text-emerald-900">
+                  <p className="text-sm font-black">
+                    이번 세션 시작 baseline과 직전 세션 baseline을 비교한 보조 변화값입니다.
                   </p>
-                  <h2 className="mt-1 text-2xl font-black text-slate-900">
-                    기준 대비 안면 반응 변화
-                  </h2>
+                  <p className="mt-2 text-base font-medium text-emerald-800">
+                    현재는 입, 눈, 표정 협응을 각각 독립 계측하지 않고 baseline 얼굴 metric 1개만 비교합니다.
+                  </p>
                 </div>
-              </div>
-
-              <div className="mt-6 space-y-5">
-                <SymmetryRow
-                  label="입 주위 반응 변화"
-                  delta={mouthImprovement}
-                  feedback={
-                    mouthImprovement == null ? "미측정" : `${mouthImprovement.toFixed(1)}점 변화`
-                  }
-                  tone="emerald"
-                />
-                <SymmetryRow
-                  label="눈매 반응 변화"
-                  delta={eyeImprovement}
-                  feedback={
-                    eyeImprovement == null ? "미측정" : `${eyeImprovement.toFixed(1)}점 변화`
-                  }
-                  tone="emerald"
-                />
-                <SymmetryRow
-                  label="표정-발성 협응 변화"
-                  delta={facialResponseChangeScore}
-                  feedback={
-                    facialResponseChangeScore == null
-                      ? "미측정"
-                      : `${facialResponseChangeScore.toFixed(1)}점 변화`
-                  }
-                  tone="slate"
-                />
-              </div>
-
-              <div className="mt-6 rounded-[24px] bg-emerald-50 p-4 text-emerald-900">
-                <p className="text-sm font-black">
-                  {isMeasuredResult
-                    ? `노래 발화 중 기준 얼굴 대비 입 주위와 눈매 반응 변화 정도를 보조 지표로 함께 기록했습니다.`
-                    : "안면 반응 측정 데이터가 부족해 보조 안면 그래프는 계산하지 않았습니다."}
-                </p>
-                <p className="mt-2 text-base font-medium text-emerald-800">
-                  {isMeasuredResult
-                    ? "노래방의 핵심 평가는 발화 점수이며, 안면 반응 변화는 기준 얼굴 대비 변화 정도를 참고 지표로 함께 해석합니다."
-                    : "측정이 충분한 세션에서만 안면 보조 지표를 레포트에 함께 반영합니다."}
-                </p>
-              </div>
-            </section>
+              </section>
+            ) : null}
 
             <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.05)] sm:p-8">
               <div className="flex items-center gap-3">
