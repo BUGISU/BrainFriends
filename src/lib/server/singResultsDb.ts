@@ -89,8 +89,6 @@ async function fetchSingRanking(params: {
       JOIN patient_pii pii ON pii.patient_id = pm.patient_id
       WHERE cs.training_type = 'sing-training'
         AND sr.song_key = $1
-        AND pii.birth_date IS NOT NULL
-        AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, pii.birth_date)) >= 65
       ORDER BY pm.patient_pseudonym_id, sr.score DESC, cs.completed_at ASC
     ),
     ranked AS (
@@ -117,8 +115,6 @@ async function fetchSingRanking(params: {
       JOIN patient_pii pii ON pii.patient_id = pm.patient_id
       WHERE cs.training_type = 'sing-training'
         AND sr.song_key = $2
-        AND pii.birth_date IS NOT NULL
-        AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, pii.birth_date)) >= 65
       ORDER BY pm.patient_pseudonym_id, sr.score DESC, cs.completed_at ASC
     ),
     ranked AS (

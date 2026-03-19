@@ -607,16 +607,15 @@ export default function SingTrainingResultPage() {
   const mouthImprovement =
     facialResponseChangeScore == null
       ? null
-      : Math.max(6, Math.round(facialResponseChangeScore * 1.8));
+      : Math.max(0, Math.round(facialResponseChangeScore * 1.8));
   const eyeImprovement =
     facialResponseChangeScore == null
       ? null
-      : Math.max(5, Math.round(facialResponseChangeScore * 1.4));
+      : Math.max(0, Math.round(facialResponseChangeScore * 1.4));
   const rhythmCoordination =
     jitterScore == null
       ? null
       : Math.max(70, Math.min(99, result.score - Math.round(jitterScore * 5)));
-  const maskedAge = patient?.age ? `${patient.age}세 기준` : "동일 연령대 기준";
   const vitalityComment =
     !isMeasuredResult
       ? result.measurementReason || "측정 데이터가 충분하지 않아 화면 확인용 결과만 표시합니다."
@@ -856,14 +855,14 @@ export default function SingTrainingResultPage() {
                   label="좌측 구강 근육 활성도"
                   before={mouthImprovement == null ? null : 67}
                   after={mouthImprovement == null ? null : 67 + mouthImprovement}
-                  feedback={
-                    mouthImprovement == null ? "미측정" : `${mouthImprovement}% 변화`
-                  }
-                />
-                <SymmetryRow
-                  label="좌측 안륜근 반응도"
-                  before={eyeImprovement == null ? null : 72}
-                  after={eyeImprovement == null ? null : 72 + eyeImprovement}
+                    feedback={
+                      mouthImprovement == null ? "미측정" : `${mouthImprovement}% 변화`
+                    }
+                  />
+                  <SymmetryRow
+                    label="좌측 안륜근 반응도"
+                    before={eyeImprovement == null ? null : 72}
+                    after={eyeImprovement == null ? null : 72 + eyeImprovement}
                   feedback={
                     eyeImprovement == null ? "미측정" : `${eyeImprovement}% 변화`
                   }
@@ -905,37 +904,37 @@ export default function SingTrainingResultPage() {
                 </div>
                 <div>
                   <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
-                    Silver Ranking
+                    Overall Ranking
                   </p>
                   <h2 className="mt-1 text-2xl font-black text-slate-900">
-                    전국 실버 랭킹 Top 5
+                    전체 랭킹 Top 5
                   </h2>
                 </div>
               </div>
               <p className="mt-4 text-base font-medium text-slate-500">
-                {maskedAge} · 전국 회원 중 실버 연령대 최고 점수 기준 상위 5명을 표시합니다.
-              </p>
+                {result.song} 곡 기준 전체 사용자 최고 점수 상위 5명을 표시합니다.
+                </p>
 
               <div className="mt-5 rounded-[24px] border border-emerald-200 bg-emerald-50 p-4">
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-700">
-                  My Rank
-                </p>
-                <p className="mt-2 text-xl font-black text-slate-900">
-                  {myRank && hasDbRanking
-                    ? `${myRank.rank}위 · ${myRank.score}점`
-                    : dbSaveState === "saving"
-                      ? "랭킹 산출 중"
-                    : dbSaveState === "local_only"
+                    나의 순위
+                  </p>
+                  <p className="mt-2 text-xl font-black text-slate-900">
+                    {myRank && hasDbRanking
+                      ? `${myRank.rank}위 · ${myRank.score}점`
+                      : dbSaveState === "saving"
+                        ? "랭킹 산출 중"
+                      : dbSaveState === "local_only"
                         ? "로컬 모드"
                         : "--"}
-                </p>
-                <p className="mt-1 text-sm font-medium text-slate-600">
-                  {myRank && hasDbRanking
-                    ? `${myRank.name}님의 현재 ${result.song} 전국 실버 랭킹 위치입니다.`
-                    : dbSaveState === "local_only"
-                      ? "실측 지표가 없어 서버 저장과 DB 랭킹 계산을 생략했습니다."
-                      : `${result.song} 기준 DB 랭킹 데이터가 아직 없습니다.`}
-                </p>
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-600">
+                    {myRank && hasDbRanking
+                      ? `${myRank.name}님의 현재 ${result.song} 전체 랭킹 위치입니다.`
+                      : dbSaveState === "local_only"
+                        ? "실측 지표가 없어 서버 저장과 DB 랭킹 계산을 생략했습니다."
+                        : `${result.song} 기준 DB 랭킹 데이터가 아직 없습니다.`}
+                  </p>
               </div>
 
               <div className="mt-5 space-y-3">
