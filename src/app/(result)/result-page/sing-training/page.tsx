@@ -598,18 +598,13 @@ export default function SingTrainingResultPage() {
       return;
     }
 
-    const needsStoredResultSync =
-      !result || result.metricSource !== "measured" || dbSaveState === "local_only";
-
-    if (!needsStoredResultSync) {
-      return;
-    }
-
     let cancelled = false;
     void fetchMyHistoryEntries()
       .then(({ entries }) => {
         if (cancelled) return;
         setHistoryEntries(entries);
+        const needsStoredResultSync =
+          !result || result.metricSource !== "measured" || dbSaveState === "local_only";
         const latestSing = entries.find((row) => row.trainingMode === "sing");
         if (!latestSing?.singResult) {
           if (!result && fallbackSong) {
@@ -624,6 +619,11 @@ export default function SingTrainingResultPage() {
             );
             setMyRank(null);
           }
+          setHasLoadedResult(true);
+          return;
+        }
+
+        if (!needsStoredResultSync) {
           setHasLoadedResult(true);
           return;
         }
