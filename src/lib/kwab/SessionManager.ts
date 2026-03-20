@@ -972,8 +972,7 @@ export class SessionManager {
             String(row?.transcript ?? "").trim().length > 0 &&
             String(row?.transcript ?? "").trim() !== "시연용 더미 응답입니다.",
         ).length;
-        if (transcriptCount === rows.length) return "measured";
-        if (transcriptCount > 0) return "partial";
+        if (transcriptCount > 0) return "measured";
         return "demo";
       }
 
@@ -981,8 +980,7 @@ export class SessionManager {
         const imageCount = rows.filter(
           (row) => String(row?.userImage ?? "").trim().length > 0,
         ).length;
-        if (imageCount === rows.length) return "measured";
-        if (imageCount > 0) return "partial";
+        if (imageCount > 0) return "measured";
         return "demo";
       }
 

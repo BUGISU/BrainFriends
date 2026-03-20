@@ -15,7 +15,11 @@ export type PersistClinicalHistoryResult = {
 };
 
 function shouldPersistClinicalHistory(historyEntry: TrainingHistoryEntry) {
-  return historyEntry.measurementQuality?.overall === "measured";
+  const overall = historyEntry.measurementQuality?.overall;
+  if (historyEntry.trainingMode === "sing") {
+    return overall === "measured";
+  }
+  return overall === "measured" || overall === "partial";
 }
 
 const CLINICAL_SYNC_PREFIX = "clinical-db-sync:";

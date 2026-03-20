@@ -36,7 +36,11 @@ function isValidHistoryEntry(
 }
 
 function shouldPersistHistoryEntry(entry: TrainingHistoryEntry) {
-  return entry.measurementQuality?.overall === "measured";
+  const overall = entry.measurementQuality?.overall;
+  if (entry.trainingMode === "sing") {
+    return overall === "measured";
+  }
+  return overall === "measured" || overall === "partial";
 }
 
 export async function POST(req: Request) {
