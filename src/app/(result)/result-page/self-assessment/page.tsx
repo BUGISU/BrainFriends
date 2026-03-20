@@ -294,7 +294,7 @@ function ResultContent() {
   );
   const isServerExcluded =
     dbSaveState === "local_only" ||
-    currentHistoryEntry?.measurementQuality?.overall !== "measured";
+    currentHistoryEntry?.measurementQuality?.overall === "demo";
   const isDemoResult = currentHistoryEntry?.measurementQuality?.overall === "demo";
 
   const previousHistory = useMemo(() => {

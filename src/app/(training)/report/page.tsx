@@ -63,7 +63,7 @@ function shouldShowServerExcludedBadge(entry: TrainingHistoryEntry | null) {
   if (entry.trainingMode === "sing") {
     return !isMeasuredSingReportEntry(entry);
   }
-  return entry.measurementQuality?.overall !== "measured";
+  return entry.measurementQuality?.overall === "demo";
 }
 
 function isDemoSkipEntry(entry: TrainingHistoryEntry | null) {

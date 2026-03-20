@@ -162,7 +162,7 @@ function ResultRehabPage() {
   );
   const isServerExcluded =
     dbSaveState === "local_only" ||
-    latestStepRow?.measurementQuality?.overall !== "measured";
+    latestStepRow?.measurementQuality?.overall === "demo";
   const isDemoResult = latestStepRow?.measurementQuality?.overall === "demo";
 
   useEffect(() => {
