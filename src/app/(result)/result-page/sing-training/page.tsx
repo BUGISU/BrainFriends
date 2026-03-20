@@ -43,6 +43,7 @@ type RankRow = {
 };
 
 type SingResult = {
+  sourceSessionKey?: string;
   song: string;
   userName: string;
   score: number;
@@ -110,6 +111,15 @@ const EMPTY_RANKINGS: RankRow[] = Array.from({ length: 5 }, (_, index) => ({
   score: 0,
   me: false,
 }));
+
+function buildSingSourceSessionKey(song: string, completedAt: number) {
+  const normalizedSong = song
+    .replace(/[^a-z0-9-]/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+  return `sing-${normalizedSong || "song"}-${completedAt}`;
+}
 
 function parseMeasuredNumber(value: string | null | undefined) {
   if (!value) return null;
@@ -322,6 +332,9 @@ async function persistToDatabase(
   result: SingResult,
 ): Promise<PersistDatabaseResult> {
   let nextResult = result;
+  const sourceSessionKey =
+    result.sourceSessionKey?.trim() ||
+    buildSingSourceSessionKey(result.song, result.completedAt);
 
   if (
     result.reviewAudioUrl &&
@@ -331,7 +344,7 @@ async function persistToDatabase(
       const reviewAudioBlob = await dataUrlToBlob(result.reviewAudioUrl);
       const uploadedReviewAudio = await uploadClinicalMedia({
         patient,
-        sourceSessionKey: patient.sessionId,
+        sourceSessionKey,
         trainingType: "sing-training",
         mediaType: "audio",
         captureRole: "review-audio",
@@ -376,11 +389,11 @@ async function persistToDatabase(
         const frameBlob = await dataUrlToBlob(frame.dataUrl);
         const uploadedFrame = await uploadClinicalMedia({
           patient,
-          sourceSessionKey: patient.sessionId,
+          sourceSessionKey,
           trainingType: "sing-training",
           mediaType: "image",
           captureRole: `face-keyframe-${index + 1}`,
-          labelSegment: `${result.song}-${frame.label}`,
+          labelSegment: `frame-${index + 1}`,
           blob: frameBlob,
           fileExtension: "jpg",
           capturedAt: frame.capturedAt,
@@ -423,6 +436,7 @@ async function persistToDatabase(
   try {
     const persistableResult = {
       ...nextResult,
+      sourceSessionKey,
       reviewAudioUrl: undefined,
       reviewKeyFrames: Array.isArray(nextResult.reviewKeyFrames)
         ? nextResult.reviewKeyFrames.map((frame) => ({
@@ -805,6 +819,8 @@ export default function SingTrainingResultPage() {
     jitterScore == null ? "미측정" : `${jitterScore.toFixed(2)}%`;
   const lyricAccuracyLabel =
     lyricAccuracyScore == null ? "미측정" : `${lyricAccuracyScore.toFixed(1)}점`;
+  const hasMeasuredSpeech =
+    consonantScore != null && vowelScore != null && lyricAccuracyScore != null;
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f5fbf8_0%,#eef8f3_100%)] px-4 py-6 sm:px-6 sm:py-8">
@@ -934,9 +950,10 @@ export default function SingTrainingResultPage() {
                   자음 {consonantLabel} · 모음 {vowelLabel} · 가사 일치도 {lyricAccuracyLabel} · 반응속도 {result.rtLatency === "-- ms" ? "미측정" : result.rtLatency}
                 </p>
                 <p className="mt-2 text-sm text-slate-500">
-                  {result.transcript?.trim()
+                  {(hasMeasuredSpeech || isDemoSkipResult) &&
+                  result.transcript?.trim()
                     ? `인식 가사: "${result.transcript}"`
-                    : "인식된 가사 텍스트가 없습니다."}
+                    : "..."}
                 </p>
               </div>
               <div className="mt-4 rounded-[24px] border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">

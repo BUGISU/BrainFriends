@@ -33,6 +33,11 @@ function getTrainingType(entry: TrainingHistoryEntry) {
   return entry.trainingMode === "rehab" ? "speech-rehab" : "self-assessment";
 }
 
+function getClinicalSourceSessionKey(entry: TrainingHistoryEntry) {
+  const trainingType = getTrainingType(entry);
+  return `history-${trainingType}-${entry.historyId}`;
+}
+
 function sanitizeHistoryEntryForDatabase(
   historyEntry: TrainingHistoryEntry,
 ): TrainingHistoryEntry {
@@ -78,6 +83,7 @@ export async function syncTrainingMediaForHistory(
 
   const uploads: Array<Promise<unknown>> = [];
   const trainingType = getTrainingType(historyEntry);
+  const sourceSessionKey = getClinicalSourceSessionKey(historyEntry);
 
   const enqueueAudioUpload = (
     stepNo: number,
@@ -91,7 +97,7 @@ export async function syncTrainingMediaForHistory(
       dataUrlToBlob(audioUrl).then((blob) =>
         uploadClinicalMedia({
           patient,
-          sourceSessionKey: historyEntry.sessionId,
+          sourceSessionKey,
           trainingType,
           stepNo,
           mediaType: "audio",
@@ -116,7 +122,7 @@ export async function syncTrainingMediaForHistory(
       dataUrlToBlob(imageUrl).then((blob) =>
         uploadClinicalMedia({
           patient,
-          sourceSessionKey: historyEntry.sessionId,
+          sourceSessionKey,
           trainingType,
           stepNo,
           mediaType: "image",

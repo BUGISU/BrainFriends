@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
-import { AUTH_COOKIE_NAME, getAuthenticatedSessionContext } from "@/lib/server/accountAuth";
+import {
+  AUTH_COOKIE_NAME,
+  getAuthenticatedSessionContext,
+} from "@/lib/server/accountAuth";
 import { listTrainingDraftsForAuthenticatedUser } from "@/lib/server/trainingDraftsDb";
 
 const notoSansKr = Noto_Sans_KR({
@@ -13,7 +16,7 @@ const notoSansKr = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "브레인프렌즈 GOLDEN",
+  title: "브레인프렌즈",
   description: "SaMD 기반 언어 재활 훈련",
 };
 
@@ -22,9 +25,10 @@ function serializePatientBootstrap(patient: unknown) {
 }
 
 function serializeDraftBootstrap(drafts: unknown) {
-  return JSON.stringify(
-    drafts ?? { local: {}, session: {} },
-  ).replace(/</g, "\\u003c");
+  return JSON.stringify(drafts ?? { local: {}, session: {} }).replace(
+    /</g,
+    "\\u003c",
+  );
 }
 
 function buildStorageBootstrapScript(patient: unknown, drafts: unknown) {

@@ -260,6 +260,32 @@ Not intended use:
 - 결과 저장 시 `algorithm_version`, `feature_schema_version`, `scoring_rule_version`, `model_version`, `release_version`을 같이 기록해 재현성과 추적성을 확보한다.
 - 점수는 모델 출력 그 자체가 아니라 landmark/STT 결과를 입력으로 하는 규칙 기반 후처리를 포함한다.
 
+### Brain Karaoke Facial Change Metric
+
+노래방의 `직전 세션 기준 대비 안면 변화량`은 독립적인 다중 근육 계측값이 아니라, baseline 얼굴 metric 1개를 비교하는 보조 지표다.
+
+현재 측정 방식:
+
+1. 노래 시작 전 캘리브레이션 단계에서 얼굴 baseline을 수집한다.
+2. 이때 `measurement_metadata.baseline_facial_symmetry` 와 `measurement_metadata.baseline_tracking_quality`를 저장한다.
+3. 현재 세션 결과 화면/리포트에서는 직전 measured 노래방 세션의 baseline 얼굴 metric을 함께 조회한다.
+4. 비교값은 아래와 같이 계산한다.
+
+```text
+abs(current baseline facialSymmetry - previous baseline facialSymmetry)
+```
+
+호환 처리:
+
+- 과거 저장 row에 `baseline_facial_symmetry`가 없으면 `finalSi`를 fallback 값으로 사용한다.
+
+해석 원칙:
+
+- 이 값은 총점에 반영하지 않는다.
+- 노래방의 핵심 평가는 자음/모음/가사/STT 기반 점수다.
+- 안면 변화량은 `직전 세션 baseline 대비 얼마나 달라졌는지`를 보는 참고 지표다.
+- 현재는 입, 눈, 표정 협응을 각각 독립 계측하지 않고 baseline 얼굴 metric 1개만 비교한다.
+
 ## Architecture Direction
 
 권장 논리 구조:

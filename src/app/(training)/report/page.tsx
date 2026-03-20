@@ -1025,9 +1025,15 @@ function ReportContent() {
                     {" "}반응속도 {selected.singResult?.rtLatency && selected.singResult.rtLatency !== "-- ms" ? selected.singResult.rtLatency : "미측정"}
                   </p>
                   <p className="mt-2 text-sm text-slate-500">
-                    {selected.singResult?.transcript?.trim()
+                    {selected.singResult?.finalConsonant &&
+                    selected.singResult.finalConsonant !== "--" &&
+                    selected.singResult?.finalVowel &&
+                    selected.singResult.finalVowel !== "--" &&
+                    selected.singResult?.lyricAccuracy &&
+                    selected.singResult.lyricAccuracy !== "--" &&
+                    selected.singResult?.transcript?.trim()
                       ? `인식 가사: "${selected.singResult.transcript}"`
-                      : "인식된 가사 텍스트가 없습니다."}
+                      : "..."}
                   </p>
                 </div>
                 <div className="mt-4 rounded-[24px] border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">

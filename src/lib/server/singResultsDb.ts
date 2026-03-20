@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/patientIdentityDb";
 
 export type PersistedSingResult = {
+  sourceSessionKey?: string;
   song: string;
   userName: string;
   score: number;
@@ -175,6 +176,10 @@ export async function saveSingResultToDatabase(params: {
   const client = await pool.connect();
 
   const patientPseudonymId = buildPatientPseudonymId(patient);
+  const sourceSessionKey =
+    result.sourceSessionKey?.trim().length
+      ? result.sourceSessionKey.trim()
+      : `sing-${result.song}-${result.completedAt}`;
   const sessionId = deterministicUuid(
     `session:${patientPseudonymId}:sing:${result.completedAt}:${result.song}`,
   );
@@ -223,7 +228,7 @@ export async function saveSingResultToDatabase(params: {
         sessionId,
         patientPseudonymId,
         "sing-training",
-        patient.sessionId,
+        sourceSessionKey,
         completedAt,
         completedAt,
         result.governance?.analysisVersion ?? "brain-sing-unknown",

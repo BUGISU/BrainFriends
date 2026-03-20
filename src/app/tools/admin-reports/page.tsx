@@ -10,6 +10,7 @@ import {
 import {
   getRehabRowScore,
 } from "@/features/report/utils/reportHelpers";
+import type { TrainingHistoryEntry } from "@/lib/kwab/SessionManager";
 
 type PatientSummary = {
   patientId: string;
@@ -24,24 +25,7 @@ type PatientSummary = {
   singCount: number;
 };
 
-type HistoryEntry = {
-  historyId: string;
-  sessionId: string;
-  patientName: string;
-  trainingMode: "self" | "rehab" | "sing";
-  rehabStep?: number;
-  completedAt: number;
-  aq: number;
-  stepScores: Record<string, number>;
-  singResult?: {
-    song: string;
-    score: number;
-    finalJitter: string;
-    finalSi: string;
-    rtLatency: string;
-    comment: string;
-  };
-};
+type HistoryEntry = TrainingHistoryEntry;
 
 export default function AdminReportsPage() {
   const router = useRouter();
@@ -146,6 +130,24 @@ export default function AdminReportsPage() {
     [estimatedKpiMetrics],
   );
 
+  const handleExportSelectedPatient = () => {
+    if (!selectedPatient || !entries.length) return;
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      patient: selectedPatient,
+      entries,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `brainfriends-${selectedPatient.patientCode ?? selectedPatient.patientId}-data.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   const getEntryTitle = (entry: HistoryEntry) => {
     if (entry.trainingMode === "sing") {
       return `노래 훈련 · ${entry.singResult?.song ?? "-"}`;
@@ -173,14 +175,59 @@ export default function AdminReportsPage() {
 
     if (entry.trainingMode === "rehab") {
       const rehabStep = Number(entry.rehabStep || 0);
-      const rehabStepScore =
+      const rehabStepKey =
         rehabStep >= 1 && rehabStep <= 6
-          ? entry.stepScores[`step${rehabStep}`] ?? 0
-          : 0;
+          ? (`step${rehabStep}` as keyof typeof entry.stepScores)
+          : null;
+      const rehabStepScore =
+        rehabStepKey != null ? entry.stepScores[rehabStepKey] ?? 0 : 0;
       return `대상 step ${entry.rehabStep ?? "-"} · 재활 점수 ${getRehabRowScore(entry as any).toFixed(1)} · 해당 step 점수 ${rehabStepScore}`;
     }
 
     return `종합 AQ ${Number(entry.aq ?? 0).toFixed(1)} · step1 ${entry.stepScores.step1 ?? 0} · step2 ${entry.stepScores.step2 ?? 0} · step3 ${entry.stepScores.step3 ?? 0} · step4 ${entry.stepScores.step4 ?? 0} · step5 ${entry.stepScores.step5 ?? 0} · step6 ${entry.stepScores.step6 ?? 0}`;
+  };
+
+  const getEntryMediaLinks = (entry: HistoryEntry) => {
+    const links: Array<{ label: string; href: string }> = [];
+
+    if (entry.trainingMode === "sing" && entry.singResult) {
+      if (entry.singResult.reviewAudioUrl) {
+        links.push({ label: "오디오 듣기", href: entry.singResult.reviewAudioUrl });
+      }
+      for (const [index, frame] of (entry.singResult.reviewKeyFrames ?? []).entries()) {
+        if (frame?.dataUrl) {
+          links.push({ label: `이미지 보기 ${index + 1}`, href: frame.dataUrl });
+        }
+      }
+      return links;
+    }
+
+    const stepDetails = entry.stepDetails;
+    for (const stepNo of [2, 4, 5] as const) {
+      const rows = Array.isArray(stepDetails?.[`step${stepNo}` as keyof typeof stepDetails])
+        ? (stepDetails[`step${stepNo}` as keyof typeof stepDetails] as Array<any>)
+        : [];
+      rows.forEach((row, index) => {
+        if (typeof row?.audioUrl === "string" && row.audioUrl.trim().length > 0) {
+          links.push({
+            label: `오디오 듣기 step${stepNo}-${index + 1}`,
+            href: row.audioUrl,
+          });
+        }
+      });
+    }
+
+    const step6Rows = Array.isArray(stepDetails?.step6) ? stepDetails.step6 : [];
+    step6Rows.forEach((row, index) => {
+      if (typeof row?.userImage === "string" && row.userImage.trim().length > 0) {
+        links.push({
+          label: `이미지 보기 step6-${index + 1}`,
+          href: row.userImage,
+        });
+      }
+    });
+
+    return links;
   };
 
   return (
@@ -267,11 +314,21 @@ export default function AdminReportsPage() {
               <p className="text-sm font-bold text-slate-500">사용자 리포트를 불러오는 중입니다.</p>
             ) : (
               <>
-                <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-4">
                   <SummaryCard label="사용자명" value={selectedPatient?.patientName ?? "-"} />
                   <SummaryCard label="아이디" value={selectedPatient?.loginId ?? "-"} />
                   <SummaryCard label="사용자코드" value={selectedPatient?.patientCode ?? "-"} />
                   <SummaryCard label="가명 ID" value={selectedPatient?.patientPseudonymId ?? "-"} mono />
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleExportSelectedPatient}
+                    className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 hover:bg-emerald-100"
+                  >
+                    선택 사용자 데이터 내보내기
+                  </button>
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[12px] font-semibold text-slate-600">
@@ -309,6 +366,21 @@ export default function AdminReportsPage() {
                             <Badge>{getEntryScorePill(entry)}</Badge>
                           </div>
                         </div>
+                        {getEntryMediaLinks(entry).length ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {getEntryMediaLinks(entry).map((media) => (
+                              <a
+                                key={`${entry.historyId}-${media.label}-${media.href}`}
+                                href={media.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black text-emerald-700 hover:bg-emerald-100"
+                              >
+                                {media.label}
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
                       </article>
                     ))
                   )}

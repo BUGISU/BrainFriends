@@ -59,6 +59,11 @@ function buildTrainingType(entry: TrainingHistoryEntry) {
   return entry.trainingMode === "rehab" ? "speech-rehab" : "self-assessment";
 }
 
+function buildClinicalSourceSessionKey(entry: TrainingHistoryEntry) {
+  const trainingType = buildTrainingType(entry);
+  return `history-${trainingType}-${entry.historyId}`;
+}
+
 export async function saveTrainingHistoryToDatabase(params: {
   patient: PatientProfile;
   historyEntry: TrainingHistoryEntry;
@@ -69,6 +74,7 @@ export async function saveTrainingHistoryToDatabase(params: {
 
 
   const trainingType = buildTrainingType(historyEntry);
+  const sourceSessionKey = buildClinicalSourceSessionKey(historyEntry);
   const sessionUuid = deterministicUuid(
     `clinical-session:${historyEntry.sessionId}:${historyEntry.historyId}:${trainingType}`,
   );
@@ -117,7 +123,7 @@ export async function saveTrainingHistoryToDatabase(params: {
         sessionUuid,
         patientPseudonymId,
         trainingType,
-        historyEntry.sessionId,
+        sourceSessionKey,
         completedAt,
         completedAt,
         representativeSnapshot?.algorithm_version ?? `${trainingType}-unknown`,

@@ -51,6 +51,7 @@ type SingKeyFrame = {
 };
 
 type SingResultEnvelope = {
+  sourceSessionKey?: string;
   song: string;
   userName: string;
   score: number;
@@ -109,6 +110,15 @@ const CALIBRATION_STABLE_MS = 400;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function buildSingSourceSessionKey(song: string, completedAt: number) {
+  const normalizedSong = song
+    .replace(/[^a-z0-9-]/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+  return `sing-${normalizedSong || "song"}-${completedAt}`;
 }
 
 function computeRms(samples: ArrayLike<number>) {
@@ -1181,6 +1191,7 @@ function BrainSingPageContent() {
     setScanStatus("COMPLETE");
 
     if (typeof window !== "undefined") {
+      const completedAt = Date.now();
       window.sessionStorage.setItem(
         SING_RESULT_SESSION_KEY,
         JSON.stringify({
@@ -1199,7 +1210,8 @@ function BrainSingPageContent() {
         measurementReason,
         comment: finalComment,
         rankings: rows,
-        completedAt: Date.now(),
+        completedAt,
+        sourceSessionKey: buildSingSourceSessionKey(song, completedAt),
         reviewAudioUrl: reviewAudio.dataUrl,
         reviewKeyFrames: keyFramesRef.current,
         reviewAudioMediaId: null,

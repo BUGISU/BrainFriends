@@ -347,6 +347,7 @@ export async function getAdminPatientReportDetail(
           ltr.training_mode,
           ltr.rehab_step,
           cs.session_id::text AS session_id,
+          cs.source_session_key,
           ltr.result_id::text AS result_id,
           ltr.source_history_id,
           ltr.aq,
@@ -370,6 +371,7 @@ export async function getAdminPatientReportDetail(
         SELECT
           cs.training_type,
           cs.session_id::text AS session_id,
+          cs.source_session_key,
           sr.result_id::text AS result_id,
           sr.score,
           sr.song_key,
@@ -392,11 +394,258 @@ export async function getAdminPatientReportDetail(
     ),
   ]);
 
+  const languageSourceSessionKeys = Array.from(
+    new Set(
+      languageRows.rows
+        .map((row: any) => String(row.source_session_key ?? "").trim())
+        .filter((value: string) => value.length > 0),
+    ),
+  );
+  const singSourceSessionKeys = Array.from(
+    new Set(
+      singRows.rows
+        .map((row: any) => String(row.source_session_key ?? "").trim())
+        .filter((value: string) => value.length > 0),
+    ),
+  );
+
+  const [step6ImageRows, languageAudioRows, singAudioRows, singKeyFrameRows] =
+    await Promise.all([
+      languageSourceSessionKeys.length > 0
+        ? pool.query(
+            `
+              SELECT
+                source_session_key,
+                object_key,
+                uploaded_at
+              FROM clinical_media_objects
+              WHERE patient_pseudonym_id = $1
+                AND training_type IN ('self-assessment', 'speech-rehab')
+                AND step_no = 6
+                AND media_type = 'image'
+                AND capture_role = 'step6-image'
+                AND source_session_key = ANY($2::text[])
+              ORDER BY source_session_key ASC, uploaded_at ASC
+            `,
+            [patientPseudonymId, languageSourceSessionKeys],
+          )
+        : Promise.resolve({ rows: [] as any[] }),
+      languageSourceSessionKeys.length > 0
+        ? pool.query(
+            `
+              SELECT
+                source_session_key,
+                step_no,
+                object_key,
+                uploaded_at
+              FROM clinical_media_objects
+              WHERE patient_pseudonym_id = $1
+                AND training_type IN ('self-assessment', 'speech-rehab')
+                AND step_no IN (2, 4, 5)
+                AND media_type = 'audio'
+                AND capture_role IN ('step2-audio', 'step4-audio', 'step5-audio')
+                AND source_session_key = ANY($2::text[])
+              ORDER BY source_session_key ASC, step_no ASC, uploaded_at ASC
+            `,
+            [patientPseudonymId, languageSourceSessionKeys],
+          )
+        : Promise.resolve({ rows: [] as any[] }),
+      singSourceSessionKeys.length > 0
+        ? pool.query(
+            `
+              SELECT
+                source_session_key,
+                object_key,
+                uploaded_at
+              FROM clinical_media_objects
+              WHERE patient_pseudonym_id = $1
+                AND training_type = 'sing-training'
+                AND media_type = 'audio'
+                AND capture_role = 'review-audio'
+                AND source_session_key = ANY($2::text[])
+              ORDER BY source_session_key ASC, uploaded_at DESC
+            `,
+            [patientPseudonymId, singSourceSessionKeys],
+          )
+        : Promise.resolve({ rows: [] as any[] }),
+      singSourceSessionKeys.length > 0
+        ? pool.query(
+            `
+              SELECT
+                source_session_key,
+                object_key,
+                uploaded_at,
+                capture_role
+              FROM clinical_media_objects
+              WHERE patient_pseudonym_id = $1
+                AND training_type = 'sing-training'
+                AND media_type = 'image'
+                AND capture_role LIKE 'face-keyframe-%'
+                AND source_session_key = ANY($2::text[])
+              ORDER BY source_session_key ASC, capture_role ASC, uploaded_at DESC
+            `,
+            [patientPseudonymId, singSourceSessionKeys],
+          )
+        : Promise.resolve({ rows: [] as any[] }),
+    ]);
+
+  const step6ImageMap = new Map<string, string[]>();
+  for (const row of step6ImageRows.rows) {
+    const sourceSessionKey = String(row.source_session_key ?? "").trim();
+    const objectKey = String(row.object_key ?? "").trim();
+    if (!sourceSessionKey || !objectKey) continue;
+    const next = step6ImageMap.get(sourceSessionKey) ?? [];
+    next.push(`/api/media/access?objectKey=${encodeURIComponent(objectKey)}`);
+    step6ImageMap.set(sourceSessionKey, next);
+  }
+
+  const languageAudioMap = new Map<string, Record<number, string[]>>();
+  for (const row of languageAudioRows.rows) {
+    const sourceSessionKey = String(row.source_session_key ?? "").trim();
+    const stepNo = Number(row.step_no ?? 0);
+    const objectKey = String(row.object_key ?? "").trim();
+    if (!sourceSessionKey || !stepNo || !objectKey) continue;
+    const byStep = languageAudioMap.get(sourceSessionKey) ?? {};
+    const next = byStep[stepNo] ?? [];
+    next.push(`/api/media/access?objectKey=${encodeURIComponent(objectKey)}`);
+    byStep[stepNo] = next;
+    languageAudioMap.set(sourceSessionKey, byStep);
+  }
+
+  const singAudioMap = new Map<string, string>();
+  for (const row of singAudioRows.rows) {
+    const sourceSessionKey = String(row.source_session_key ?? "").trim();
+    const objectKey = String(row.object_key ?? "").trim();
+    if (!sourceSessionKey || !objectKey || singAudioMap.has(sourceSessionKey)) continue;
+    singAudioMap.set(
+      sourceSessionKey,
+      `/api/media/access?objectKey=${encodeURIComponent(objectKey)}`,
+    );
+  }
+
+  const singKeyFrameBuckets = new Map<
+    string,
+    Map<string, { dataUrl: string; capturedAt: string; label: string }>
+  >();
+  for (const row of singKeyFrameRows.rows) {
+    const sourceSessionKey = String(row.source_session_key ?? "").trim();
+    const objectKey = String(row.object_key ?? "").trim();
+    const captureRole = String(row.capture_role ?? "keyframe").trim();
+    if (!sourceSessionKey || !objectKey || !captureRole) continue;
+    const bucket = singKeyFrameBuckets.get(sourceSessionKey) ?? new Map();
+    if (bucket.has(captureRole)) continue;
+    bucket.set(captureRole, {
+      dataUrl: `/api/media/access?objectKey=${encodeURIComponent(objectKey)}`,
+      capturedAt: new Date(row.uploaded_at).toISOString(),
+      label: captureRole,
+    });
+    singKeyFrameBuckets.set(sourceSessionKey, bucket);
+  }
+  const singKeyFrameMap = new Map<
+    string,
+    Array<{ dataUrl: string; capturedAt: string; label: string }>
+  >(
+    Array.from(singKeyFrameBuckets.entries()).map(([sourceSessionKey, bucket]) => [
+      sourceSessionKey,
+      Array.from(bucket.entries())
+        .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+        .slice(0, 3)
+        .map(([, frame]) => frame),
+    ]),
+  );
+
   const entries = mapAdminHistoryEntries(
     patient as AdminReportPatientRow,
-    languageRows.rows,
-    singRows.rows,
-  );
+    languageRows.rows.map((row: any) => {
+      const sourceSessionKey = String(row.source_session_key ?? "").trim();
+      const imageUrls = step6ImageMap.get(sourceSessionKey) ?? [];
+      const audioUrlsByStep = languageAudioMap.get(sourceSessionKey) ?? {};
+      const baseStepDetails =
+        (row.step_details as TrainingHistoryEntry["stepDetails"]) ?? {
+          step1: [],
+          step2: [],
+          step3: [],
+          step4: [],
+          step5: [],
+          step6: [],
+        };
+
+      return {
+        ...row,
+        step_details: {
+          ...baseStepDetails,
+          step2: Array.isArray(baseStepDetails.step2)
+            ? baseStepDetails.step2.map((item: any, index: number) => ({
+                ...item,
+                audioUrl:
+                  typeof item?.audioUrl === "string" && item.audioUrl.trim().length > 0
+                    ? item.audioUrl
+                    : audioUrlsByStep[2]?.[index] ?? undefined,
+              }))
+            : [],
+          step4: Array.isArray(baseStepDetails.step4)
+            ? baseStepDetails.step4.map((item: any, index: number) => ({
+                ...item,
+                audioUrl:
+                  typeof item?.audioUrl === "string" && item.audioUrl.trim().length > 0
+                    ? item.audioUrl
+                    : audioUrlsByStep[4]?.[index] ?? undefined,
+              }))
+            : [],
+          step5: Array.isArray(baseStepDetails.step5)
+            ? baseStepDetails.step5.map((item: any, index: number) => ({
+                ...item,
+                audioUrl:
+                  typeof item?.audioUrl === "string" && item.audioUrl.trim().length > 0
+                    ? item.audioUrl
+                    : audioUrlsByStep[5]?.[index] ?? undefined,
+              }))
+            : [],
+          step6: Array.isArray(baseStepDetails.step6)
+            ? baseStepDetails.step6.map((item: any, index: number) => ({
+                ...item,
+                userImage:
+                  typeof item?.userImage === "string" && item.userImage.trim().length > 0
+                    ? item.userImage
+                    : imageUrls[index] ?? undefined,
+              }))
+            : [],
+        },
+      };
+    }),
+    singRows.rows.map((row: any) => {
+      const sourceSessionKey = String(row.source_session_key ?? "").trim();
+      const versionSnapshot = (row.version_snapshot ?? undefined) as Record<string, any> | undefined;
+      return {
+        ...row,
+        comment:
+          row.comment ||
+          versionSnapshot?.measurement_metadata?.comment ||
+          "",
+        recognized_lyrics: row.recognized_lyrics,
+        version_snapshot: versionSnapshot
+          ? {
+              ...versionSnapshot,
+              reviewKeyFrames: singKeyFrameMap.get(sourceSessionKey) ?? [],
+            }
+          : versionSnapshot,
+        review_audio_url: singAudioMap.get(sourceSessionKey),
+        review_key_frames: singKeyFrameMap.get(sourceSessionKey) ?? [],
+      };
+    }),
+  ).map((entry) => {
+    if (entry.trainingMode !== "sing" || !entry.singResult) return entry;
+    const sourceRow = singRows.rows.find((row: any) => String(row.session_id) === entry.sessionId);
+    const sourceSessionKey = String(sourceRow?.source_session_key ?? "").trim();
+    return {
+      ...entry,
+      singResult: {
+        ...entry.singResult,
+        reviewAudioUrl: singAudioMap.get(sourceSessionKey),
+        reviewKeyFrames: singKeyFrameMap.get(sourceSessionKey) ?? [],
+      },
+    };
+  });
 
   return {
     requestedBy: {

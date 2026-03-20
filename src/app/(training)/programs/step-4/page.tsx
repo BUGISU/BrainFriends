@@ -1296,9 +1296,11 @@ function Step4Content() {
                             인식된 문장
                           </span>
                           <p className="mt-1 font-bold text-slate-700 italic break-words leading-relaxed max-h-24 overflow-y-auto pr-1">
-                            {(currentResult?.transcript || "").trim()
+                            {currentResult?.consonantAccuracy != null &&
+                            currentResult?.vowelAccuracy != null &&
+                            (currentResult?.transcript || "").trim()
                               ? `"${currentResult?.transcript}"`
-                              : "인식 결과가 없습니다. 마이크 권한/주변 소음을 확인 후 다시 시도해 주세요."}
+                              : "..."}
                           </p>
                           <p className="mt-1 text-[11px] font-black text-emerald-600">
                             {saveStatusText || "저장 상태 확인 중"}

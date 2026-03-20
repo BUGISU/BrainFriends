@@ -1485,9 +1485,11 @@ function Step2Content() {
                         인식된 발화
                       </p>
                       <p className="text-sm font-semibold text-slate-600 italic leading-relaxed break-words whitespace-normal">
-                        {(transcript || "").trim()
+                        {resultConsonantAccuracy != null &&
+                        resultVowelAccuracy != null &&
+                        (transcript || "").trim()
                           ? `"${transcript}"`
-                          : "인식 결과가 없습니다. 마이크 권한/주변 소음을 확인 후 다시 시도해 주세요."}
+                          : "..."}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span

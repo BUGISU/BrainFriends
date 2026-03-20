@@ -77,7 +77,11 @@ export function buildMediaObjectKey(params: {
   const sanitizedSessionKey = sourceSessionKey.replace(/[^a-zA-Z0-9_-]/g, "-");
   const normalizedLabelSegment =
     typeof labelSegment === "string" && labelSegment.trim().length > 0
-      ? labelSegment.replace(/[^a-z0-9-]/gi, "-").toLowerCase()
+      ? labelSegment
+          .replace(/[^a-z0-9-]/gi, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "")
+          .toLowerCase()
       : null;
   const captureDate = capturedAt ? new Date(capturedAt) : new Date();
   const hasValidCaptureDate = Number.isFinite(captureDate.getTime());
