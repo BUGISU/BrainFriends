@@ -19,7 +19,7 @@ function shouldPersistClinicalHistory(historyEntry: TrainingHistoryEntry) {
   if (historyEntry.trainingMode === "sing") {
     return overall === "measured";
   }
-  return overall === "measured" || overall === "partial";
+  return true;
 }
 
 const CLINICAL_SYNC_PREFIX = "clinical-db-sync:";

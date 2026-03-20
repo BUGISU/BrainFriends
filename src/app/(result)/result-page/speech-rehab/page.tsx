@@ -69,6 +69,7 @@ function ResultRehabPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [historyRows, setHistoryRows] = useState<TrainingHistoryEntry[]>([]);
+  const [serverHistoryRows, setServerHistoryRows] = useState<TrainingHistoryEntry[]>([]);
   const [playingIndex, setPlayingIndex] = useState<string | null>(null);
   const [dbSaveState, setDbSaveState] = useState<
     "idle" | "saving" | "saved" | "failed" | "local_only"
@@ -120,6 +121,7 @@ function ResultRehabPage() {
     }
     void fetchMyHistoryEntries()
       .then(({ entries }) => {
+        setServerHistoryRows(entries);
         const rows = mergeHistoryRows(
           entries,
           SessionManager.getHistoryFor(patient as any),
@@ -130,6 +132,7 @@ function ResultRehabPage() {
       })
       .catch((e) => {
         console.error("[result-rehab] load server history failed:", e);
+        setServerHistoryRows([]);
         if (!cancelled) {
           setHistoryRows(
             mergeHistoryRows([], SessionManager.getHistoryFor(patient as any)),
@@ -160,9 +163,7 @@ function ResultRehabPage() {
   const qualityUi = getMeasurementQualityUi(
     latestStepRow?.measurementQuality?.overall,
   );
-  const isServerExcluded =
-    dbSaveState === "local_only" ||
-    latestStepRow?.measurementQuality?.overall === "demo";
+  const isServerExcluded = dbSaveState === "local_only";
   const isDemoResult = latestStepRow?.measurementQuality?.overall === "demo";
 
   useEffect(() => {
@@ -183,6 +184,21 @@ function ResultRehabPage() {
         persistedHistoryIdRef.current = null;
       });
   }, [latestStepRow, patient]);
+
+  useEffect(() => {
+    if (!latestStepRow) return;
+    if (latestStepRow.measurementQuality?.overall === "demo") {
+      setDbSaveState("local_only");
+      return;
+    }
+    const existsOnServer = serverHistoryRows.some(
+      (row) => row.historyId === latestStepRow.historyId,
+    );
+    if (existsOnServer) {
+      persistedHistoryIdRef.current = latestStepRow.historyId;
+      setDbSaveState("saved");
+    }
+  }, [latestStepRow, serverHistoryRows]);
 
   const previousScore = previousStepRow
     ? Number(previousStepRow.stepScores?.[stepKey] ?? 0)

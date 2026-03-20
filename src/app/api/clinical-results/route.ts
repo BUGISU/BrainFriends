@@ -40,7 +40,7 @@ function shouldPersistHistoryEntry(entry: TrainingHistoryEntry) {
   if (entry.trainingMode === "sing") {
     return overall === "measured";
   }
-  return overall === "measured" || overall === "partial";
+  return true;
 }
 
 export async function POST(req: Request) {

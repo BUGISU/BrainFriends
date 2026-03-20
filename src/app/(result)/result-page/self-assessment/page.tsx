@@ -292,9 +292,7 @@ function ResultContent() {
   const qualityUi = getMeasurementQualityUi(
     currentHistoryEntry?.measurementQuality?.overall,
   );
-  const isServerExcluded =
-    dbSaveState === "local_only" ||
-    currentHistoryEntry?.measurementQuality?.overall === "demo";
+  const isServerExcluded = dbSaveState === "local_only";
   const isDemoResult = currentHistoryEntry?.measurementQuality?.overall === "demo";
 
   const previousHistory = useMemo(() => {
@@ -449,6 +447,21 @@ function ResultContent() {
         persistedHistoryIdRef.current = null;
       });
   }, [currentHistoryEntry, patientProfile]);
+
+  useEffect(() => {
+    if (!currentHistoryEntry) return;
+    if (currentHistoryEntry.measurementQuality?.overall === "demo") {
+      setDbSaveState("local_only");
+      return;
+    }
+    const existsOnServer = (serverHistory ?? []).some(
+      (row) => row.historyId === currentHistoryEntry.historyId,
+    );
+    if (existsOnServer) {
+      persistedHistoryIdRef.current = currentHistoryEntry.historyId;
+      setDbSaveState("saved");
+    }
+  }, [currentHistoryEntry, serverHistory]);
 
   const handleExportData = () => {
     if (!sessionData) return;
